@@ -1,0 +1,17 @@
+{
+  "name": "my-deen",
+  "version": "1.0.0",
+  "private": true,
+  "description": "My Deen — free Islamic app: prayer times, Quran, tasbih, duas, Qibla",
+  "scripts": {
+    "build:www": "rm -rf www && mkdir -p www/data www/icons www/audio www/assets && cp index.html styles.css app.js praycalc.js manifest.json sw.js privacy.html www/ && cp data/duas.js data/hadiths.js www/data/ && cp assets/quran-meta.js assets/quran-full.js www/assets/ && cp icons/* www/icons/ && cp audio/azan.mp3 audio/reminder.mp3 audio/durood.mp3 www/audio/",
+    "sync": "npm run build:www && npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/cli": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/geolocation": "^8.2.4",
+    "@capacitor/local-notifications": "^8.3.1"
+  }
+}

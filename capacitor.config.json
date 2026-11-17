@@ -1,0 +1,8 @@
+{
+  "appId": "com.deenday.app",
+  "appName": "My Deen",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false
+  }
+}

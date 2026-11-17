@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="bn" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>My Deen — নামাজ, কুরআন, দোয়া</title>
+<meta name="description" content="My Deen — ফ্রি ইসলামিক অ্যাপ: নামাজের সময়, কুরআন তিলাওয়াত, তাসবিহ, দোয়া, কিবলা, রোজা। কোনো বিজ্ঞাপন নেই, কোনো অ্যাকাউন্ট নেই।">
+<meta name="theme-color" content="#0b1e2d">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="head-row">
+      <div class="brand">
+        <img src="icons/icon-192.png" alt="My Deen">
+        <div><h1>My Deen</h1><small data-i18n="appTagline">নামাজ • কুরআন • দোয়া</small></div>
+      </div>
+      <div class="row">
+        <button class="icon-btn" id="btn-notif" title="নোটিফিকেশন">🔔<span class="badge hidden" id="notif-badge">১</span></button>
+      </div>
+    </div>
+    <div class="dates" id="date-line">…</div>
+    <div class="greet hidden" id="greet-line"></div>
+  </header>
+
+  <main>
+    <!-- ============ HOME ============ -->
+    <section class="view active" id="view-home">
+      <div class="card sky-hero" id="sky-hero" data-sky="day">
+        <div class="sky-orb" id="sky-orb"></div>
+        <div class="sky-stars" id="sky-stars"></div>
+        <div class="sky-cloud c1"></div><div class="sky-cloud c2"></div>
+        <div class="sky-inner">
+          <div class="small" id="next-label" data-i18n="nextPrayer">পরবর্তী নামাজ</div>
+          <div class="np-name" id="next-name">—</div>
+          <div class="np-count" id="next-count">--:--:--</div>
+          <div class="np-time" id="next-time">—</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row between"><h2 data-i18n="myLocation">📍 আমার অবস্থান</h2><span class="muted small" id="home-loc-coords"></span></div>
+        <p style="margin:6px 0 2px; font-size:16px; font-weight:600" id="home-loc-text">—</p>
+        <p class="muted small" id="home-loc-status">কোনো অবস্থান সেট করা নেই — নামাজের সঠিক সময়ের জন্য অবস্থান সেট করুন।</p>
+        <div class="row mt"><button class="btn block" id="btn-home-detect-loc" data-i18n="locAutoBtn">📍 ম্যাপ থেকে লোকেশন অটো সেট করুন</button></div>
+        <div class="row mt"><button class="btn ghost block" id="btn-home-manual-loc">✏️ ম্যানুয়ালি শহর সেট করুন / Set manually</button></div>
+        <p class="muted small mt">“অটো সেট”-এ চাপ দিলে ফোনের GPS থেকে আপনার বর্তমান অবস্থান নেওয়া হবে (অনুমতি দিতে হবে)। চাইলে শহরের নাম লিখেও ম্যানুয়ালি সেট করতে পারবেন।</p>
+      </div>
+
+      <div class="card" id="install-card">
+        <h2>📲 হোম স্ক্রিনে যোগ করুন</h2>
+        <p class="muted small" style="margin:4px 0 2px; line-height:1.7">এক ট্যাপে My Deen ফোনের হোম স্ক্রিনে বসিয়ে নিন — খুললেই নামাজের সময় আর পরবর্তী নামাজের কাউন্টডাউন দেখা যাবে।</p>
+        <div class="row mt"><button class="btn gold block" id="btn-install-home">📲 Add to Home Screen</button></div>
+        <p class="muted small mt hidden" id="install-hint-home"></p>
+      </div>
+
+      <div class="card">
+        <div class="row between"><h2 id="h-prayers" data-i18n="prayersToday">আজকের নামাজের সময়</h2><span class="muted small" id="prayer-city">—</span></div>
+        <p class="muted small" style="margin:2px 0 4px">কোনো ওয়াক্তের নাম বা সময়ে চাপ দিলে সেই ওয়াক্তের আজান আগে-পরে করা যাবে।</p>
+        <div id="prayer-list"><p class="muted">সময় লোড হচ্ছে…</p></div>
+      </div>
+
+      <!-- নামাজ শিক্ষা (Namaz Shikkha) is hidden for now at the owner's
+           request (2026-11-17). The section, its data and all its code are
+           kept intact below — set LEARN_ENABLED = true in the script to
+           bring it back. -->
+      <div class="card hidden" id="learn-card">
+        <h2 data-i18n="learnCardTitle">📚 নামাজ শিক্ষা</h2>
+        <p class="muted" style="margin:4px 0 2px; line-height:1.7" data-i18n="learnCardDesc">সহিহ হাদিস অনুযায়ী ধাপে ধাপে নামাজ — প্রতিটি ভঙ্গির ফেসলেস ছবি, কীভাবে হাত তুলতে হয় ও কোথায় বাঁধতে হয়, প্রতিটি ধাপে যা বলতে হয়, আর নামাজের জন্য দরকারি সব দোয়া ও সূরা।</p>
+        <div class="row mt"><button class="btn gold block" id="btn-go-learn" data-i18n="learnOpen">শেখা শুরু করুন →</button></div>
+      </div>
+
+      <div class="card">
+        <div class="row between"><h2 data-i18n="quranTracker">কুরআন ট্র্যাকার</h2><span class="muted small" id="quran-progress-text">০%</span></div>
+        <div class="progress"><div id="quran-progress-bar" style="width:0%"></div></div>
+        <p class="muted small mt" id="quran-progress-detail">—</p>
+        <div class="row mt"><button class="btn ghost block" id="btn-go-quran" data-i18n="readQuran">কুরআন পড়ুন →</button></div>
+      </div>
+
+      <div class="card">
+        <h2 id="h-tracker" data-i18n="tracker">নামাজের হিসাব (আজ)</h2>
+        <div id="tracker-today"></div>
+        <div class="mt"><div class="row between small"><span data-i18n="last7">গত ৭ দিন</span><b id="week-summary">—</b></div>
+        <div class="week-dots" id="week-dots"></div></div>
+        <div class="mt small muted" id="month-summary">—</div>
+      </div>
+
+      <div class="card">
+        <h2 data-i18n="forbiddenTitle">সালাতের নিষিদ্ধ সময়</h2>
+        <p class="muted small" data-i18n="forbiddenNote">এই সময়গুলোতে সালাত আদায় নিষিদ্ধ (ব্যতিক্রম: সূর্যগ্রহণের নামাজ ও কাজা ফরজ)।</p>
+        <div id="forbidden-list"></div>
+      </div>
+
+      <div class="card nafl-card" id="nafl-card">
+        <div class="row between"><h2 data-i18n="naflTitle">নফল সালাতের সময়</h2></div>
+        <div id="nafl-rows"></div>
+        <div class="nafl-strip">
+          <div class="nafl-cell"><b id="nafl-sehri">—</b><span id="nafl-sehri-label">পরবর্তী সাহরি</span></div>
+          <div class="nafl-cell"><b id="nafl-iftar">—</b><span id="nafl-iftar-label">পরবর্তী ইফতার</span></div>
+          <div class="nafl-cell"><b id="nafl-count">--:--:--</b><span id="nafl-count-label">ইফতারের বাকি</span></div>
+        </div>
+        <div class="nafl-more" id="nafl-more"><div class="nafl-more-inner">
+          <div id="nafl-extra"></div>
+        </div></div>
+        <button class="btn ghost block mt" id="btn-go-fasting" data-i18n="fastCal">রোজার ক্যালেন্ডার দেখুন →</button>
+        <button class="nafl-expand" id="btn-nafl-expand" aria-expanded="false"><span id="nafl-expand-label">বড় করে দেখুন</span><span class="nafl-chev" aria-hidden="true">›</span></button>
+      </div>
+    </section>
+
+    <!-- ============ NOTIFICATIONS ============ -->
+    <section class="view" id="view-notif">
+      <div class="card">
+        <h2 data-i18n="notifLabel">নোটিফিকেশন</h2>
+        <p class="muted small">প্রতিদিন একটি সহিহ হাদিস, কুরআনের একটি আয়াত ও একটি আমলের পরামর্শ — নিচে পড়ুন।</p>
+      </div>
+      <div id="notif-feed"><p class="muted">লোড হচ্ছে…</p></div>
+    </section>
+
+    <!-- ============ QURAN ============ -->
+    <section class="view" id="view-quran">
+      <div class="card">
+        <h2 data-i18n="quranTitle">পবিত্র কুরআন</h2>
+        <div class="row between"><span class="muted small">অগ্রগতি: <b id="quran-progress-text2">০%</b></span><span class="muted small" id="quran-progress-detail2">—</span></div>
+        <div class="progress mt"><div id="quran-progress-bar2" style="width:0%"></div></div>
+        <input type="text" id="surah-search" placeholder="সূরা খুঁজুন" class="mt">
+        <div class="row wrap mt">
+          <button class="chip on" data-qtab="all" data-i18n="allSurahs">সব সূরা</button>
+          <button class="chip" data-qtab="bookmarks" data-i18n="bookmarksTab">🔖 বুকমার্ক</button>
+          <button class="chip" data-qtab="read" data-i18n="readTab">✅ পড়া শেষ</button>
+        </div>
+      </div>
+      <div id="surah-list"><p class="muted">সূরার তালিকা লোড হচ্ছে…</p></div>
+    </section>
+
+    <!-- ============ READER ============ -->
+    <section class="view" id="view-reader">
+      <div class="card">
+        <button class="btn ghost" id="btn-back-quran" data-i18n="backToList">← সূরার তালিকা</button>
+        <h2 class="mt" id="reader-title">—</h2>
+        <div class="muted small" id="reader-meta">—</div>
+        <div class="row wrap mt">
+          <select id="reciter" style="flex:1; min-width:160px"></select>
+          <button class="mini-btn" id="btn-autoplay" data-i18n="listenAll">▶️ সব শুনুন</button>
+        </div>
+        <div class="row mt">
+          <input type="number" id="jump-ayah" min="1" placeholder="আয়াত নম্বর">
+          <button class="btn" id="btn-jump" data-i18n="goBtn">যান</button>
+        </div>
+        <div class="row mt">
+          <button class="btn gold block" id="btn-mark-read" data-i18n="markRead">✅ এই সূরা পড়া শেষ</button>
+        </div>
+      </div>
+      <div id="ayah-list"><p class="muted">আয়াত লোড হচ্ছে…</p></div>
+      <button class="btn gold block mt mb" id="btn-next-surah" data-i18n="nextSurah">পরের সূরা →</button>
+    </section>
+
+    <!-- ============ TASBIH ============ -->
+    <section class="view" id="view-tasbih">
+      <div class="card center">
+        <h2 data-i18n="tasbihTitle">ডিজিটাল তাসবিহ</h2>
+        <div class="row wrap" id="dhikr-presets" style="justify-content:center"></div>
+        <div class="tasbih-circle" id="tasbih-tap" role="button" tabindex="0">
+          <div class="count" id="tasbih-count">০</div>
+          <div class="of" id="tasbih-of">লক্ষ্য: ৩৩</div>
+        </div>
+        <div class="progress"><div id="tasbih-bar" style="width:0%"></div></div>
+        <p class="muted small mt" id="tasbih-today">আজ মোট: ০</p>
+        <div class="row" style="justify-content:center">
+          <button class="btn ghost" id="btn-tasbih-reset" data-i18n="restartBtn">↺ আবার শুরু</button>
+          <button class="btn ghost" id="btn-tasbih-target" data-i18n="changeTarget">🎯 লক্ষ্য বদলান</button>
+        </div>
+        <p class="muted small" data-i18n="tasbihHint">বৃত্তে চাপ দিলেই গণনা বাড়বে। টিপ দিলে হালকা কম্পন হবে।</p>
+      </div>
+      <div class="card">
+        <h3 data-i18n="todayCount">আজকের হিসাব</h3>
+        <div id="tasbih-history"></div>
+      </div>
+    </section>
+
+    <!-- ============ DUAS ============ -->
+    <section class="view" id="view-duas">
+      <div class="card">
+        <h2 data-i18n="duasTitle">দোয়া ও আজকার</h2>
+        <div class="row wrap" id="dua-cats"></div>
+      </div>
+      <div id="dua-list"></div>
+      <div class="card">
+        <h3 data-i18n="ruqyahTitle">🛡️ রুকইয়াহ</h3>
+        <p class="muted" data-i18n="ruqyahDesc">আয়াতুল কুরসি, সূরা বাকারার শেষ ২ আয়াত, সূরা ইখলাস, ফালাক ও নাস — পড়ুন ও শুনুন।</p>
+        <button class="btn block" id="btn-ruqyah" data-i18n="ruqyahOpen">রুকইয়াহ খুলুন</button>
+      </div>
+    </section>
+
+    <!-- ============ LEARN PRAYER ============ -->
+    <section class="view" id="view-learn">
+      <div class="card">
+        <button class="btn ghost" id="btn-back-learn" data-i18n="learnBack">← হোম</button>
+        <h2 class="mt" data-i18n="learnTitle">নামাজ শিক্ষা</h2>
+        <p class="muted" style="line-height:1.75" data-i18n="learnIntro">রাসূলুল্লাহ ﷺ বলেছেন: “তোমরা সেভাবে নামাজ পড়ো, যেভাবে আমাকে নামাজ পড়তে দেখেছো।” (বুখারি ৬৩১) — এই গাইডে সেই নিয়মেই ধাপে ধাপে নামাজ শেখানো হয়েছে।</p>
+        <div id="learn-madhhab" class="mt"></div>
+        <div class="demo-stage" id="learn-demo"></div>
+        <div class="demo-seq" id="learn-demo-seq"></div>
+        <h3 class="mt" data-i18n="learnRakats">ফরজ রাকাত</h3>
+        <div class="rakat-strip" id="learn-rakats"></div>
+      </div>
+      <div class="card">
+        <h2 data-i18n="learnStepsTitle">ধাপে ধাপে নামাজ</h2>
+        <div id="learn-steps"><p class="muted">লোড হচ্ছে…</p></div>
+      </div>
+      <div class="card">
+        <h2 data-i18n="learnDuasTitle">নামাজের দোয়া ও সূরা</h2>
+        <p class="muted small" data-i18n="learnDuasSub">নামাজে যা যা পড়তে হয় — আরবি লেখা, উচ্চারণ ও অর্থসহ।</p>
+        <div id="learn-duas" style="margin-top:10px"></div>
+      </div>
+      <div class="card">
+        <p class="muted small" style="line-height:1.75" data-i18n="learnMadhabNote">দ্রষ্টব্য: হাত বাঁধার স্থান (বুকের ওপর / নাভির নিচে) ও রুকু-সিজদায় যাওয়া-আসায় হাত তোলা (রফয়ে ইয়াদাইন) নিয়ে মাজহাবভেদে মতভেদ আছে — প্রতিটি মতের পক্ষেই হাদিসের বর্ণনা রয়েছে। আপনি যে মাজহাব অনুসরণ করেন, সে অনুযায়ী আমল করুন; এ নিয়ে বিতর্ক ইসলামে নিরুৎসাহিত।</p>
+      </div>
+    </section>
+
+    <!-- ============ RUQYAH ============ -->
+    <section class="view" id="view-ruqyah">
+      <div class="card">
+        <button class="btn ghost" id="btn-back-duas" data-i18n="backToDuas">← দোয়া</button>
+        <h2 class="mt" data-i18n="ruqyahTitle">রুকইয়াহ</h2>
+        <p class="muted small" data-i18n="ruqyahNote">আয়াতগুলো কুরআন থেকে লোড হবে। অডিও বোতামে চাপ দিলে তিলাওয়াত শুনতে পারবেন।</p>
+      </div>
+      <div id="ruqyah-list"><p class="muted">লোড হচ্ছে…</p></div>
+    </section>
+
+    <!-- ============ QIBLA ============ -->
+    <section class="view" id="view-qibla">
+      <div class="card center">
+        <h2 data-i18n="qiblaTitle">কিবলার দিক</h2>
+        <div class="compass-wrap">
+          <div class="compass" id="compass">
+            <div class="tick">N ↑</div>
+            <div class="needle" id="needle"></div>
+            <div class="center-dot"></div>
+          </div>
+        </div>
+        <div class="qibla-deg"><span id="qibla-deg">—</span> <small id="qibla-dir"></small></div>
+        <p class="muted" id="qibla-note" data-i18n="qiblaNote">ফোনটি সমতলে রেখে ধীরে ঘোরান — সোনালি সূচ কিবলার দিকে ঘুরবে।</p>
+        <div class="row" style="justify-content:center">
+          <button class="btn" id="btn-gps" data-i18n="useMyLoc">📍 আমার অবস্থান ব্যবহার করুন</button>
+        </div>
+        <p class="muted small mt" id="qibla-loc">অবস্থান সেট করা নেই</p>
+      </div>
+    </section>
+
+    <!-- ============ FASTING ============ -->
+    <section class="view" id="view-fasting">
+      <div class="card">
+        <h2 data-i18n="fastingTitle">রোজা</h2>
+        <div id="fast-countdown"></div>
+      </div>
+      <div class="card">
+        <h3 data-i18n="sunnahTitle">সুন্নত রোজার রিমাইন্ডার</h3>
+        <div id="fast-list"><p class="muted">হিজরি ক্যালেন্ডার লোড হচ্ছে…</p></div>
+      </div>
+      <div class="card">
+        <h3 data-i18n="hijriMonthTitle">এই মাসের হিজরি তারিখ</h3>
+        <div id="hijri-month"></div>
+      </div>
+    </section>
+
+    <!-- ============ SETTINGS ============ -->
+    <section class="view" id="view-settings">
+      <div class="card">
+        <h2 data-i18n="profileTitle">প্রোফাইল</h2>
+        <p class="muted small">আপনার নাম ও Gmail ঠিকানা শুধু আপনার ফোনেই থাকে — কোনো সার্ভারে যায় না, কোনো পাসওয়ার্ড লাগে না।</p>
+        <label data-i18n="yourName">আপনার নাম</label>
+        <input type="text" id="set-profile-name" placeholder="নাম">
+        <label>Gmail ঠিকানা</label>
+        <input type="email" id="set-profile-gmail" placeholder="যেমন: example@gmail.com" autocomplete="email">
+        <div class="row mt">
+          <button class="btn gold block" id="btn-gmail-login">Gmail দিয়ে লগইন করুন</button>
+        </div>
+        <p class="muted small mt hidden" id="gmail-status"></p>
+        <div class="row mt">
+          <button class="btn block" id="btn-save-profile" data-i18n="saveBtn">সংরক্ষণ করুন</button>
+          <button class="btn ghost" id="btn-clear-profile" data-i18n="clearBtn">মুছুন</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2 data-i18n="settingsTitle">সেটিংস</h2>
+        <div class="switch-row"><span data-i18n="autoLocLabel">📍 অবস্থান স্বয়ংক্রিয়ভাবে নির্ণয় করুন</span>
+          <label class="switch"><input type="checkbox" id="set-autoloc" checked><span class="slider"></span></label></div>
+        <p class="muted small" data-i18n="autoLocDesc">চালু থাকলে GPS থেকে আপনার শহর নিজে থেকেই সেট হবে (অনুমতি দিতে হবে)। বন্ধ থাকলে নিচের শহর ব্যবহার হবে।</p>
+        <div class="row mt"><button class="btn ghost block" id="btn-detect-loc" data-i18n="detectNow">📍 এখনই অবস্থান নির্ণয় করুন</button></div>
+        <label data-i18n="cityLabel">শহর</label>
+        <input type="text" id="set-city" placeholder="শহরের নাম লিখুন / Type your city">
+        <label data-i18n="countryLabel">দেশ</label>
+        <input type="text" id="set-country" placeholder="দেশের নাম লিখুন / Type your country">
+        <label data-i18n="methodLabel">নামাজের হিসাবের পদ্ধতি</label>
+        <select id="set-method"></select>
+        <label data-i18n="schoolLabel">আসরের মাজহাব</label>
+        <select id="set-school">
+          <option value="0" data-i18n="shafii">শাফিঈ (সাধারণ)</option>
+          <option value="1" data-i18n="hanafi">হানাফী</option>
+        </select>
+        <label data-i18n="langLabel">ভাষা</label>
+        <select id="set-lang"></select>
+        <div class="switch-row"><span data-i18n="themeLabel">ডার্ক থিম (আকাশ থিম)</span>
+          <label class="switch"><input type="checkbox" id="set-dark" checked><span class="slider"></span></label></div>
+        <div class="switch-row"><span data-i18n="azanLabel">নামাজের সময় আজান</span>
+          <label class="switch"><input type="checkbox" id="set-azan" checked><span class="slider"></span></label></div>
+        <div class="switch-row"><span data-i18n="duroodLabel">📿 ফোন আনলক করলে দরুদ</span>
+          <label class="switch"><input type="checkbox" id="set-durood" checked><span class="slider"></span></label></div>
+        <div id="reminder-settings"></div>
+        <label data-i18n="adhanLabel">আজানের সুর</label>
+        <select id="set-adhan"></select>
+        <label data-i18n="reciterLabel">তিলাওয়াতের কারি</label>
+        <select id="set-reciter"></select>
+        <div class="switch-row"><span data-i18n="notifLabel">নোটিফিকেশন</span>
+          <label class="switch"><input type="checkbox" id="set-notif"><span class="slider"></span></label></div>
+        <div class="switch-row"><span id="daily-label">🌅 প্রতিদিন সকালে হাদিস ও আয়াত</span>
+          <label class="switch"><input type="checkbox" id="set-daily" checked><span class="slider"></span></label></div>
+        <p class="muted small" id="daily-desc"></p>
+        <div class="row mt">
+          <button class="btn block" id="btn-save-settings" data-i18n="saveBtn">সংরক্ষণ করুন</button>
+        </div>
+        <p class="muted small mt" data-i18n="dataPrivate">সব তথ্য শুধু আপনার ফোনেই থাকে — কোনো সার্ভারে যায় না।</p>
+      </div>
+      <div class="card">
+        <h3 data-i18n="aboutTitle">অ্যাপ সম্পর্কে</h3>
+        <p class="muted" data-i18n="aboutLine2">আপনাদের দ্বীনি পালনের সহায়তায় ছোট একটু প্রচেষ্টা।</p>
+        <div class="row wrap">
+          <button class="btn ghost" id="btn-privacy" data-i18n="privacyBtn">গোপনীয়তা নীতি</button>
+          <button class="btn ghost" id="btn-install" data-i18n="installBtn">📲 ফোনে ইনস্টল করুন</button>
+        </div>
+        <p class="muted small mt" id="install-hint"></p>
+      </div>
+    </section>
+
+    <!-- ============ PRIVACY ============ -->
+    <section class="view" id="view-privacy">
+      <div class="card">
+        <button class="btn ghost" id="btn-back-settings" data-i18n="backToSettings">← সেটিংস</button>
+        <h2 class="mt" data-i18n="privacyTitle">গোপনীয়তা নীতি</h2>
+        <div id="privacy-body"></div>
+      </div>
+    </section>
+  </main>
+
+  <nav id="bottom-nav">
+    <button data-view="home" class="on"><span class="ic">🕌</span><span data-i18n="nav_home">হোম</span></button>
+    <button data-view="quran"><span class="ic">📖</span><span data-i18n="nav_quran">কুরআন</span></button>
+    <button data-view="tasbih"><span class="ic">📿</span><span data-i18n="nav_tasbih">তাসবিহ</span></button>
+    <button data-view="duas"><span class="ic">🤲</span><span data-i18n="nav_duas">দোয়া</span></button>
+    <button data-view="qibla"><span class="ic">🧭</span><span data-i18n="nav_qibla">কিবলা</span></button>
+    <button data-view="fasting"><span class="ic">🌙</span><span data-i18n="nav_fasting">রোজা</span></button>
+    <button data-view="settings"><span class="ic">⚙️</span><span data-i18n="nav_settings">সেটিংস</span></button>
+  </nav>
+</div>
+
+<audio id="audio-ayah" preload="none"></audio>
+<audio id="audio-azan" preload="none" src="audio/azan.mp3"></audio>
+<audio id="audio-durood" preload="none" src="audio/durood.mp3"></audio>
+<audio id="audio-reminder" preload="none" src="audio/reminder.mp3"></audio>
+<div id="lang-first" style="position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:99;padding:20px">
+  <div class="card" style="max-width:420px;width:100%;max-height:86vh;overflow:auto">
+    <h2 data-i18n="langFirstTitle">Choose your language</h2>
+    <p class="muted small" data-i18n="langFirstDesc">Select the language for the app. You can change it anytime in Settings.</p>
+    <div id="lang-first-list" class="row wrap mt"></div>
+  </div>
+</div>
+<div id="loc-setup" style="position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;z-index:98;padding:20px">
+  <div class="card" style="max-width:420px;width:100%;max-height:88vh;overflow:auto">
+    <h2>📍 অবস্থান সেট করুন</h2>
+    <p class="muted" style="line-height:1.7">নামাজের সঠিক সময় ও কিবলার জন্য আপনার অবস্থান দরকার। আগে থেকে কোনো শহর সেট করা নেই — নিচের দুটি উপায়ের যেকোনো একটিতে সেট করুন। পৃথিবীর যেকোনো জায়গায় সঠিক আজানের সময় পাওয়া যাবে।</p>
+    <button class="btn block mt" id="btn-loc-allow">📍 Allow location — GPS দিয়ে অটো সেট করুন</button>
+    <p class="muted small mt">ফোনের লোকেশন অনুমতি চাইবে; Allow দিলে আপনার বর্তমান অবস্থান অনুযায়ী সময় সেট হয়ে যাবে। অনুমতি না দিলে নিচে ম্যানুয়ালি সেট করুন।</p>
+    <button class="btn ghost block mt" id="btn-loc-manual-toggle">✏️ Set manually — শহরের নাম লিখে সেট করুন</button>
+    <div id="loc-manual-form" class="hidden">
+      <label>শহর / City</label>
+      <input type="text" id="loc-city-in" placeholder="যেমন: Dhaka">
+      <label>দেশ / Country</label>
+      <input type="text" id="loc-country-in" placeholder="যেমন: Bangladesh">
+      <div class="row mt"><button class="btn gold block" id="btn-loc-save">সংরক্ষণ করুন / Save</button></div>
+      <p class="muted small mt" id="loc-manual-msg"></p>
+    </div>
+    <button class="btn ghost block mt" id="btn-loc-close">পরে করব / Later</button>
+  </div>
+</div>
+<div id="toast"></div>
+
+
+
+
+<script src="data/duas.js"></script>
+<script src="data/hadiths.js"></script>
+<script src="assets/quran-meta.js"></script>
+<script src="assets/quran-full.js"></script>
+<script src="praycalc.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
