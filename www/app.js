@@ -1824,7 +1824,7 @@ const Lb = (bn, en) => { const l = settings.lang; if (l==="bn") return bn;
 /* ---------------- settings ---------------- */
 const DEFAULTS = {city:"", country:"", lat:null, lon:null, method:0, school:1,
   lang:"en", theme:"dark", azan:true, adhan:"a1", reciter:"ar.alafasy", notif:false, tasbihTarget:33,
-  autoLoc:true, useCoords:false, profileName:"", gmail:"", duroodOnUnlock:true, learnMadhhab:"hanafi",
+  autoLoc:true, useCoords:false, profileName:"", gmail:"", profilePhoto:"", duroodOnUnlock:true, learnMadhhab:"hanafi",
   dailyNotif:true, duroodRemOn:true, duroodRemMin:30, astaghRemOn:true, astaghRemMin:30,
   /* Location identity: locId names the CURRENT location ("c:lat,lon" for
      coordinate locations, "n:city|country" for city-name ones). The
@@ -2570,6 +2570,42 @@ function renderGmailStatus(){
     el.classList.remove("hidden");
     el.textContent = (Lb("✅ লগইন করা আছে: ", "✅ Logged in as: ")) + settings.gmail;
   } else el.classList.add("hidden");
+}
+/* Profile photo: stored ONLY on this phone (localStorage, downscaled to
+   256px JPEG so it stays small). Shown in the profile card and as a small
+   circle in the header. No photo is ever uploaded anywhere. */
+function renderProfilePhoto(){
+  const big = $("#profile-avatar"), hdr = $("#hdr-avatar");
+  const photo = settings.profilePhoto || "";
+  if (big){
+    if (photo){ big.innerHTML = `<img src="${photo}" alt="">`; }
+    else { const initial = (settings.profileName || settings.gmail || "?").trim().charAt(0).toUpperCase() || "?"; big.innerHTML = `<span>${initial}</span>`; }
+  }
+  if (hdr){
+    if (photo){ hdr.src = photo; hdr.classList.remove("hidden"); }
+    else hdr.classList.add("hidden");
+  }
+}
+function handleProfilePhotoFile(file){
+  if (!file || !file.type || file.type.indexOf("image/") !== 0) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    const img = new Image();
+    img.onload = ()=>{
+      try {
+        const size = 256, c = document.createElement("canvas");
+        c.width = size; c.height = size;
+        const ctx = c.getContext("2d");
+        const s = Math.min(img.width, img.height), sx = (img.width - s) / 2, sy = (img.height - s) / 2;
+        ctx.drawImage(img, sx, sy, s, s, 0, 0, size, size);
+        settings.profilePhoto = c.toDataURL("image/jpeg", 0.85);
+        saveSettings(); renderProfilePhoto();
+        toast(Lb("প্রোফাইল ছবি সেভ হয়েছে 🤍", "Profile photo saved 🤍"));
+      } catch(e){ toast(Lb("ছবি সেভ হয়নি — আবার চেষ্টা করুন", "Photo could not be saved — try again")); }
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
 }
 
 /* ---------------- Quran ---------------- */
@@ -4358,7 +4394,7 @@ function fillSettings(){
   const al = $("#set-autoloc"); if (al) al.checked = !!settings.autoLoc;
   const pn = $("#set-profile-name"); if (pn) pn.value = settings.profileName || "";
   const gm = $("#set-profile-gmail"); if (gm) gm.value = settings.gmail || "";
-  renderGreet(); renderGmailStatus();
+  renderGreet(); renderGmailStatus(); renderProfilePhoto();
   const sl0 = $("#set-lang");
   if (sl0) sl0.innerHTML = LANGS.map(l=>`<option value="${l.id}" ${settings.lang===l.id?"selected":""}>${l.native} (${l.name})</option>`).join("");
   $("#set-city").value = settings.city; $("#set-country").value = settings.country;
@@ -4439,12 +4475,19 @@ function bindEvents(){
   $("#btn-go-learn").onclick=()=>showView("learn");
   $("#btn-back-learn").onclick=()=>showView("home");
   $("#btn-mark-read").onclick=()=>toggleSurahRead(currentSurah);
-  $("#btn-save-profile").onclick=()=>{ settings.profileName = $("#set-profile-name").value.trim(); settings.gmail = $("#set-profile-gmail").value.trim(); saveSettings(); renderGreet(); renderGmailStatus(); toast(t("saved")); };
+  $("#btn-save-profile").onclick=()=>{ settings.profileName = $("#set-profile-name").value.trim(); settings.gmail = $("#set-profile-gmail").value.trim(); saveSettings(); renderGreet(); renderGmailStatus(); renderProfilePhoto(); toast(t("saved")); };
+  const pp = $("#profile-photo-input");
+  if (pp) pp.onchange=e=>{ const f = e.target.files && e.target.files[0]; if (f) handleProfilePhotoFile(f); pp.value = ""; };
+  const ppBtn = $("#btn-change-photo");
+  if (ppBtn) ppBtn.onclick=()=>{ const i = $("#profile-photo-input"); if (i) i.click(); };
+  const tdBtn = $("#btn-test-durood");
+  if (tdBtn) tdBtn.onclick=()=>{ playDurood(true); toast(Lb("দরুদ বাজছে 🔊", "Playing durood 🔊")); };
   $("#btn-gmail-login").onclick=()=>{ const g = $("#set-profile-gmail").value.trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(g)){ toast(Lb("সঠিক Gmail ঠিকানা লিখুন", "Enter a valid Gmail address")); return; }
     settings.gmail = g; saveSettings(); renderGmailStatus();
-    toast(Lb("Gmail দিয়ে লগইন হয়েছে 🤍", "Logged in with Gmail 🤍")); };
-  $("#btn-clear-profile").onclick=()=>{ settings.profileName = ""; settings.gmail = ""; $("#set-profile-name").value = ""; $("#set-profile-gmail").value = ""; saveSettings(); renderGreet(); renderGmailStatus(); toast(Lb("মুছে ফেলা হয়েছে", "Removed")); };
+    toast(Lb("Gmail দিয়ে লগইন হয়েছে 🤍", "Logged in with Gmail 🤍"));
+    showView("home"); };
+  $("#btn-clear-profile").onclick=()=>{ settings.profileName = ""; settings.gmail = ""; settings.profilePhoto = ""; $("#set-profile-name").value = ""; $("#set-profile-gmail").value = ""; saveSettings(); renderGreet(); renderGmailStatus(); renderProfilePhoto(); toast(Lb("মুছে ফেলা হয়েছে", "Removed")); };
   $("#btn-detect-loc").onclick=()=>detectLocation(false);
   $("#btn-home-detect-loc").onclick=()=>detectLocation(false);
   $("#set-durood").onchange=e=>{ settings.duroodOnUnlock = e.target.checked; saveSettings(); syncDuroodToggleNative(); };

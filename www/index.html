@@ -23,6 +23,7 @@
         <div><h1>My Deen</h1><small data-i18n="appTagline">নামাজ • কুরআন • দোয়া</small></div>
       </div>
       <div class="row">
+        <img id="hdr-avatar" class="hdr-avatar hidden" alt="">
         <button class="icon-btn" id="btn-notif" title="নোটিফিকেশন">🔔<span class="badge hidden" id="notif-badge">১</span></button>
       </div>
     </div>
@@ -275,6 +276,14 @@
       <div class="card">
         <h2 data-i18n="profileTitle">প্রোফাইল</h2>
         <p class="muted small">আপনার নাম ও Gmail ঠিকানা শুধু আপনার ফোনেই থাকে — কোনো সার্ভারে যায় না, কোনো পাসওয়ার্ড লাগে না।</p>
+        <div class="profile-photo-row">
+          <div class="avatar-big" id="profile-avatar"><span>?</span></div>
+          <div>
+            <button class="btn gold" id="btn-change-photo">📷 ছবি বদলান</button>
+            <p class="muted small">ছবি শুধু আপনার ফোনেই থাকে, কোথাও আপলোড হয় না।</p>
+          </div>
+          <input type="file" id="profile-photo-input" accept="image/*" class="hidden">
+        </div>
         <label data-i18n="yourName">আপনার নাম</label>
         <input type="text" id="set-profile-name" placeholder="নাম">
         <label>Gmail ঠিকানা</label>
@@ -313,6 +322,8 @@
           <label class="switch"><input type="checkbox" id="set-azan" checked><span class="slider"></span></label></div>
         <div class="switch-row"><span data-i18n="duroodLabel">📿 ফোন আনলক করলে দরুদ</span>
           <label class="switch"><input type="checkbox" id="set-durood" checked><span class="slider"></span></label></div>
+        <div class="row mt"><button class="btn" id="btn-test-durood">🔊 দরুদ পরীক্ষা করুন</button></div>
+        <p class="muted small">আনলকে দরুদ না বাজলে: ফোনের Settings → Apps → My Deen → Autostart চালু করুন, আর Battery saver → No restrictions দিন। (Xiaomi ফোন অ্যাপ বন্ধ করে দিলে আনলকের দরুদ বাজে না।)</p>
         <div id="reminder-settings"></div>
         <label data-i18n="adhanLabel">আজানের সুর</label>
         <select id="set-adhan"></select>
