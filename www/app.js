@@ -157,7 +157,6 @@ const STR = {  en: {
     aboutLine1:"My Deen v2.0 — free Islamic app. Prayer times: Aladhan API; Quran: AlQuran Cloud. No ads.",
     aboutLine2:"A small effort to make your religious practice easier.",
     privacyBtn:"Privacy Policy",
-    installBtn:"📲 Install on phone",
     backToSettings:"← Settings",
     privacyTitle:"Privacy Policy",
     langFirstTitle:"Choose your language",
@@ -262,7 +261,6 @@ const STR = {  en: {
     aboutLine1:"My Deen v2.0 — تطبيق إسلامي مجاني. مواقيت الصلاة: Aladhan API؛ القرآن: AlQuran Cloud. بدون إعلانات.",
     aboutLine2:"جهد صغير لتيسير عبادتك.",
     privacyBtn:"سياسة الخصوصية",
-    installBtn:"📲 تثبيت على الهاتف",
     backToSettings:"← الإعدادات",
     privacyTitle:"سياسة الخصوصية",
     langFirstTitle:"اختر لغتك",
@@ -384,7 +382,6 @@ const STR = {  en: {
     aboutLine1:"My Deen v2.0 — ফ্রি ইসলামিক অ্যাপ। নামাজের সময়: Aladhan API; কুরআন: AlQuran Cloud। কোনো বিজ্ঞাপন নেই।",
     aboutLine2:"আপনাদের দ্বীনি পালন সহজ করতে ছোট একটু প্রচেষ্টা।",
     privacyBtn:"গোপনীয়তা নীতি",
-    installBtn:"📲 ফোনে ইনস্টল করুন",
     backToSettings:"← সেটিংস",
     privacyTitle:"গোপনীয়তা নীতি",
     langFirstTitle:"আপনার ভাষা বেছে নিন",
@@ -489,7 +486,6 @@ const STR = {  en: {
     aboutLine1:"My Deen v2.0 — مفت اسلامی ایپ۔ نماز کے اوقات: Aladhan API؛ قرآن: AlQuran Cloud۔ کوئی اشتہار نہیں۔",
     aboutLine2:"آپ کی دینی عبادت آسان بنانے کی چھوٹی سی کوشش۔",
     privacyBtn:"پرائیویسی پالیسی",
-    installBtn:"📲 فون پر انسٹال کریں",
     backToSettings:"← ترتیبات",
     privacyTitle:"پرائیویسی پالیسی",
     langFirstTitle:"اپنی زبان چنیں",
@@ -594,7 +590,6 @@ const STR = {  en: {
     aboutLine1:"My Deen v2.0 — aplikasi Islam percuma. Waktu solat: Aladhan API; Al-Quran: AlQuran Cloud. Tiada iklan.",
     aboutLine2:"Usaha kecil untuk memudahkan ibadah anda.",
     privacyBtn:"Dasar Privasi",
-    installBtn:"📲 Pasang pada telefon",
     backToSettings:"← Tetapan",
     privacyTitle:"Dasar Privasi",
     langFirstTitle:"Pilih bahasa anda",
@@ -699,7 +694,6 @@ const STR = {  en: {
     aboutLine1:"My Deen v2.0 — aplikasi Islam gratis. Waktu sholat: Aladhan API; Al-Qur'an: AlQuran Cloud. Tanpa iklan.",
     aboutLine2:"Usaha kecil untuk memudahkan ibadah Anda.",
     privacyBtn:"Kebijakan Privasi",
-    installBtn:"📲 Pasang di ponsel",
     backToSettings:"← Pengaturan",
     privacyTitle:"Kebijakan Privasi",
     langFirstTitle:"Pilih bahasa Anda",
@@ -804,7 +798,6 @@ const STR = {  en: {
     aboutLine1:"My Deen v2.0 — ücretsiz İslami uygulama. Namaz vakitleri: Aladhan API; Kur'an: AlQuran Cloud. Reklam yok.",
     aboutLine2:"İbadetinizi kolaylaştırmak için küçük bir çaba.",
     privacyBtn:"Gizlilik Politikası",
-    installBtn:"📲 Telefona yükle",
     backToSettings:"← Ayarlar",
     privacyTitle:"Gizlilik Politikası",
     langFirstTitle:"Dilinizi seçin",
@@ -909,7 +902,6 @@ const STR = {  en: {
     aboutLine1:"My Deen v2.0 — برنامه اسلامی رایگان. اوقات نماز: Aladhan API؛ قرآن: AlQuran Cloud. بدون تبلیغات.",
     aboutLine2:"تلاشی کوچک برای آسان‌تر کردن عبادت شما.",
     privacyBtn:"سیاست حریم خصوصی",
-    installBtn:"📲 نصب روی گوشی",
     backToSettings:"← تنظیمات",
     privacyTitle:"سیاست حریم خصوصی",
     langFirstTitle:"زبان خود را انتخاب کنید",
@@ -1014,7 +1006,6 @@ const STR = {  en: {
     aboutLine1:"My Deen v2.0 — application islamique gratuite. Horaires de prière : Aladhan API ; Coran : AlQuran Cloud. Aucune publicité.",
     aboutLine2:"Un petit effort pour faciliter votre pratique religieuse.",
     privacyBtn:"Politique de Confidentialité",
-    installBtn:"📲 Installer sur le téléphone",
     backToSettings:"← Réglages",
     privacyTitle:"Politique de Confidentialité",
     langFirstTitle:"Choisissez votre langue",
@@ -1119,7 +1110,6 @@ const STR = {  en: {
     aboutLine1:"My Deen v2.0 — मुफ़्त इस्लामिक ऐप। नमाज़ के समय: Aladhan API; क़ुरआन: AlQuran Cloud। कोई विज्ञापन नहीं।",
     aboutLine2:"आपकी धार्मिक प्रथा को आसान बनाने का एक छोटा प्रयास।",
     privacyBtn:"गोपनीयता नीति",
-    installBtn:"📲 फ़ोन पर इंस्टॉल करें",
     backToSettings:"← सेटिंग्स",
     privacyTitle:"गोपनीयता नीति",
     langFirstTitle:"अपनी भाषा चुनें",
@@ -1213,7 +1203,6 @@ const STR = {  en: {
     saveOffsets:"وختونه خوندي کړئ",
     aboutTitle:"د اپ په اړه",
     privacyBtn:"د محرمیت تګلاره",
-    installBtn:"📲 پر تلیفون نصب کړئ",
     backToSettings:"← ترتیبات",
     privacyTitle:"د محرمیت تګلاره",
     langFirstTitle:"خپله ژبه وټاکئ",
@@ -1309,7 +1298,6 @@ const STR = {  en: {
     saveOffsets:"Ajiye lokuta",
     aboutTitle:"Game da App",
     privacyBtn:"Manufar Sirri",
-    installBtn:"📲 Shigar a waya",
     backToSettings:"← Saituna",
     privacyTitle:"Manufar Sirri",
     langFirstTitle:"Zaɓi harshenka",
@@ -1413,7 +1401,6 @@ const STR = {  en: {
     aboutLine1:"My Deen v2.0 — programu ya Kiislamu ya bure. Nyakat za sala: Aladhan API; Qur'an: AlQuran Cloud. Hakuna matangazo.",
     aboutLine2:"Juhudi ndogo ya kurahisisha ibada yako.",
     privacyBtn:"Sera ya Faragha",
-    installBtn:"📲 Sakinisha kwenye simu",
     backToSettings:"← Mipangilio",
     privacyTitle:"Sera ya Faragha",
     langFirstTitle:"Chagua lugha yako",
@@ -1517,7 +1504,6 @@ const STR = {  en: {
     aboutLine1:"My Deen v2.0 — бесплатное исламское приложение. Время намазов: Aladhan API; Коран: AlQuran Cloud. Без рекламы.",
     aboutLine2:"Небольшое усилие, чтобы облегчить вашу религиозную практику.",
     privacyBtn:"Политика конфиденциальности",
-    installBtn:"📲 Установить на телефон",
     backToSettings:"← Настройки",
     privacyTitle:"Политика конфиденциальности",
     langFirstTitle:"Выберите язык",
@@ -1622,7 +1608,6 @@ const STR = {  en: {
     aboutLine1:"My Deen v2.0 — aplicación islámica gratuita. Horarios de oración: Aladhan API; Corán: AlQuran Cloud. Sin anuncios.",
     aboutLine2:"Un pequeño esfuerzo para facilitar tu práctica religiosa.",
     privacyBtn:"Política de Privacidad",
-    installBtn:"📲 Instalar en el teléfono",
     backToSettings:"← Ajustes",
     privacyTitle:"Política de Privacidad",
     langFirstTitle:"Elige tu idioma",
@@ -1727,7 +1712,6 @@ const STR = {  en: {
     aboutLine1:"My Deen v2.0 — kostenlose islamische App. Gebetszeiten: Aladhan API; Koran: AlQuran Cloud. Keine Werbung.",
     aboutLine2:"Ein kleiner Beitrag, um deine religiöse Praxis zu erleichtern.",
     privacyBtn:"Datenschutz",
-    installBtn:"📲 Auf dem Telefon installieren",
     backToSettings:"← Einstellungen",
     privacyTitle:"Datenschutz",
     langFirstTitle:"Wähle deine Sprache",
@@ -1790,7 +1774,6 @@ const PHRASE = {
   "Bookmark saved ✓": {"ar":"تم حفظ العلامة ✓", "de":"Lesezeichen gespeichert ✓", "es":"Marcador guardado ✓", "fa":"نشانک ذخیره شد ✓", "fr":"Favori enregistré ✓", "ha":"An adana alama ✓", "hi":"बुकमार्क सहेजा गया ✓", "id":"Markah disimpan ✓", "ms":"Penanda disimpan ✓", "ps":"نښه خوندي شوه ✓", "ru":"Закладка сохранена ✓", "sw":"Alamisho imehifadhiwa ✓", "tr":"Yer imi kaydedildi ✓", "ur":"بک مارک محفوظ ہو گیا ✓"},
   "completed — Alhamdulillah!": {"ar":"اكتمل — الحمد لله!", "de":"abgeschlossen — Alhamdulillah!", "es":"completado — ¡Alhamdulillah!", "fa":"کامل شد — الحمدلله!", "fr":"terminé — Alhamdulillah !", "ha":"an kammala — Alhamdulillah!", "hi":"पूर्ण हुआ — अल्हम्दुलिल्लाह!", "id":"selesai — Alhamdulillah!", "ms":"selesai — Alhamdulillah!", "ps":"بشپړ شو — الحمدلله!", "ru":"выполнено — Альхамдулиллях!", "sw":"imekamilika — Alhamdulillah!", "tr":"tamamlandı — Elhamdülillah!", "ur":"مکمل ہو گیا — الحمدللہ!"},
   "See below": {"ar":"انظر أدناه", "de":"Siehe unten", "es":"Ver abajo", "fa":"پایین را ببینید", "fr":"Voir ci-dessous", "ha":"Duba ƙasa", "hi":"नीचे देखें", "id":"Lihat di bawah", "ms":"Lihat di bawah", "ps":"لاندې وګورئ", "ru":"Смотрите ниже", "sw":"Tazama hapa chini", "tr":"Aşağıya bakın", "ur":"نیچے دیکھیں"},
-  "In Chrome: ⋮ menu → 'Add to Home screen' / 'Install app'. My Deen will appear on your home screen.": {"ar":"في Chrome: قائمة ⋮ ← «إضافة إلى الشاشة الرئيسية» / «تثبيت التطبيق». ستظهر أيقونة My Deen على شاشتك الرئيسية.", "fa":"در Chrome: منوی ⋮ ← «افزودن به صفحه اصلی» / «نصب برنامه». آیکون My Deen روی صفحه اصلی شما قرار می‌گیرد.", "fr":"Dans Chrome : menu ⋮ → « Ajouter à l'écran d'accueil » / « Installer l'application ». L'icône My Deen apparaîtra sur votre écran d'accueil.", "id":"Di Chrome: menu ⋮ → 'Add to Home screen' / 'Instal aplikasi'. Ikon My Deen akan muncul di layar utama Anda.", "ms":"Dalam Chrome: menu ⋮ → 'Add to Home screen' / 'Pasang aplikasi'. Ikon My Deen akan muncul pada skrin utama anda.", "tr":"Chrome'da: ⋮ menü → 'Ana ekrana ekle' / 'Uygulamayı yükle'. My Deen simgesi ana ekranınıza gelir.", "ur":"Chrome میں ⋮ مینیو ← 'Add to Home screen' / 'ایپ انسٹال کریں' دبائیں۔ My Deen کا آئیکن ہوم اسکرین پر آ جائے گا۔"},
   "Loading ayahs…": {"ar":"جارٍ تحميل الآيات…", "de":"Ayas werden geladen…", "es":"Cargando aleyas…", "fa":"در حال بارگذاری آیات…", "fr":"Chargement des versets…", "ha":"Ana lodin ayoyi…", "hi":"आयतें लोड हो रही हैं…", "id":"Memuat ayat…", "ms":"Memuatkan ayat…", "ps":"آیتونه لوډېږي…", "ru":"Загрузка аятов…", "sw":"Inapakia aya…", "tr":"Ayetler yükleniyor…", "ur":"آیات لوڈ ہو رہی ہیں…"},
   "This month so far:": {"ar":"حتى الآن هذا الشهر:", "de":"Diesen Monat bisher:", "es":"Este mes hasta ahora:", "fa":"تا اینجای این ماه:", "fr":"Ce mois-ci jusqu'à présent :", "ha":"Ya zuwa wannan wata:", "hi":"इस महीने अब तक:", "id":"Sejauh ini bulan ini:", "ms":"Setakat bulan ini:", "ps":"تر اوسه په دې میاشت کې:", "ru":"В этом месяце пока:", "sw":"Mwezi huu hadi sasa:", "tr":"Bu ay şu ana kadar:", "ur":"اس مہینے اب تک:"},
   "Surah": {"ar":"سورة", "de":"Sure", "es":"Sura", "fa":"سوره", "fr":"Sourate", "ha":"Sura", "hi":"सूरह", "id":"Surah", "ms":"Surah", "ps":"سورت", "ru":"Сура", "sw":"Sura", "tr":"Sure", "ur":"سورت"},
@@ -4301,51 +4284,6 @@ async function saveManualLocation(city, country){
   return true;
 }
 
-/* ---------------- Add to Home Screen (PWA install) ----------------
-   The browser's own install prompt is captured so ONE tap on the
-   button puts the app icon on the phone's home screen. The installed
-   app opens on the home view — prayer times with the next-prayer
-   countdown (the manifest start_url is the app itself). */
-let deferredInstallPrompt = null;
-window.addEventListener("beforeinstallprompt", e=>{
-  e.preventDefault();
-  deferredInstallPrompt = e;
-  updateInstallUI();
-});
-window.addEventListener("appinstalled", ()=>{
-  deferredInstallPrompt = null;
-  updateInstallUI();
-  toast(Lb("✅ হোম স্ক্রিনে যোগ হয়েছে", "✅ Added to your home screen"));
-});
-function isStandalone(){
-  return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
-}
-function updateInstallUI(){
-  const c = $("#install-card");
-  if (c) c.classList.toggle("hidden", isStandalone());
-}
-async function promptInstall(){
-  if (deferredInstallPrompt){
-    /* The browser's own install-prompt object (BeforeInstallPrompt) —
-       invoked via bracket notation so it is never confused with the
-       blocked window dialog of the same name. */
-    deferredInstallPrompt["prompt"]();
-    let choice = null;
-    try { choice = await deferredInstallPrompt.userChoice; } catch(e){}
-    deferredInstallPrompt = null;
-    if (choice && choice.outcome === "accepted") toast(Lb("✅ হোম স্ক্রিনে যোগ হচ্ছে…", "✅ Adding to your home screen…"));
-    return;
-  }
-  /* No native prompt available (iOS Safari, or the browser has not
-     offered one yet): show the exact manual steps for this browser. */
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent || "");
-  const msg = isIOS
-    ? Lb("Safari-তে নিচের Share (⬆) বোতামে চাপ দিন → 'Add to Home Screen' বেছে নিন। হোম স্ক্রিনে My Deen আইকন বসে যাবে।", "In Safari: tap the Share (⬆) button → 'Add to Home Screen'. My Deen will appear on your home screen.")
-    : Lb("Chrome-এ ⋮ মেনু → 'Add to Home screen' / 'অ্যাপ ইনস্টল করুন' চাপ দিন। হোম স্ক্রিনে My Deen আইকন বসে যাবে।", "In Chrome: ⋮ menu → 'Add to Home screen' / 'Install app'. My Deen will appear on your home screen.");
-  const h1 = $("#install-hint"); if (h1) h1.textContent = msg;
-  const h2 = $("#install-hint-home"); if (h2){ h2.textContent = msg; h2.classList.remove("hidden"); }
-  toast("📲 নিচে দেখুন");
-}
 
 /* ---------------- navigation & settings UI ---------------- */
 const METHODS = [[17,"Malaysia (JAKIM)"],[2,"ISNA (North America)"],[3,"Muslim World League"],[4,"Umm al-Qura (Makkah)"],
@@ -4510,8 +4448,6 @@ function bindEvents(){
   $("#btn-back-settings").onclick=()=>showView("settings");
   $("#btn-ruqyah").onclick=()=>{ showView("ruqyah"); renderRuqyah(); };
   $("#btn-privacy").onclick=()=>{ $("#privacy-body").innerHTML = `<p style="white-space:pre-line;line-height:1.8">${Lb(PRIVACY_BN, PRIVACY_EN)}</p>`; showView("privacy"); };
-  $("#btn-install").onclick=promptInstall;
-  const bih = $("#btn-install-home"); if (bih) bih.onclick=promptInstall;
   const bhm = $("#btn-home-manual-loc"); if (bhm) bhm.onclick=()=>openLocSetup(true);
   const bla = $("#btn-loc-allow"); if (bla) bla.onclick=()=>detectLocation(false);
   const blm = $("#btn-loc-manual-toggle"); if (blm) blm.onclick=()=>{ const f = $("#loc-manual-form"); if (f) f.classList.toggle("hidden"); };
@@ -4574,7 +4510,6 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   }
   step(()=>renderTasbih()); step(()=>renderDuaCats()); step(()=>renderDuas()); step(()=>renderQibla());
   step(()=>renderNotifFeed()); step(()=>updateNotifBadge()); step(()=>renderGreet()); step(()=>setupNativeAzanActions());
-  step(()=>updateInstallUI());
   /* No location set → the location setup screen comes first: the user
      picks "Allow location" (GPS) or "Set manually" (type a city).
      There is no pre-set city to fall back to, ever. */
