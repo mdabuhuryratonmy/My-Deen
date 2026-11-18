@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- My Deen launch splash: solid emerald background (app brand colour).
+     Replaces the plain-white placeholder splash.png files that were never
+     pushed to GitHub; a single drawable covers all screen densities. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#0e6a4c" />
+</shape>
