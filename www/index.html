@@ -51,7 +51,7 @@
         <p class="muted small" id="home-loc-status">কোনো অবস্থান সেট করা নেই — নামাজের সঠিক সময়ের জন্য অবস্থান সেট করুন।</p>
         <div class="row mt"><button class="btn block" id="btn-home-detect-loc" data-i18n="locAutoBtn">📍 ম্যাপ থেকে লোকেশন অটো সেট করুন</button></div>
         <div class="row mt"><button class="btn ghost block" id="btn-home-manual-loc">✏️ ম্যানুয়ালি শহর সেট করুন / Set manually</button></div>
-        <p class="muted small mt">“অটো সেট”-এ চাপ দিলে ফোনের GPS থেকে আপনার বর্তমান অবস্থান নেওয়া হবে (অনুমতি দিতে হবে)। চাইলে শহরের নাম লিখেও ম্যানুয়ালি সেট করতে পারবেন।</p>
+        <p class="muted small mt">“অটো সেট”-এ চাপ দিলে ফোনের GPS থেকে আপনার বর্তমান অবস্থান নেওয়া হবে (অনুমতি দিতে হবে)। চাইলে গ্রাম/শহরের নাম লিখেও ম্যানুয়ালি সেট করতে পারবেন।</p>
       </div>
 
       <div class="card" id="install-card">
@@ -295,7 +295,7 @@
         <p class="muted small" data-i18n="autoLocDesc">চালু থাকলে GPS থেকে আপনার শহর নিজে থেকেই সেট হবে (অনুমতি দিতে হবে)। বন্ধ থাকলে নিচের শহর ব্যবহার হবে।</p>
         <div class="row mt"><button class="btn ghost block" id="btn-detect-loc" data-i18n="detectNow">📍 এখনই অবস্থান নির্ণয় করুন</button></div>
         <label data-i18n="cityLabel">শহর</label>
-        <input type="text" id="set-city" placeholder="শহরের নাম লিখুন / Type your city">
+        <input type="text" id="set-city" placeholder="গ্রাম/শহরের নাম লিখুন / Type your village or city">
         <label data-i18n="countryLabel">দেশ</label>
         <input type="text" id="set-country" placeholder="দেশের নাম লিখুন / Type your country">
         <label data-i18n="methodLabel">নামাজের হিসাবের পদ্ধতি</label>
@@ -380,7 +380,7 @@
     <button class="btn ghost block mt" id="btn-loc-manual-toggle">✏️ Set manually — শহরের নাম লিখে সেট করুন</button>
     <div id="loc-manual-form" class="hidden">
       <label>শহর / City</label>
-      <input type="text" id="loc-city-in" placeholder="যেমন: Dhaka">
+      <input type="text" id="loc-city-in" placeholder="যেমন: Bagharpara, Jessore">
       <label>দেশ / Country</label>
       <input type="text" id="loc-country-in" placeholder="যেমন: Bangladesh">
       <div class="row mt"><button class="btn gold block" id="btn-loc-save">সংরক্ষণ করুন / Save</button></div>

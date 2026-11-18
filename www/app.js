@@ -4023,7 +4023,12 @@ async function detectLocation(auto){
        the old code appeared to "collect nothing". */
     const opts = { enableHighAccuracy: !auto, timeout: 15000, maximumAge: 600000 };
     let settled = false;
-    const ok = p => { if (!settled){ settled = true; resolve({ lat: p.coords.latitude, lon: p.coords.longitude }); } };
+    const ok = p => { if (settled) return; settled = true;
+      /* Accuracy guard (village fix): a coarse fix over 1 km off would
+         put prayer times on the wrong place — reject it so the saved /
+         manual location keeps working instead of a wrong one. */
+      if (p.coords.accuracy && p.coords.accuracy > 1000){ reject({ code: 4, message: "gps coarse" }); return; }
+      resolve({ lat: p.coords.latitude, lon: p.coords.longitude }); };
     const bad = e => { if (!settled){ settled = true; reject(e); } };
     /* Hard timeout: inside some embedded browsers (e.g. an in-app webview
        where geolocation is not delegated) NEITHER callback ever fires —
@@ -4044,9 +4049,11 @@ async function detectLocation(auto){
     settings.locManual = false;
     settings.locId = coordsKeyOf(); settings.coordsLoc = settings.locId;
     try {
-      const j = await fetchJson(`${NOMINATIM}?format=json&lat=${settings.lat}&lon=${settings.lon}&zoom=10&accept-language=${settings.lang}`, 10000);
+      /* zoom=18 resolves down to village / hamlet level — zoom=10 only
+         ever returned the nearest town or city (Fix #2). */
+      const j = await fetchJson(`${NOMINATIM}?format=json&lat=${settings.lat}&lon=${settings.lon}&zoom=18&accept-language=${settings.lang}`, 10000);
       const a = (j && j.address) || {};
-      const city = a.city || a.town || a.village || a.municipality || a.state || "";
+      const city = villageNameOf(a);
       if (city) settings.city = city;
       if (a.country) settings.country = a.country;
     } catch(e){ /* city name stays as-is; coordinates still work */ }
@@ -4110,6 +4117,103 @@ function openLocSetup(showManual){
   const co = $("#loc-country-in"); if (co && !co.value) co.value = settings.country || "";
 }
 function closeLocSetup(){ const o = $("#loc-setup"); if (o) o.style.display = "none"; }
+/* Village-first place naming (Fix #2): prefer the smallest place
+   (village / hamlet), then the town / city, then the wider area. */
+function villageNameOf(a){
+  a = a || {};
+  return a.village || a.hamlet || a.suburb || a.neighbourhood || a.town || a.city || a.municipality || a.county || a.state_district || a.state || "";
+}
+
+/* Offline gazetteer (Fix #2) — village / upazila / city fallback.
+   When the network lookup fails, a typed place name is matched here so
+   prayer times still work offline from real coordinates. These are
+   public place coordinates, rounded to 2 decimals (~1 km — well
+   within prayer-time tolerance). */
+const GAZETTEER = {
+  /* Bangladesh — all 64 districts (headquarters) */
+  "dhaka": [23.81, 90.41], "chattogram": [22.36, 91.78], "chittagong": [22.36, 91.78],
+  "khulna": [22.82, 89.55], "rajshahi": [24.37, 88.60], "barishal": [22.70, 90.37],
+  "barisal": [22.70, 90.37], "sylhet": [24.90, 91.87], "rangpur": [25.74, 89.25],
+  "mymensingh": [24.75, 90.40], "cumilla": [23.46, 91.18], "comilla": [23.46, 91.18],
+  "narayanganj": [23.62, 90.50], "gazipur": [24.00, 90.43], "tangail": [24.25, 89.92],
+  "jessore": [23.17, 89.21], "jashore": [23.17, 89.21], "bogura": [24.85, 89.37],
+  "bogra": [24.85, 89.37], "dinajpur": [25.63, 88.65], "pabna": [24.01, 89.24],
+  "kushtia": [23.90, 89.12], "faridpur": [23.60, 89.83], "noakhali": [22.82, 91.10],
+  "coxs bazar": [21.44, 92.00], "bandarban": [22.20, 92.22], "rangamati": [22.65, 92.18],
+  "khagrachari": [23.12, 91.98], "feni": [23.02, 91.38], "lakshmipur": [22.95, 90.83],
+  "chandpur": [23.23, 90.65], "brahmanbaria": [23.96, 91.11], "habiganj": [24.38, 91.42],
+  "moulvibazar": [24.48, 91.78], "sunamganj": [25.07, 91.40], "netrokona": [24.88, 90.73],
+  "sherpur": [25.02, 90.02], "jamalpur": [24.92, 89.94], "kishoreganj": [24.44, 90.78],
+  "manikganj": [23.86, 90.00], "munshiganj": [23.54, 90.53], "narsingdi": [23.92, 90.72],
+  "shariatpur": [23.24, 90.43], "madaripur": [23.17, 90.21], "gopalganj": [23.01, 89.82],
+  "bagerhat": [22.66, 89.79], "chuadanga": [23.64, 88.85], "jhenaidah": [23.54, 89.18],
+  "magura": [23.49, 89.42], "narail": [23.17, 89.50], "satkhira": [22.72, 89.08],
+  "meherpur": [23.76, 88.63], "naogaon": [24.80, 88.95], "natore": [24.61, 89.00],
+  "chapainawabganj": [24.60, 88.27], "joypurhat": [25.10, 89.00], "lalmonirhat": [25.92, 89.45],
+  "kurigram": [25.80, 89.65], "gaibandha": [25.33, 89.54], "nilphamari": [25.93, 88.86],
+  "panchagarh": [26.34, 88.56], "thakurgaon": [26.03, 88.46], "sirajganj": [24.46, 89.70],
+  "bhola": [22.69, 90.65], "patuakhali": [22.36, 90.33], "barguna": [22.16, 90.12],
+  "jhalokati": [22.64, 90.20], "pirojpur": [22.58, 89.99],
+  /* Bangladesh — upazilas / towns (Jessore region first) */
+  "bagharpara": [23.22, 89.35], "abhaynagar": [23.02, 89.44], "manirampur": [23.02, 89.23],
+  "keshabpur": [22.91, 89.23], "chaugachha": [23.27, 89.02], "sharsha": [23.08, 88.86],
+  "jhikargachha": [23.10, 89.12], "benapole": [23.04, 88.90], "dumuria": [22.82, 89.43],
+  "phultala": [22.97, 89.46], "dighalia": [22.91, 89.53], "terokhada": [22.94, 89.67],
+  "rupsa": [22.83, 89.58], "paikgachha": [22.59, 89.34], "koyra": [22.35, 89.30],
+  "dacope": [22.58, 89.51], "batiaghata": [22.74, 89.52], "mongla": [22.48, 89.61],
+  "rampal": [22.60, 89.66], "fakirhat": [22.78, 89.71], "mollahat": [22.93, 89.70],
+  "chitalmari": [22.79, 89.87], "morrelganj": [22.45, 89.86], "sarankhola": [22.30, 89.80],
+  "kachua": [22.65, 89.98], "kachua chandpur": [23.35, 90.89], "lohagara": [23.18, 89.65],
+  "kalia": [23.03, 89.63], "savar": [23.86, 90.27], "dhamrai": [23.92, 90.22],
+  "keraniganj": [23.70, 90.33], "tongi": [23.89, 90.41], "mirpur": [23.80, 90.36],
+  "uttara": [23.87, 90.38], "mirzapur": [24.11, 90.19], "kalihati": [24.38, 89.97],
+  "ghatail": [24.48, 90.02], "sakhipur": [24.32, 90.17], "basail": [24.22, 90.06],
+  "nagarpur": [24.06, 89.87], "delduar": [24.15, 89.98], "sreepur": [24.20, 90.48],
+  "kapasia": [24.10, 90.57], "kaliganj": [23.92, 90.57], "kaliakair": [24.08, 90.32],
+  "laksam": [23.24, 91.13], "chauddagram": [23.22, 91.31], "nangalkot": [23.17, 91.21],
+  "barura": [23.38, 91.06], "chandina": [23.49, 91.01], "daudkandi": [23.53, 90.73],
+  "homna": [23.68, 90.73], "meghna": [23.62, 90.67], "titas": [23.61, 90.77],
+  "muradnagar": [23.64, 90.93], "debidwar": [23.60, 90.99], "burichang": [23.55, 91.13],
+  "brahmanpara": [23.62, 91.10], "hajiganj": [23.25, 90.85], "shahrasti": [23.21, 90.95],
+  "faridganj": [23.13, 90.75], "haimchar": [23.09, 90.65], "matlab": [23.35, 90.71],
+  "matlab uttar": [23.45, 90.71], "matlab dakshin": [23.35, 90.71],
+  "jessore sadar": [23.17, 89.21], "khulna sadar": [22.82, 89.55], "rajshahi sadar": [24.37, 88.60],
+  "sylhet sadar": [24.90, 91.87], "rangpur sadar": [25.74, 89.25], "mymensingh sadar": [24.75, 90.40],
+  "barishal sadar": [22.70, 90.37], "dinajpur sadar": [25.63, 88.65], "bogura sadar": [24.85, 89.37],
+  "pabna sadar": [24.01, 89.24], "kushtia sadar": [23.90, 89.12], "tangail sadar": [24.25, 89.92],
+  "gazipur sadar": [24.00, 90.43], "narayanganj sadar": [23.62, 90.50], "chandpur sadar": [23.23, 90.65],
+  "cumilla sadar": [23.46, 91.18],
+  /* Malaysia */
+  "ipoh": [4.60, 101.08], "chemor": [4.72, 101.12], "jelapang": [4.65, 101.07],
+  "kuala lumpur": [3.14, 101.69], "kl": [3.14, 101.69], "george town": [5.41, 100.34],
+  "penang": [5.41, 100.34], "johor bahru": [1.49, 103.76], "malacca": [2.19, 102.25],
+  "melaka": [2.19, 102.25], "kuantan": [3.81, 103.33], "kuching": [1.55, 110.35],
+  "kota kinabalu": [5.98, 116.07], "shah alam": [3.07, 101.52], "petaling jaya": [3.11, 101.60],
+  "seremban": [2.73, 101.94], "alor setar": [6.12, 100.37], "kota bharu": [6.13, 102.24],
+  "kuala terengganu": [5.33, 103.14], "taiping": [4.85, 100.74], "batu gajah": [4.47, 101.04],
+  "kampar": [4.30, 101.15], "gopeng": [4.47, 101.17], "simpang pulai": [4.58, 101.13],
+  "tanjung rambutan": [4.67, 101.15], "sungai siput": [4.82, 101.07], "kuala kangsar": [4.77, 100.94],
+  "parit buntar": [5.12, 100.49], "teluk intan": [4.02, 101.02], "bagan serai": [5.01, 100.54],
+  /* Major world cities */
+  "makkah": [21.42, 39.82], "mecca": [21.42, 39.82], "madinah": [24.47, 39.61],
+  "medina": [24.47, 39.61], "london": [51.51, -0.13], "new york": [40.71, -74.01],
+  "toronto": [43.65, -79.38], "sydney": [-33.87, 151.21], "dubai": [25.20, 55.27],
+  "singapore": [1.35, 103.82], "jakarta": [-6.21, 106.85], "delhi": [28.61, 77.21],
+  "kolkata": [22.57, 88.36], "karachi": [24.86, 67.01], "lahore": [31.52, 74.36],
+  "istanbul": [41.01, 28.98], "cairo": [30.04, 31.24], "bangkok": [13.76, 100.50]
+};
+function gazetteerLookup(q){
+  const norm = s => (s || "").toLowerCase().replace(/['\u2019]/g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  const strip = s => norm(s).replace(/\b(upazila|thana|sadar|district|zila|pourashava|union|city)\b/g, "").replace(/\s+/g, " ").trim();
+  const tries = [];
+  const add = t => { if (t && !tries.includes(t)) tries.push(t); };
+  add(norm(q)); add(strip(q));
+  /* "Bagharpara, Jessore" — try each comma part on its own. */
+  String(q || "").split(",").forEach(part => { add(norm(part)); add(strip(part)); });
+  for (const t of tries){ if (GAZETTEER[t]) return GAZETTEER[t]; }
+  return null;
+}
+
 /* Manual location: the typed city is resolved to real coordinates with
    OpenStreetMap Nominatim, so prayer times are then computed from the
    actual latitude/longitude and the place's own timezone, with the
@@ -4125,12 +4229,24 @@ async function saveManualLocation(city, country){
       const r = j[0], a = r.address || {};
       settings.lat = +(+r.lat).toFixed(4); settings.lon = +(+r.lon).toFixed(4);
       settings.useCoords = true;
-      settings.city = a.city || a.town || a.village || a.municipality || a.state || city;
+      settings.city = villageNameOf(a) || city;
       settings.country = a.country || country;
       settings.locId = coordsKeyOf(); settings.coordsLoc = settings.locId;
       resolved = true;
     }
-  } catch(e){ /* fall through: keep the typed city name */ }
+  } catch(e){ /* fall through: gazetteer / typed name below */ }
+  /* Offline fallback (Fix #2): when the network lookup fails, match
+     the typed village / upazila / city against the built-in gazetteer
+     so prayer times still work offline from real coordinates. */
+  if (!resolved){
+    const g = gazetteerLookup(city + (country ? ", " + country : ""));
+    if (g){
+      settings.lat = g[0]; settings.lon = g[1]; settings.useCoords = true;
+      settings.city = city; settings.country = country;
+      settings.locId = coordsKeyOf(); settings.coordsLoc = settings.locId;
+      resolved = true;
+    }
+  }
   settings.locManual = true;
   if (!resolved){
     settings.city = city; settings.country = country; settings.useCoords = false;
@@ -4439,6 +4555,13 @@ document.addEventListener("DOMContentLoaded", async ()=>{
     detectLocation(true);
   }
   setInterval(()=>{ renderPrayers(); checkAzan(); }, 1000);
+  /* Countdown resync (Fix #2): timers freeze while the tab / app is
+     hidden — re-render the moment it comes back, and pick up a
+     location saved in another tab. */
+  const resyncCountdown = ()=>{ renderPrayers(); if (timingsDate !== ddmmyyyy()) initPrayers(); };
+  document.addEventListener("visibilitychange", ()=>{ if (!document.hidden) resyncCountdown(); });
+  window.addEventListener("focus", resyncCountdown);
+  window.addEventListener("storage", resyncCountdown);
   setInterval(checkDhikrReminders, 20000);
   setInterval(()=>{ if (timingsDate !== ddmmyyyy()) initPrayers(); }, 60000);
   if ("serviceWorker" in navigator){
