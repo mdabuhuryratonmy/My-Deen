@@ -855,27 +855,26 @@ Object.assign(settings, _savedTz);
     check("Fix #24: AlarmReceiver maps a stale stored 'azan' type to azan-v2",
       _ar.includes('if (type.equals("azan")) type = "azan-v2"'), "stale mapping");
 
-    // ---- Fix #25: first-launch permission onboarding (Play Store) ----
-    // Play Store users must never dig through Settings: the app asks for
-    // each permission itself, in Bengali, one step at a time. Two of them
-    // (exact alarms, autostart) cannot be granted from inside the app at
-    // all — the app opens the exact system page so the user only flips
-    // one switch; the modal says this honestly.
+    // ---- Fix #25 rewritten by Fix #32: direct system permission requests ----
+    // The user (21:59) rejected the 4-step in-app modal (ধাপ 1/4, dots,
+    // "এড়িয়ে যান / পরে করব"). The app now asks for each permission
+    // directly, the way normal apps do: the phone's own dialog for
+    // notifications/battery, the phone's own Settings page for exact
+    // alarms/autostart (those two can ONLY be a toggle on a system page).
+    // The plugin mechanism (requestStep, batteryExempt, manifest) is
+    // unchanged — only the in-app modal UI is gone.
     const _idx = fs.readFileSync("/home/hatch/workspace/deen-day/www/index.html", "utf8");
     const _pa = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/PrayerAlarmPlugin.java", "utf8");
-    check("Fix #25: onboarding modal exists with all 4 step titles",
-      _idx.includes('id="perm-onboard"') && _idx.includes("অ্যাপ চালুর আগে অনুমতি") &&
-      src.includes("নোটিফিকেশন") && src.includes("সঠিক সময়ের অ্যালার্ম") &&
-      src.includes("ব্যাটারি — No restrictions") && src.includes("অটোস্টার্ট"), "4 steps");
-    // ONBOARD_STEPS is a top-level const in app.js, so the harness cannot
-    // read it as a bare identifier — verify it from the source instead.
-    const _ob = src.slice(src.indexOf("const ONBOARD_STEPS"), src.indexOf("let onboardIdx"));
-    check("Fix #25: ONBOARD_STEPS has 4 steps, each with a Bengali reason",
-      ["notifications","exact","battery","autostart"].every(id=>_ob.includes('id:"'+id+'"')) &&
-      _ob.includes("আজান ও নামাজের আগের নোটিফিকেশন") &&
-      _ob.includes("নামাজের সময় হুবহু আজান বাজাতে") &&
-      _ob.includes("ফোন ঘুমিয়ে গেলেও") &&
-      _ob.includes("ফোন চালু হলে বা অ্যাপ বন্ধ হয়ে গেলে"), "4 steps");
+    const _css = fs.readFileSync("/home/hatch/workspace/deen-day/www/styles.css", "utf8");
+    check("Fix #32: the onboarding modal is fully gone (HTML, JS, CSS)",
+      !_idx.includes('id="perm-onboard"') && !_idx.includes("অ্যাপ চালুর আগে অনুমতি") &&
+      !_idx.includes("perm-dots") && !_idx.includes("perm-action") &&
+      !src.includes("openPermOnboard") && !src.includes("ONBOARD_STEPS") && !src.includes("renderOnboard") &&
+      !src.includes("skipOnboard") && !_css.includes("perm-dot"),
+      "modal removed");
+    check("Fix #32: PERM_STEPS has the same 4 permissions, in order, as a plain list",
+      src.includes('const PERM_STEPS = ["notifications", "exact", "battery", "autostart"]'),
+      "4 steps");
     check("Fix #25: plugin has requestStep with all 4 step branches",
       _pa.includes("public void requestStep") && _pa.includes('"notifications"') &&
       _pa.includes('"exact"') && _pa.includes('"battery"') && _pa.includes('"autostart"'), "4 branches");
@@ -883,19 +882,26 @@ Object.assign(settings, _savedTz);
       _pa.includes("ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS") &&
       _pa.includes("AutoStartManagementActivity") &&
       _pa.includes("ACTION_APPLICATION_DETAILS_SETTINGS"), "intents");
-    check("Fix #25: getStatus reports batteryExempt so the onboarding can show it done",
+    check("Fix #25: getStatus reports batteryExempt so the chain can check it",
       _pa.includes('ret.put("batteryExempt"'), "batteryExempt");
     check("Fix #25: manifest declares the battery-optimisation request permission",
       _mf.includes("REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"), "manifest");
-    check("Fix #25: first launch opens the onboarding modal, not a blind system prompt",
+    check("Fix #32: first launch runs the direct chain (still 2.5 s after open, still once)",
       src.includes("function maybeAskPermissions(){\n  if (settings.onboarded) return;") &&
-      src.includes("setTimeout(()=>openPermOnboard(), 2500)"), "modal on first launch");
-    check("Fix #25: Settings 'সব অনুমতি দিন' button re-opens the onboarding",
-      src.includes('permBtn.onclick=()=>openPermOnboard()'), "re-open");
-    check("Fix #25: onboarded flag defaults to false (new installs see the flow)",
+      src.includes("setTimeout(()=>runPermChain(), 2500)"), "chain on first launch");
+    check("Fix #32: the chain pauses after a Settings page opens and resumes on foreground return",
+      src.includes("permChainWaiting = true") && src.includes("resumePermChain()") &&
+      src.includes('document.addEventListener("visibilitychange"'), "pause/resume");
+    check("Fix #32: the chain ends by marking onboarded (a decline is never re-asked every launch)",
+      src.includes("function finishPermChain()") && src.includes("settings.onboarded = true; settings.permAsked = true;"),
+      "once only");
+    check("Fix #32: Settings 'সব অনুমতি দিন' button runs the direct chain for what is missing",
+      src.includes('permBtn.onclick=()=>runPermChain()'), "direct re-run");
+    check("Fix #32: onboarded flag defaults to false (new installs get asked once)",
       src.includes("onboarded:false"), "default false");
-    check("Fix #25: the modal honestly says two permissions need a Settings switch",
-      _idx.includes("দুটো অনুমতি (সঠিক সময়ের অ্যালার্ম, অটোস্টার্ট) ফোনের নিয়মে শুধু সেটিংসের সুইচ দিয়ে চালু করা যায়"), "honest note");
+    check("Fix #32: on the web (no plugin) only the standard notification dialog is asked",
+      src.includes('Notification.requestPermission()') && src.includes('exact: true, battery: true, autostart: true'),
+      "web fallback");
 
     // ---- Fix #26: all 5 prayer times 100% correct (JAKIM, Ipoh/Chemor) ----
     // Official JAKIM times (Aladhan API, method 17, school 0) verified live:

@@ -400,10 +400,6 @@ hr.sep{border:none; border-top:1px solid var(--line); margin:14px 0}
 .alarm-warn{display:flex; flex-direction:column; gap:6px; background:#fff3cd; border:1px solid #e6c200; color:#6d4c00; border-radius:12px; padding:10px 12px; margin:0 0 10px; font-size:14px}
 .alarm-warn[hidden]{display:none}
 .alarm-warn .btn{align-self:flex-start}
-.perm-dots{display:flex;gap:8px;margin:10px 0 4px}
-.perm-dot{width:30px;height:30px;border-radius:50%;border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--muted)}
-.perm-dot.cur{border-color:var(--gold);color:var(--gold-d);background:rgba(212,175,55,.15)}
-.perm-dot.done{border-color:var(--emerald);background:var(--emerald);color:#fff}
 .alarm-status{font-size:13px; color:#666; margin-top:8px}
 .ring-count{font-size:34px; font-weight:700; letter-spacing:1px; margin:2px 0}
 .ring-sub{font-size:13px; opacity:.92}
