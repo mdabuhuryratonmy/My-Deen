@@ -40,6 +40,7 @@ globalThis.migrateAlarmSounds=migrateAlarmSounds;
 globalThis.normalizeSounds=normalizeSounds; globalThis.toggleDetailSound=toggleDetailSound;
 globalThis.qiblaBearing=qiblaBearing; globalThis.updateNeedle=updateNeedle;
 globalThis.__setQiblaDeg=v=>{ qiblaDeg=v; }; globalThis.__setHeading=v=>{ heading=v; };
+globalThis.fetchQibla=fetchQibla; globalThis.__getQiblaDeg=()=>qiblaDeg;
 globalThis.resolveCityCoordsOffline=resolveCityCoordsOffline;
 `);
 
@@ -474,5 +475,26 @@ check("Fix #12: existing coordinates are not overwritten by the table",
   settings.lat === 23.1664 && settings.lon === 89.2081, `${settings.lat},${settings.lon}`);
 Object.assign(settings, _savedTz);
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+// ---- Fix #13 follow-up: fetchQibla falls back to the local bearing ----
+// (async — the summary waits for these checks)
+(async()=>{
+  try {
+    const _realFetch = globalThis.fetch;
+    const _savedQ = {lat:settings.lat, lon:settings.lon, city:settings.city, country:settings.country, locId:settings.locId};
+    settings.lat = 51.5074; settings.lon = -0.1278; settings.city = "London"; settings.country = "United Kingdom"; settings.locId = "london";
+    globalThis.fetch = async()=>({ok:true, json:async()=>({code:200, data:{direction:291.9}})});
+    await fetchQibla();
+    check("Fix #13: API direction is used when it answers (291.9)", Math.abs(__getQiblaDeg() - 291.9) < 0.001, String(__getQiblaDeg()));
+    globalThis.fetch = async()=>({ok:true, json:async()=>({code:400, data:{}})});
+    await fetchQibla();
+    check("Fix #13: API error payload falls back to the local bearing (London 119.0°)", Math.abs(__getQiblaDeg() - 119) < 0.5, String(__getQiblaDeg()));
+    globalThis.fetch = async()=>{ throw new Error("network down"); };
+    await fetchQibla();
+    check("Fix #13: network failure falls back to the local bearing", Math.abs(__getQiblaDeg() - 119) < 0.5, String(__getQiblaDeg()));
+    globalThis.fetch = _realFetch;
+    Object.assign(settings, _savedQ);
+  } finally {
+    console.log(`\n${pass} passed, ${fail} failed`);
+    process.exit(fail ? 1 : 0);
+  }
+})();
