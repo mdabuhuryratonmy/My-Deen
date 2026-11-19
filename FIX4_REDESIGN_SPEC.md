@@ -75,3 +75,8 @@
 - বড় কাউন্টডাউন রিং — **রাতে সাহরি পর্যন্ত, দিনে ইফতার পর্যন্ত** গুনবে
 - নিচে রোজা সম্পর্কে হাদিসের কার্ড — ডানে/বামে সোয়াইপ করে হাদিস বদলানো যাবে (ডট দেখাবে)
 - সাওমের সময়সূচি তালিকা: পরবর্তী সাহরি (সময় + ঘণ্টা আইকন) ও পরবর্তী ইফতার (সময় + ঘণ্টা আইকন) — **ঘণ্টায় ট্যাপ করলে সেই সাহরি/ইফতারের অ্যালার্ম সেট হবে** (সবুজ ঘণ্টা = চালু, ধূসর = বন্ধ)
+
+## Fix #5 (2026-11-19, user-reported after installing the run #15 build)
+1. Profile form: after saving name/Gmail the WHOLE form disappears; only a small saved line (✓ name) + delete button remain; deleting the profile brings the form back. (Fix #3 only hid the login button — the form stayed visible.)
+2. Manual location REMOVED everywhere: the city/country inputs in Settings, and the manual form in the home location-setup modal. Location is GPS-only now; all texts mentioning manual entry updated.
+3. Unlock durood: NO code change — verified the receiver is registered for USER_PRESENT in the run #15 APK manifest (aapt), the JS default is ON and synced to native. If it still does not play, the cause is the phone side: the app must be the installed APK (not the PWA) and Xiaomi Autostart + Battery "No restrictions" must be ON for My Deen.
