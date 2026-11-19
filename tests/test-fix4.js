@@ -30,7 +30,7 @@ globalThis.renderLoginState=renderLoginState; globalThis.renderReminderSettings=
 globalThis.renderFastSchedule=renderFastSchedule; globalThis.renderFasting=renderFasting;
 globalThis.FASTING_HADITHS=FASTING_HADITHS; globalThis.PREAZAN_TEXTS=PREAZAN_TEXTS;
 globalThis.TAHAJJUD_TEXT=TAHAJJUD_TEXT; globalThis.ALARM_SOUNDS=ALARM_SOUNDS;
-globalThis.PREAZAN_IDS=PREAZAN_IDS; globalThis.AZAN_IDS=AZAN_IDS;
+globalThis.PREAZAN_IDS=PREAZAN_IDS; globalThis.PREAZAN5_IDS=PREAZAN5_IDS; globalThis.AZAN_IDS=AZAN_IDS;
 globalThis.getDetailDraft=()=>detailDraft; globalThis.getDetailId=()=>detailId;
 globalThis.__setTimings = v => { timings = v; };
 globalThis.pname=pname; globalThis.Lb=Lb; globalThis.num=num; globalThis.t=t;
@@ -72,11 +72,11 @@ check("alarmSound defaults name / notification", settings.alarmSound.Fajr==="nam
 check("permAsked default false", settings.permAsked===false);
 
 // ---- Pre-azan texts: exact, not one letter changed ----
-check("pre-azan Fajr exact", PREAZAN_TEXTS.Fajr === "ফজরের নামাজের সময় হয়েছে, ঘুম থেকে উঠে মিসওয়াক করে নামাজের প্রস্তুতি নিন");
-check("pre-azan Dhuhr exact", PREAZAN_TEXTS.Dhuhr === "যোহরের নামাজের সময় হয়েছে, মিসওয়াক করে নামাজের প্রস্তুতি নিন");
-check("pre-azan Asr exact", PREAZAN_TEXTS.Asr === "আসরের নামাজের সময় হয়েছে, মিসওয়াক করে নামাজের প্রস্তুতি নিন");
-check("pre-azan Maghrib exact", PREAZAN_TEXTS.Maghrib === "মাগরিবের নামাজের সময় হয়েছে, মিসওয়াক করে নামাজের প্রস্তুতি নিন");
-check("pre-azan Isha exact", PREAZAN_TEXTS.Isha === "ইশার নামাজের সময় হয়েছে, মিসওয়াক করে নামাজের প্রস্তুতি নিন");
+check("pre-azan Fajr exact", PREAZAN_TEXTS.Fajr === "ফজরের নামাজের সময় হয়েছে, ঘুম থেকে উঠে মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন");
+check("pre-azan Dhuhr exact", PREAZAN_TEXTS.Dhuhr === "যোহরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন");
+check("pre-azan Asr exact", PREAZAN_TEXTS.Asr === "আসরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন");
+check("pre-azan Maghrib exact", PREAZAN_TEXTS.Maghrib === "মাগরিবের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন");
+check("pre-azan Isha exact", PREAZAN_TEXTS.Isha === "ইশার নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন");
 check("tahajjud text exact", TAHAJJUD_TEXT === "তাহাজ্জুদের সময় হয়েছে, উঠে নামাজের প্রস্তুতি নিন");
 
 // ---- Forbidden windows ----
@@ -103,11 +103,12 @@ check("inside morning forbidden window counts to its end", ne2.kind==="forbidden
 
 // ---- Alarm list ----
 let list = buildPrayerAlarmList();
-check("alarm list has 5 azan + 5 pre-azan by default", list.length===10 && list.filter(a=>a.type==="azan").length===5 && list.filter(a=>a.type==="preazan").length===5, String(list.length));
+check("alarm list has 5 azan + 10 pre-azan by default", list.length===15 && list.filter(a=>a.type==="azan").length===5 && list.filter(a=>a.type==="preazan").length===10, String(list.length));
 const fajrAzan = list.find(a=>a.prayerId==="Fajr" && a.type==="azan");
-const fajrPre = list.find(a=>a.prayerId==="Fajr" && a.type==="preazan");
-check("pre-azan is exactly 2 min before azan", fajrPre && fajrAzan && (fajrAzan.at - fajrPre.at)===120000);
-check("pre-azan ids 31–35", list.filter(a=>a.type==="preazan").map(a=>a.id).join(",")==="31,32,33,34,35");
+const fajrPres = list.filter(a=>a.prayerId==="Fajr" && a.type==="preazan");
+const fajrDiffs = fajrPres.map(a=>(fajrAzan.at - a.at + 86400000) % 86400000);
+check("pre-azan is twice: 5 and 2 min before azan", fajrAzan && fajrPres.length===2 && fajrDiffs.includes(300000) && fajrDiffs.includes(120000));
+check("pre-azan ids 31–35 and 51–55", list.filter(a=>a.type==="preazan").map(a=>a.id).sort((x,y)=>x-y).join(",")==="31,32,33,34,35,51,52,53,54,55");
 check("no tahajjud alarm when its toggle is off", !list.some(a=>a.type==="tahajjud"));
 settings.alarmOn.Tahajjud = true; settings.alarmOn.Sehri = true; settings.alarmOn.Iftar = true; settings.alarmOn.Duha = true;
 list = buildPrayerAlarmList();
@@ -227,6 +228,40 @@ check("header hides on home",
   src.includes("hdr.style.display") && src.includes('v === "home" ? "none"'));
 check("renderTracker guards the removed tracker card",
   src.includes("if (!box) return;"));
+
+// ---- Fix #8: pre-azan twice (5 + 2 min before), exact texts, no hurry ----
+check("pre-azan texts are the user's exact words",
+  PREAZAN_TEXTS.Fajr === "ফজরের নামাজের সময় হয়েছে, ঘুম থেকে উঠে মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+  PREAZAN_TEXTS.Dhuhr === "যোহরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+  PREAZAN_TEXTS.Asr === "আসরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+  PREAZAN_TEXTS.Maghrib === "মাগরিবের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+  PREAZAN_TEXTS.Isha === "ইশার নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন");
+check("tahajjud text is the user's exact words",
+  TAHAJJUD_TEXT === "তাহাজ্জুদের সময় হয়েছে, উঠে নামাজের প্রস্তুতি নিন");
+check("no hurry/check wording left anywhere in the app",
+  !src.includes("তাড়াতাড়ি") && !src.includes("নামাজ পড়েছো কিনা") && !src.includes("CHECK_IDS") && !src.includes("HURRY_IDS") && !src.includes("prayer_check") && !src.includes("scheduleNativeAzanChecks"));
+// buildPrayerAlarmList: 2 pre-azan entries per prayer, 5 and 2 min before the azan
+__setTimings({Fajr:"05:42", Dhuhr:"13:04", Asr:"16:24", Maghrib:"18:58", Isha:"20:11", Sunrise:"07:03", Sunset:"18:58", Imsak:"05:32", Lastthird:"02:03"});
+settings.alarmOn = {...settings.alarmOn, Fajr:true, Dhuhr:true, Asr:true, Maghrib:true, Isha:true, Tahajjud:true, Sehri:false, Iftar:false, Duha:false};
+const alarmList = buildPrayerAlarmList();
+const preList = alarmList.filter(a=>a.type==="preazan");
+check("each prayer gets two pre-azan reminders (5 min + 2 min before)",
+  preList.length === 10 && ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>{
+    const az = alarmList.find(a=>a.type==="azan" && a.prayerId===pid);
+    const pres = preList.filter(a=>a.prayerId===pid);
+    if (!az || pres.length!==2) return false;
+    const diffs = pres.map(a=>(az.at - a.at + 86400000) % 86400000);
+    return diffs.includes(5*60000) && diffs.includes(2*60000) &&
+      pres.every(a=>a.body===PREAZAN_TEXTS[pid] && a.sound==="none");
+  }));
+check("pre-azan ids are 31-35 (2 min) and 51-55 (5 min)",
+  preList.map(a=>a.id).sort((x,y)=>x-y).join(",") === [...PREAZAN_IDS, ...PREAZAN5_IDS].sort((x,y)=>x-y).join(","));
+check("tahajjud is a single silent notification, no azan",
+  alarmList.filter(a=>a.type==="tahajjud").length===1 &&
+  alarmList.find(a=>a.type==="tahajjud").body===TAHAJJUD_TEXT &&
+  alarmList.find(a=>a.type==="tahajjud").sound==="none");
+check("old daily check/hurry repeats are cancelled once on sync",
+  src.includes("cancelLegacyCheckReminders") && src.includes("legacy_check_cancelled"));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
