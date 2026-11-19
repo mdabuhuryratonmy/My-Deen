@@ -26,6 +26,7 @@ globalThis.forbiddenWindows=forbiddenWindows; globalThis.nextEvent=nextEvent; gl
 globalThis.computeTimingsLocal=computeTimingsLocal; globalThis.effSchool=effSchool; globalThis.schoolForRegion=schoolForRegion; globalThis.toMin=toMin;
 globalThis.locNow=locNow; globalThis.locAbs=locAbs; globalThis.todayKey=todayKey; globalThis.ddmmyyyy=ddmmyyyy; globalThis.__getTimings=()=>timings;
 globalThis.buildPrayerAlarmList=buildPrayerAlarmList; globalThis.renderPrayers=renderPrayers;
+globalThis.renderForbidden=renderForbidden;
 globalThis.renderCalendarPage=renderCalendarPage; globalThis.openPrayerDetail=openPrayerDetail;
 globalThis.updateDetailTime=updateDetailTime; globalThis.renderAlarmPage=renderAlarmPage;
 globalThis.renderLoginState=renderLoginState; globalThis.renderReminderSettings=renderReminderSettings; globalThis.dhikrMinFromOffset=dhikrMinFromOffset; globalThis.renderTracker=renderTracker; globalThis.renderFastHadith=renderFastHadith;
@@ -138,6 +139,39 @@ check("Fix #15: at 18:36 (reported case) the ring shows Asr (current), counting 
 const at0650 = new Date(); at0650.setHours(6,50,0,0);
 const ne0650 = nextEvent(at0650);
 check("Fix #15: at 06:50 the ring shows Fajr (current), counting to sunrise 07:03", ne0650.kind==="prayer" && ne0650.id==="Fajr" && ne0650.state==="current" && ne0650.at.getHours()===7 && ne0650.at.getMinutes()===3, ne0650.kind+" "+ne0650.id);
+
+// ---- Fix #16: forbidden time shows the message, no countdown ----
+// During a forbidden window the ring must show "এখন সালাতের নিষিদ্ধ
+// সময়, এই সময়ে নামাজ পড়া নিষিদ্ধ" — no "শেষ হতে বাকি" countdown.
+// In a normal waqt the ring shows the prayer name + countdown as
+// before. Also: the forbidden section's midday cell must show the
+// Fix #15 window (12:56–13:02), not the old hardcoded 12:50–13:00.
+const RealDate16 = Date;
+const _tz16 = settings.tzName; settings.tzName = "";
+const fake16 = (h, m, s=0) => {
+  const t = new Date(); t.setHours(h, m, s, 0);
+  globalThis.Date = class extends RealDate16 {
+    constructor(...a){ super(...(a.length ? a : [t.getTime()])); }
+    static now(){ return t.getTime(); }
+  };
+};
+settings.lang = "bn";
+fake16(18, 50); renderPrayers();
+check("Fix #16: at 18:50 (inside evening window) the ring shows the forbidden message, no countdown",
+  els["#ring-name"].textContent === "এখন সালাতের নিষিদ্ধ সময়, এই সময়ে নামাজ পড়া নিষিদ্ধ" &&
+  els["#ring-count"].textContent === "" && els["#ring-count"].style.display === "none" &&
+  els["#ring-sub"].textContent === "" && els["#ring-label"].textContent === "নিষিদ্ধ সময়",
+  `${els["#ring-name"].textContent} / count='${els["#ring-count"].textContent}' / sub='${els["#ring-sub"].textContent}'`);
+fake16(18, 36); renderPrayers();
+check("Fix #16: at 18:36 (Asr) the ring still shows Asr + countdown + 'শেষ হতে বাকি'",
+  els["#ring-name"].textContent === "আসর" && els["#ring-count"].textContent === "০০:২২:০০" &&
+  els["#ring-sub"].textContent === "শেষ হতে বাকি" && els["#ring-label"].textContent === "বর্তমান নামাজ",
+  `${els["#ring-name"].textContent} / ${els["#ring-count"].textContent} / ${els["#ring-sub"].textContent}`);
+renderForbidden();
+check("Fix #16: forbidden section midday cell shows the Fix #15 window 12:56–13:02",
+  els["#forbidden-list"].innerHTML.includes("১২:৫৬") && els["#forbidden-list"].innerHTML.includes("১:০২") && !els["#forbidden-list"].innerHTML.includes("১২:৫০"),
+  els["#forbidden-list"].innerHTML.slice(0, 220));
+globalThis.Date = RealDate16; settings.tzName = _tz16;
 
 // ---- Fix #11: Asr school follows the region (Malaysia = Shafi'i) ----
 const _savedS = {country:settings.country, school:settings.school, schoolExplicit:settings.schoolExplicit, lat:settings.lat, lon:settings.lon, city:settings.city, tzName:settings.tzName, locId:settings.locId, tzLoc:settings.tzLoc, method:settings.method};
