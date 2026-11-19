@@ -2430,24 +2430,22 @@ function renderPrayers(){
   const ringName = $("#ring-name"), ringCount = $("#ring-count"), ringFg = $("#ring-fg"),
         ringLabel = $("#ring-label"), ringSub = $("#ring-sub");
   if (ringName){
-    // Fix #16: during a forbidden window the ring shows the message
-    // "এখন সালাতের নিষিদ্ধ সময়, এই সময়ে নামাজ পড়া নিষিদ্ধ" — NO
-    // "শেষ হতে বাকি" countdown. Otherwise the ring shows the prayer
-    // name + "শেষ হতে বাকি"/"শুরু হতে বাকি" + HH:MM:SS as before.
+    // Fix #16 + Fix #17 (user reversed the countdown part): during a
+    // forbidden window the ring name shows the message "এখন সালাতের
+    // নিষিদ্ধ সময়, এই সময়ে নামাজ পড়া নিষিদ্ধ" — AND the "শেষ হতে
+    // বাকি" countdown IS shown too. Otherwise the ring shows the
+    // prayer name + countdown as before.
     const isForbidNow = ev.kind==="forbidden" && ev.state==="current";
     ringName.textContent = isForbidNow
       ? Lb("এখন সালাতের নিষিদ্ধ সময়, এই সময়ে নামাজ পড়া নিষিদ্ধ", "It is now a forbidden time for prayer; praying is forbidden at this time")
       : ev.name;
     ringName.classList.toggle("forbid-msg", isForbidNow);
   }
-  if (ringCount){
-    ringCount.textContent = (ev.kind==="forbidden" && ev.state==="current") ? "" : `${num(pad2(h))}:${num(pad2(m))}:${num(pad2(s))}`;
-    ringCount.style.display = (ev.kind==="forbidden" && ev.state==="current") ? "none" : "";
-  }
+  if (ringCount) ringCount.textContent = `${num(pad2(h))}:${num(pad2(m))}:${num(pad2(s))}`;
   if (ringLabel) ringLabel.textContent = ev.kind==="prayer"
     ? (ev.state==="current" ? Lb("বর্তমান নামাজ", "Current prayer") : Lb("পরের নামাজ", "Next prayer"))
     : ev.kind==="tahajjud" ? Lb("তাহাজ্জুদ", "Tahajjud") : Lb("নিষিদ্ধ সময়", "Forbidden time");
-  if (ringSub) ringSub.textContent = (ev.kind==="forbidden" && ev.state==="current") ? "" : (ev.state==="current" ? Lb("শেষ হতে বাকি", "Time remaining") : Lb("শুরু হতে বাকি", "Starts in"));
+  if (ringSub) ringSub.textContent = ev.state==="current" ? Lb("শেষ হতে বাকি", "Time remaining") : Lb("শুরু হতে বাকি", "Starts in");
   if (ringFg){
     const C = 2*Math.PI*96;
     const prog = Math.min(1, Math.max(0, (now - ev.prev) / (ev.at - ev.prev)));
