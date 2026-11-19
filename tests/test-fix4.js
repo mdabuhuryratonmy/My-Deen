@@ -447,6 +447,21 @@ check("Fix #13: local bearing Jashore is 277.8° (API 277.84°)",
 check("Fix #13: cross-check London 119.0°, New York 58.5°",
   Math.abs(qiblaBearing(51.5074, -0.1278) - 119) < 0.5 && Math.abs(qiblaBearing(40.7128, -74.006) - 58.5) < 0.5,
   `${qiblaBearing(51.5074, -0.1278).toFixed(1)} / ${qiblaBearing(40.7128, -74.006).toFixed(1)}`);
+// Fix #13 worldwide: the SAME universal great-circle formula, no
+// city-specific code — verified against the Aladhan API in 6 cities.
+// (Mecca itself is the destination: at the Kaaba the direction is
+// undefined, so Jeddah is the meaningful nearby check.)
+const WORLD_QIBLA = [
+  ["Dhaka", 23.8103, 90.4125, 277.57],
+  ["Jeddah", 21.4858, 39.1925, 96.01],
+  ["London", 51.5074, -0.1278, 118.99],
+  ["New York", 40.7128, -74.0060, 58.48],
+  ["Jakarta", -6.2088, 106.8456, 295.15],
+  ["Ipoh", 4.5975, 101.0901, 291.90],
+];
+check("Fix #13 worldwide: local bearing matches the Aladhan API in 6 cities (Dhaka, Jeddah, London, New York, Jakarta, Ipoh)",
+  WORLD_QIBLA.every(([n, la, lo, api]) => Math.abs(qiblaBearing(la, lo) - api) < 0.1),
+  WORLD_QIBLA.map(([n, la, lo, api]) => `${n} ${qiblaBearing(la, lo).toFixed(2)}°`).join(", "));
 const _css13 = fs.readFileSync("/home/hatch/workspace/deen-day/www/styles.css", "utf8");
 const _needleRule = (_css13.match(/\.compass \.needle\{[^}]*\}/) || [""])[0];
 check("Fix #13: needle extends upward from the centre (top 10%, height 40%, pivot 50% 100%)",
