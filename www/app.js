@@ -2875,8 +2875,13 @@ function renderSurahList(filter="", tab="all"){
   }
   if (filter){
     const f = filter.trim().toLowerCase();
-    list = list.filter(s=> s.englishName.toLowerCase().includes(f) || String(s.number)===f ||
-      (s.englishNameTranslation||"").toLowerCase().includes(f));
+    // Fix #21: users type "Fatiha" but the name is spelled "Faatiha" —
+    // collapsing repeated letters on both sides makes the common
+    // spelling find the surah (and the original spelling still works).
+    const normName = s => s.toLowerCase().replace(/(.)\1+/g, "$1");
+    const nf = normName(f);
+    list = list.filter(s=> normName(s.englishName).includes(nf) || String(s.number)===f ||
+      normName(s.englishNameTranslation||"").includes(nf));
   }
   box.innerHTML = list.map(s=>`<button class="surah-item" data-surah="${s.number}">
     <span class="num">${num(s.number)}</span>
@@ -4241,17 +4246,23 @@ async function scheduleNativeDhikr(){
     // Fix #4 §6: a dhikr reminder notification also PLAYS its audio —
     // each kind gets its own channel with its own sound (durood.mp3 /
     // istighfar.mp3), because Android 8+ plays the CHANNEL sound.
-    await LN.createChannel({ id: "dhikr-durood", name: "Durood reminders",
+    // Fix #18: the old channel IDs were created without a working sound
+    // on the user's phone (notification arrived, no audio) and Android
+    // never updates an existing channel — so the reminders now use
+    // fresh v2 channel IDs (the old ones are deleted by the native
+    // ensureChannels). The per-notification sound fields stay: the
+    // plugin strips the ".mp3" and resolves R.raw.durood/istighfar.
+    await LN.createChannel({ id: "dhikr-durood-v2", name: "Durood reminders",
       description: "Durood Sharif reminders", sound: "durood.mp3", importance: 4, vibration: true });
-    await LN.createChannel({ id: "dhikr-istighfar", name: "Istighfar reminders",
+    await LN.createChannel({ id: "dhikr-istighfar-v2", name: "Istighfar reminders",
       description: "Astaghfirullah reminders", sound: "istighfar.mp3", importance: 4, vibration: true });
     const jobs = [
       { on: settings.duroodRemOn, min: settings.duroodRemMin || 30, base: DUROOD_REM_BASE,
-        channelId: "dhikr-durood", sound: "durood.mp3",
+        channelId: "dhikr-durood-v2", sound: "durood.mp3",
         title: "My Deen — " + Lb("দরুদ শরিফ", "Durood Sharif"),
         body: DUROOD_AR + " — " + Lb("দরুদ পড়ুন", "Recite Durood upon the Prophet ﷺ") },
       { on: settings.astaghRemOn, min: settings.astaghRemMin || 30, base: ASTAGH_REM_BASE,
-        channelId: "dhikr-istighfar", sound: "istighfar.mp3",
+        channelId: "dhikr-istighfar-v2", sound: "istighfar.mp3",
         title: "My Deen — " + Lb("ইস্তিগফার", "Istighfar"),
         body: ASTAGH_AR + " — " + Lb("আস্তাগফিরুল্লাহ পড়ুন, আল্লাহর কাছে ক্ষমা চান", "Recite Astaghfirullah — seek Allah's forgiveness") }
     ];
@@ -4504,16 +4515,76 @@ function buildPrayerAlarmList(){
    Capacitor LocalNotifications (the old path). */
 async function syncPrayerAlarms(){
   await cancelLegacyCheckReminders(); // Fix #8: remove the old daily check/hurry repeats once
+  const list = buildPrayerAlarmList();
   const PA = (typeof window.Capacitor !== "undefined" && window.Capacitor.Plugins)
     ? window.Capacitor.Plugins.PrayerAlarm : null;
   if (PA && PA.scheduleAlarms){
     try {
-      const list = buildPrayerAlarmList();
-      await PA.scheduleAlarms({ alarms: list.map(a=>({ id:a.id, at:a.at.getTime(), type:a.type, title:a.title, body:a.body, sound:a.sound, prayerId:a.prayerId })) });
+      // Fix #19: the schedule result used to be ignored — on a fresh
+      // install, with the exact-alarm permission still missing, EVERY
+      // alarm was silently skipped and the user only found out when the
+      // azan never rang. Now the skipped count is recorded and shown.
+      const r = await PA.scheduleAlarms({ alarms: list.map(a=>({ id:a.id, at:a.at.getTime(), type:a.type, title:a.title, body:a.body, sound:a.sound, prayerId:a.prayerId })) });
+      alarmStatus.checked = true;
+      alarmStatus.scheduled = (r && typeof r.scheduled === "number") ? r.scheduled : list.length;
+      alarmStatus.skipped = (r && typeof r.skipped === "number") ? r.skipped : 0;
+      refreshAlarmStatus();
       return;
     } catch(e){ /* fall through to the LN path */ }
   }
   await scheduleNativeAzan();
+  alarmStatus.checked = true; alarmStatus.scheduled = list.length; alarmStatus.skipped = 0;
+  refreshAlarmStatus();
+}
+/* Fix #19: alarm + permission status, shown on Home (warning banner)
+   and the Alarm page so the user can SEE before the prayer time
+   whether the azan will ring — instead of discovering at the prayer
+   time that it never rang. */
+let alarmStatus = { checked:false, notifications:false, exact:false, scheduled:0, skipped:0 };
+async function refreshAlarmStatus(){
+  const PA = (typeof window.Capacitor !== "undefined" && window.Capacitor.Plugins)
+    ? window.Capacitor.Plugins.PrayerAlarm : null;
+  if (PA && PA.getStatus){
+    try {
+      const s = await PA.getStatus();
+      alarmStatus.checked = true;
+      alarmStatus.notifications = !!s.notificationsGranted;
+      alarmStatus.exact = !!s.exactAlarmGranted;
+    } catch(e){}
+  }
+  renderAlarmStatus();
+}
+function nextAzanInfo(){
+  try {
+    if (!timings) return "";
+    const now = Date.now();
+    const next = buildPrayerAlarmList().filter(a=>a.type==="azan" && a.at.getTime() > now).sort((x,y)=>x.at-y.at)[0];
+    if (!next) return "";
+    return `${Lb("পরের আজান", "Next azan")}: ${pname(next.prayerId)} ${fmtTime(timings[next.prayerId] || "")}`;
+  } catch(e){ return ""; }
+}
+function renderAlarmStatus(){
+  const w = $("#alarm-warn");
+  if (w){
+    const bad = alarmStatus.checked && (!alarmStatus.notifications || !alarmStatus.exact || alarmStatus.skipped > 0);
+    w.hidden = !bad;
+    if (bad){
+      const missing = [];
+      if (!alarmStatus.notifications) missing.push(Lb("নোটিফিকেশন", "notifications"));
+      if (!alarmStatus.exact) missing.push(Lb("সঠিক সময়ের অ্যালার্ম", "exact alarms"));
+      w.innerHTML = `<b>⚠ ${Lb("আজানের অ্যালার্ম সেট হয়নি", "Azan alarms are not set")}</b><span>${Lb("অনুমতি দিন, নইলে আজান বাজবে না", "Grant the permission or the azan will not ring")}${missing.length ? " — " + missing.join(", ") : ""}</span><button class="btn small" id="alarm-warn-btn">${Lb("অনুমতি দিন", "Grant permission")}</button>`;
+      const b = $("#alarm-warn-btn"); if (b) b.onclick = ()=>requestAllPermissions();
+    }
+  }
+  const s = $("#alarm-status");
+  if (s && alarmStatus.checked){
+    if (!alarmStatus.notifications || !alarmStatus.exact || alarmStatus.skipped > 0){
+      s.innerHTML = `⚠ ${Lb("আজানের অ্যালার্ম সেট হয়নি — ওপরে অনুমতি দিন", "Azan alarms are not set — grant the permission above")}`;
+    } else {
+      const next = nextAzanInfo();
+      s.innerHTML = `✓ ${Lb("আজানের অ্যালার্ম চালু আছে", "Azan alarms are on")} (${num(alarmStatus.scheduled)})${next ? " — " + next : ""}`;
+    }
+  }
 }
 async function scheduleNativeAzan(){
   try {
@@ -5125,7 +5196,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
      hidden — re-render the moment it comes back, and pick up a
      location saved in another tab. */
   const resyncCountdown = ()=>{ renderPrayers(); if (timingsDate !== ddmmyyyy()) initPrayers(); };
-  document.addEventListener("visibilitychange", ()=>{ if (!document.hidden) resyncCountdown(); });
+  document.addEventListener("visibilitychange", ()=>{ if (!document.hidden){ resyncCountdown(); syncPrayerAlarms(); refreshAlarmStatus(); } }); // Fix #19: re-sync alarms on foreground — granting the exact-alarm permission in Settings and returning now arms the alarms (before this, a grant after the first sync left every alarm unarmed until a full restart, with no warning)
   window.addEventListener("focus", resyncCountdown);
   window.addEventListener("storage", resyncCountdown);
   setInterval(checkDhikrReminders, 20000);
