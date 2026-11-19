@@ -380,10 +380,57 @@ nav button.on{color:var(--emerald); font-weight:700}
 .hidden{display:none !important}
 .center{text-align:center}
 hr.sep{border:none; border-top:1px solid var(--line); margin:14px 0}
+/* ---------- Fix #4: countdown ring hero ---------- */
+.ring-hero{position:relative; overflow:hidden; text-align:center; color:#fff; border:none; padding:22px 16px 16px}
+.ring-hero[data-sky="dawn"]{background:linear-gradient(180deg,#2b3a67 0%, #7b5e9e 34%, #e8907c 62%, #f7b267 100%)}
+.ring-hero[data-sky="day"]{background:linear-gradient(180deg,#1d6fb8 0%, #4aa3df 45%, #a8d8f0 78%, #d9eefb 100%)}
+.ring-hero[data-sky="golden"]{background:linear-gradient(180deg,#5b4a8a 0%, #c97b4a 42%, #f2a65a 70%, #ffd98a 100%)}
+.ring-hero[data-sky="dusk"]{background:linear-gradient(180deg,#1c1445 0%, #6d2a5e 40%, #c94f5e 68%, #ff8a5c 100%)}
+.ring-hero[data-sky="night"]{background:linear-gradient(180deg,#020617 0%, #0b1e3a 52%, #16324f 82%, #1e4a6b 100%)}
+.ring-wrap{position:relative; width:220px; height:220px; margin:0 auto}
+.ring-svg{width:220px; height:220px; transform:rotate(-90deg)}
+.ring-bg{fill:none; stroke:rgba(255,255,255,.28); stroke-width:9}
+.ring-fg{fill:none; stroke:var(--gold); stroke-width:9; stroke-linecap:round}
+.ring-center{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-shadow:0 2px 10px rgba(0,0,0,.45)}
+.ring-moon{font-size:26px; line-height:1}
+.ring-hero .small{font-size:13px; opacity:.92; margin-top:4px}
+.ring-name{font-size:22px; font-weight:700; color:#fff}
+.ring-count{font-size:34px; font-weight:700; letter-spacing:1px; margin:2px 0}
+.ring-sub{font-size:13px; opacity:.92}
+.pills{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:16px}
+.pill{background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.35); color:#fff;
+  border-radius:999px; padding:6px 12px; font-size:13px; font-weight:600}
+.small-ring{margin:6px auto 0}
 
+/* prayer list: icon + orange dot */
+.p-ic{margin-right:6px}
+.orange-dot{display:inline-block; width:9px; height:9px; border-radius:50%; background:#f97316; margin-left:6px; vertical-align:middle}
+.link-btn{background:none; border:none; color:var(--emerald); font-size:13px; font-weight:600; text-decoration:underline; padding:4px 0}
+[data-theme="dark"] .link-btn{color:var(--gold-l)}
 
-/* Profile photo */
-.profile-photo-row{display:flex; align-items:center; gap:14px; margin:10px 0 14px}
-.avatar-big{width:72px; height:72px; min-width:72px; border-radius:50%; border:2px solid var(--gold); background:var(--emerald); color:#fff; display:flex; align-items:center; justify-content:center; font-size:30px; font-weight:700; overflow:hidden}
-.avatar-big img{width:100%; height:100%; object-fit:cover}
-.hdr-avatar{width:36px; height:36px; border-radius:50%; border:2px solid var(--gold); object-fit:cover}
+/* detail page: slider + sounds */
+.adj-slider{width:100%; accent-color:var(--emerald); margin:14px 0 6px}
+.sound-row{display:flex; justify-content:space-between; align-items:center; padding:11px 2px; border-bottom:1px solid var(--line); cursor:pointer}
+.sound-row:last-child{border-bottom:none}
+.sound-row.on{background:rgba(212,175,55,.12); border-radius:10px; padding-left:10px; padding-right:10px}
+.sound-name{font-size:15px; font-weight:600}
+.sound-check{font-size:16px; margin-right:4px}
+
+/* calendar day cards */
+.cal-card{padding:0; overflow:hidden}
+.cal-head{background:linear-gradient(135deg,var(--emerald-d),var(--emerald) 60%,var(--emerald-l)); color:#fff;
+  padding:12px 14px; font-weight:700; font-size:14.5px; display:flex; justify-content:space-between; align-items:center; gap:8px}
+.cal-head .mini-btn{background:rgba(255,255,255,.18); border-color:rgba(255,255,255,.4); color:#fff}
+.cal-line{display:flex; justify-content:space-between; padding:7px 14px; border-bottom:1px solid var(--line); font-size:14.5px}
+.cal-forb{padding:10px 14px; font-size:13px; color:var(--muted); background:rgba(212,175,55,.08)}
+
+/* fasting page: hadith swipe + bells */
+.fast-hadith-card{text-align:center; padding:6px 4px}
+.fast-hadith-card .n-ar{font-size:20px}
+.fast-hadith-card .n-bn{margin-top:6px; line-height:1.7}
+.fast-hadith-card .n-date{margin-top:6px; font-size:12.5px; color:var(--muted)}
+.dots{display:flex; gap:6px; justify-content:center; margin-top:10px}
+.dots .dot{width:9px; height:9px; border-radius:50%; border:none; background:var(--line); padding:0}
+.dots .dot.on{background:var(--gold)}
+.bell-btn{background:none; border:none; font-size:22px; padding:2px 6px}
+.bell-btn.on{filter:drop-shadow(0 0 6px rgba(13,122,92,.6))}
