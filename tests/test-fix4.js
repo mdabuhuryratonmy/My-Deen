@@ -35,6 +35,7 @@ globalThis.getDetailDraft=()=>detailDraft; globalThis.getDetailId=()=>detailId;
 globalThis.__setTimings = v => { timings = v; };
 globalThis.pname=pname; globalThis.Lb=Lb; globalThis.num=num; globalThis.t=t;
 globalThis.migrateAlarmSounds=migrateAlarmSounds;
+globalThis.normalizeSounds=normalizeSounds; globalThis.toggleDetailSound=toggleDetailSound;
 `);
 
 let pass = 0, fail = 0;
@@ -69,7 +70,7 @@ check("offsets include Duha/Tahajjud/forbidden/Sehri/Iftar",
 check("alarmOn defaults: 5 fard on, others off",
   settings.alarmOn.Fajr===true && settings.alarmOn.Isha===true && settings.alarmOn.Duha===false &&
   settings.alarmOn.Tahajjud===false && settings.alarmOn.Sehri===false && settings.alarmOn.Iftar===false);
-check("alarmSound defaults all name (prayer name, permanent default)", Object.values(settings.alarmSound).every(v=>v==="name") && settings.alarmSound.Fajr==="name" && settings.alarmSound.Sehri==="name");
+check("alarmSound defaults all [name] (prayer name, permanent default)", Object.values(settings.alarmSound).every(v=>Array.isArray(v) && v.length===1 && v[0]==="name") && settings.alarmSound.Fajr[0]==="name" && settings.alarmSound.Sehri[0]==="name");
 check("permAsked default false", settings.permAsked===false);
 
 // ---- Pre-azan texts: exact, not one letter changed ----
@@ -133,7 +134,7 @@ getDetailDraft().offset = 0; updateDetailTime();
 check("offset 0 shows 'Exact time'", els["#detail-exact"].textContent === "Exact time", els["#detail-exact"].textContent);
 getDetailDraft().offset = 5; updateDetailTime();
 check("offset +5 changes the set time to 5:47", els["#detail-time"].textContent.includes("৫:৪৭"), els["#detail-time"].textContent);
-check("ALARM_SOUNDS has 5 options, no notification, name is default", ALARM_SOUNDS.length===5 && ALARM_SOUNDS.some(s=>s.id==="azan") && ALARM_SOUNDS.some(s=>s.id==="silent") && ALARM_SOUNDS.some(s=>s.id==="name") && !ALARM_SOUNDS.some(s=>s.id==="notification"));
+check("ALARM_SOUNDS has 6 options incl. notification and name", ALARM_SOUNDS.length===6 && ALARM_SOUNDS.some(s=>s.id==="azan") && ALARM_SOUNDS.some(s=>s.id==="silent") && ALARM_SOUNDS.some(s=>s.id==="name") && ALARM_SOUNDS.some(s=>s.id==="notification"));
 
 // ---- Alarm page + calendar ----
 renderAlarmPage();
@@ -264,13 +265,51 @@ check("tahajjud is a single silent notification, no azan",
 check("old daily check/hurry repeats are cancelled once on sync",
   src.includes("cancelLegacyCheckReminders") && src.includes("legacy_check_cancelled"));
 
-// ---- Fix #9: "notification" sound removed; "name" is the permanent default; pre-azan always on ----
-check("no notification sound option anywhere in the alarm flow",
-  !ALARM_SOUNDS.some(s=>s.id==="notification") && !src.includes('id:"notification"') && !src.includes('sound==="notification"'));
+// ---- Fix #10: multi-select alarm sound (name permanent + one extra, max 2) ----
+check("normalizeSounds keeps old choice next to permanent name",
+  JSON.stringify(normalizeSounds("notification"))===JSON.stringify(["name","notification"]) &&
+  JSON.stringify(normalizeSounds("azan"))===JSON.stringify(["name","azan"]) &&
+  JSON.stringify(normalizeSounds("silent"))===JSON.stringify(["silent"]) &&
+  JSON.stringify(normalizeSounds(["azan","notification"]))===JSON.stringify(["name","azan"]) &&
+  JSON.stringify(normalizeSounds("name"))===JSON.stringify(["name"]));
 settings.alarmSound.Sehri = "notification"; // simulate an older saved value
 migrateAlarmSounds();
-check("older saved notification sound migrates to name",
-  settings.alarmSound.Sehri==="name" && Object.values(settings.alarmSound).every(v=>v!=="notification"));
+check("older saved notification sound migrates to name + notification",
+  JSON.stringify(settings.alarmSound.Sehri)===JSON.stringify(["name","notification"]));
+openPrayerDetail("Fajr");
+check("detail draft starts with name only",
+  JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["name"]));
+toggleDetailSound("azan");
+check("adding azan gives name + azan",
+  JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["name","azan"]));
+toggleDetailSound("notification");
+check("a third sound is refused (max 2 together)",
+  JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["name","azan"]));
+toggleDetailSound("azan");
+check("tapping a selected extra removes it, name stays",
+  JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["name"]));
+toggleDetailSound("name");
+check("name cannot be turned off (permanent default)",
+  JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["name"]));
+toggleDetailSound("silent");
+check("silent stands alone",
+  JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["silent"]));
+toggleDetailSound("azan");
+check("picking another sound clears silent",
+  JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["name","azan"]));
+settings.alarmSound.Fajr = ["name","azan"];
+const azanSoundList = buildPrayerAlarmList();
+check("name + azan plays the azan sound",
+  azanSoundList.find(a=>a.type==="azan" && a.prayerId==="Fajr").sound==="azan");
+settings.alarmSound.Fajr = ["name","notification"];
+const notifSoundList = buildPrayerAlarmList();
+check("name + notification plays the notification sound",
+  notifSoundList.find(a=>a.type==="azan" && a.prayerId==="Fajr").sound==="reminder");
+settings.alarmSound.Fajr = ["silent"];
+const silentSoundList = buildPrayerAlarmList();
+check("silent alone plays no sound",
+  silentSoundList.find(a=>a.type==="azan" && a.prayerId==="Fajr").sound==="none");
+settings.alarmSound.Fajr = ["name"];
 settings.alarmOn = {...settings.alarmOn, Fajr:false, Dhuhr:false, Asr:false, Maghrib:false, Isha:false, Tahajjud:false, Sehri:false, Iftar:false, Duha:false};
 const alarmListOff = buildPrayerAlarmList();
 check("pre-azan stays on even when every prayer alarm is off",
