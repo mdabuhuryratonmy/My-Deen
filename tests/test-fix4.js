@@ -175,6 +175,34 @@ check("Fix #16: forbidden section midday cell shows the Fix #15 window 12:56–1
   els["#forbidden-list"].innerHTML.slice(0, 220));
 globalThis.Date = RealDate16; settings.tzName = _tz16;
 
+// ---- Fix #18: dhikr reminder notification arrives but no audio ----
+// Cause: Android plays the notification CHANNEL's sound, and once a
+// channel is created its sound can never be changed — the old
+// dhikr-durood/dhikr-istighfar channels on the user's phone were
+// created without a working sound, so every reminder arrived silent.
+// (The MP3s themselves are fine: durood 3.72 s / mean −22.1 dB,
+// istighfar 6.17 s / mean −23.0 dB — normal audible speech; the
+// plugin resolves "durood.mp3" correctly by stripping the extension.)
+// Fix: fresh v2 channel IDs in both the native ensureChannels (with
+// R.raw.durood/istighfar + HIGH importance) and the JS scheduler,
+// and the old channels are deleted. The old IDs must not appear as a
+// channelId/createChannel id anywhere in the schedule path.
+const _src18 = fs.readFileSync("/home/hatch/workspace/deen-day/www/app.js", "utf8");
+const _java18 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AlarmScheduler.java", "utf8");
+check("Fix #18: JS schedules durood reminders on the v2 channel with durood.mp3",
+  _src18.includes('channelId: "dhikr-durood-v2", sound: "durood.mp3"'), "channelId dhikr-durood-v2");
+check("Fix #18: JS schedules istighfar reminders on the v2 channel with istighfar.mp3",
+  _src18.includes('channelId: "dhikr-istighfar-v2", sound: "istighfar.mp3"'), "channelId dhikr-istighfar-v2");
+check("Fix #18: the old channel IDs are gone from the JS schedule path (exact quoted ids)",
+  !/"dhikr-durood"/.test(_src18) && !/"dhikr-istighfar"/.test(_src18), "no old ids in app.js");
+check("Fix #18: native creates the v2 channels with the raw sounds + HIGH importance",
+  _java18.includes('createChannel(nm, ctx, "dhikr-durood-v2"') && _java18.includes("IMPORTANCE_HIGH, R.raw.durood") &&
+  _java18.includes('createChannel(nm, ctx, "dhikr-istighfar-v2"') && _java18.includes("IMPORTANCE_HIGH, R.raw.istighfar"),
+  "native v2 channels");
+check("Fix #18: native deletes the old (possibly silent) dhikr channels",
+  _java18.includes('deleteNotificationChannel("dhikr-durood")') && _java18.includes('deleteNotificationChannel("dhikr-istighfar")'),
+  "old channels deleted");
+
 // ---- Fix #11: Asr school follows the region (Malaysia = Shafi'i) ----
 const _savedS = {country:settings.country, school:settings.school, schoolExplicit:settings.schoolExplicit, lat:settings.lat, lon:settings.lon, city:settings.city, tzName:settings.tzName, locId:settings.locId, tzLoc:settings.tzLoc, method:settings.method};
 settings.country = "Malaysia"; settings.schoolExplicit = false; settings.school = 1;
