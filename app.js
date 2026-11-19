@@ -4387,7 +4387,7 @@ function checkAzan(){
      1. pre-azan reminder — the user's exact Bengali text (Fix #8), the
         SAME text twice: 5 minutes before (ids 51-55) and 2 minutes
         before (ids 31-35), no sound.
-     2. azan (ids 1-5) at prayer time + user offset, channel "azan" with
+     2. azan (ids 1-5) at prayer time + user offset, channel "azan-v2" with
         the bundled azan.mp3 as the notification sound. The sound is
         played by the system as the notification sound, so dismissing /
         swiping the notification away stops the azan audio.
@@ -4472,7 +4472,7 @@ function buildPrayerAlarmList(){
         title: "My Deen — " + name, body: PREAZAN_TEXTS[id], sound: "none", prayerId: id });
     });
     if (!settings.alarmOn[id]) return;
-    list.push({ id: AZAN_IDS[i], at, type: "azan", title: "My Deen — " + name,
+    list.push({ id: AZAN_IDS[i], at, type: "azan-v2", title: "My Deen — " + name,
       body: Lb("মিসওয়াক ও অজু করে নামাজের জন্য প্রস্তুত হোন", "Use miswak and perform wudu to prepare for prayer"),
       sound: soundFor(id), prayerId: id });
   });
@@ -4558,7 +4558,7 @@ function nextAzanInfo(){
   try {
     if (!timings) return "";
     const now = Date.now();
-    const next = buildPrayerAlarmList().filter(a=>a.type==="azan" && a.at.getTime() > now).sort((x,y)=>x.at-y.at)[0];
+    const next = buildPrayerAlarmList().filter(a=>a.type==="azan-v2" && a.at.getTime() > now).sort((x,y)=>x.at-y.at)[0];
     if (!next) return "";
     return `${Lb("পরের আজান", "Next azan")}: ${pname(next.prayerId)} ${fmtTime(timings[next.prayerId] || "")}`;
   } catch(e){ return ""; }
@@ -4594,7 +4594,7 @@ async function scheduleNativeAzan(){
     const perm = await LN.requestPermissions();
     if (perm && perm.display && perm.display !== "granted") return;
     // Channels: Android 8+ plays the CHANNEL sound, so each sound gets its own channel.
-    await LN.createChannel({ id: "azan", name: "Azan", description: "Prayer time azan alerts", sound: "azan.mp3", importance: 5, vibration: true });
+    await LN.createChannel({ id: "azan-v2", name: "Azan", description: "Prayer time azan alerts", sound: "azan.mp3", importance: 5, vibration: true });
     await LN.createChannel({ id: "preazan", name: "Pre-azan reminders", description: "5 and 2 minutes before prayer time", importance: 4, vibration: true });
     await LN.createChannel({ id: "tahajjud", name: "Tahajjud", description: "Tahajjud notification (no azan)", importance: 4, vibration: true });
     await LN.createChannel({ id: "sehri", name: "Sehri", description: "Sehri alarm", importance: 4, vibration: true });

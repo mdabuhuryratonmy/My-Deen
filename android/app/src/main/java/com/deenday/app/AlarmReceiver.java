@@ -23,7 +23,10 @@ public class AlarmReceiver extends BroadcastReceiver {
             AlarmScheduler.ensureChannels(context);
             int id = intent.getIntExtra("id", 0);
             String type = intent.getStringExtra("type");
-            if (type == null || type.isEmpty()) type = "azan";
+            if (type == null || type.isEmpty()) type = "azan-v2";
+            // Fix #24: stale stored alarms from the old build carry
+            // type "azan" — post them on the new channel too.
+            if (type.equals("azan")) type = "azan-v2";
             String title = intent.getStringExtra("title");
             String body = intent.getStringExtra("body");
             NotificationCompat.Builder builder = new NotificationCompat.Builder(context, type)

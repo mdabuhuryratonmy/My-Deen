@@ -104,7 +104,7 @@ public final class AlarmScheduler {
     public static PendingIntent pendingIntent(Context ctx, JSONObject alarm) {
         Intent i = new Intent(ctx, AlarmReceiver.class);
         i.putExtra("id", alarm.optInt("id", 0));
-        i.putExtra("type", alarm.optString("type", "azan"));
+        i.putExtra("type", alarm.optString("type", "azan-v2"));
         i.putExtra("title", alarm.optString("title", "My Deen"));
         i.putExtra("body", alarm.optString("body", ""));
         i.putExtra("sound", alarm.optString("sound", "none"));
@@ -125,8 +125,14 @@ public final class AlarmScheduler {
         try {
             NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm == null) return;
-            createChannel(nm, ctx, "azan", "Azan", "Prayer time azan alerts",
+            createChannel(nm, ctx, "azan-v2", "Azan", "Prayer time azan alerts",
                     NotificationManager.IMPORTANCE_HIGH, R.raw.azan);
+            // Fix #24: the old "azan" channel on the user's phone plays NO
+            // sound (notifications arrive silently, exactly like the dhikr
+            // channels in Fix #18) and Android never updates an existing
+            // channel's sound, so the only reliable repair is a fresh
+            // channel ID. Delete the old (possibly silent) one.
+            nm.deleteNotificationChannel("azan");
             createChannel(nm, ctx, "preazan", "Pre-azan reminders", "2 minutes before prayer time",
                     NotificationManager.IMPORTANCE_DEFAULT, -1);
             createChannel(nm, ctx, "tahajjud", "Tahajjud", "Tahajjud notification (no azan)",

@@ -256,8 +256,8 @@ Object.assign(settings, _savedS);
 
 // ---- Alarm list ----
 let list = buildPrayerAlarmList();
-check("alarm list has 5 azan + 10 pre-azan by default", list.length===15 && list.filter(a=>a.type==="azan").length===5 && list.filter(a=>a.type==="preazan").length===10, String(list.length));
-const fajrAzan = list.find(a=>a.prayerId==="Fajr" && a.type==="azan");
+check("alarm list has 5 azan + 10 pre-azan by default", list.length===15 && list.filter(a=>a.type==="azan-v2").length===5 && list.filter(a=>a.type==="preazan").length===10, String(list.length));
+const fajrAzan = list.find(a=>a.prayerId==="Fajr" && a.type==="azan-v2");
 const fajrPres = list.filter(a=>a.prayerId==="Fajr" && a.type==="preazan");
 const fajrDiffs = fajrPres.map(a=>(fajrAzan.at - a.at + 86400000) % 86400000);
 check("pre-azan is twice: 5 and 2 min before azan", fajrAzan && fajrPres.length===2 && fajrDiffs.includes(300000) && fajrDiffs.includes(120000));
@@ -400,7 +400,7 @@ const alarmList = buildPrayerAlarmList();
 const preList = alarmList.filter(a=>a.type==="preazan");
 check("each prayer gets two pre-azan reminders (5 min + 2 min before)",
   preList.length === 10 && ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>{
-    const az = alarmList.find(a=>a.type==="azan" && a.prayerId===pid);
+    const az = alarmList.find(a=>a.type==="azan-v2" && a.prayerId===pid);
     const pres = preList.filter(a=>a.prayerId===pid);
     if (!az || pres.length!==2) return false;
     const diffs = pres.map(a=>(az.at - a.at + 86400000) % 86400000);
@@ -451,21 +451,21 @@ check("picking another sound clears silent",
 settings.alarmSound.Fajr = ["name","azan"];
 const azanSoundList = buildPrayerAlarmList();
 check("name + azan plays the azan sound",
-  azanSoundList.find(a=>a.type==="azan" && a.prayerId==="Fajr").sound==="azan");
+  azanSoundList.find(a=>a.type==="azan-v2" && a.prayerId==="Fajr").sound==="azan");
 settings.alarmSound.Fajr = ["name","notification"];
 const notifSoundList = buildPrayerAlarmList();
 check("name + notification plays the notification sound",
-  notifSoundList.find(a=>a.type==="azan" && a.prayerId==="Fajr").sound==="reminder");
+  notifSoundList.find(a=>a.type==="azan-v2" && a.prayerId==="Fajr").sound==="reminder");
 settings.alarmSound.Fajr = ["silent"];
 const silentSoundList = buildPrayerAlarmList();
 check("silent alone plays no sound",
-  silentSoundList.find(a=>a.type==="azan" && a.prayerId==="Fajr").sound==="none");
+  silentSoundList.find(a=>a.type==="azan-v2" && a.prayerId==="Fajr").sound==="none");
 settings.alarmSound.Fajr = ["name"];
 settings.alarmOn = {...settings.alarmOn, Fajr:false, Dhuhr:false, Asr:false, Maghrib:false, Isha:false, Tahajjud:false, Sehri:false, Iftar:false, Duha:false};
 const alarmListOff = buildPrayerAlarmList();
 check("pre-azan stays on even when every prayer alarm is off",
   alarmListOff.filter(a=>a.type==="preazan").length===10 &&
-  alarmListOff.filter(a=>a.type==="azan").length===0 &&
+  alarmListOff.filter(a=>a.type==="azan-v2").length===0 &&
   ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>alarmListOff.filter(a=>a.type==="preazan" && a.prayerId===pid).length===2));
 settings.alarmOn = {...settings.alarmOn, Fajr:true, Dhuhr:true, Asr:true, Maghrib:true, Isha:true};
 
@@ -507,7 +507,7 @@ settings.tzName = "Asia/Dhaka";
 // Native alarms must fire at the absolute instant of the location
 // wall-clock time: Maghrib 17:17 Jashore = 19:17 on a Malaysia clock.
 const dhakaWall = ms => { const d = new Date(ms + 6*3600000); return [d.getUTCHours(), d.getUTCMinutes()]; };
-const maghAzan = buildPrayerAlarmList().find(a=>a.type==="azan" && a.prayerId==="Maghrib");
+const maghAzan = buildPrayerAlarmList().find(a=>a.type==="azan-v2" && a.prayerId==="Maghrib");
 check("Fix #12: Maghrib alarm fires at 17:17 Jashore wall-clock (absolute instant)",
   maghAzan && dhakaWall(maghAzan.at.getTime()).join(":")==="17:17",
   maghAzan ? dhakaWall(maghAzan.at.getTime()).join(":") : "none");
@@ -827,6 +827,30 @@ Object.assign(settings, _savedTz);
       /<receiver android:name="\.AlarmReceiver" android:exported="false" \/>/.test(_mf), "exported=false");
     check("Fix #23: both system-broadcast intent filters are still present",
       _mf.includes("android.intent.action.USER_PRESENT") && _mf.includes("android.intent.action.BOOT_COMPLETED"), "filters ok");
+
+    // ---- Fix #24: azan channel re-created as azan-v2 (silent-channel repair) ----
+    // Symptom (20:43): notifications arrive but NO audio at all — azan sound
+    // never plays, exactly like the dhikr channels in Fix #18. The code
+    // creates "azan" with R.raw.azan, but a channel's sound can never be
+    // changed once created, so a broken/silent channel stays silent. Same
+    // repair as Fix #18: fresh channel ID, delete the old one. The alarm
+    // list's type IS the channel (AlarmReceiver posts on type), so the
+    // type, the JS createChannel and the native ensureChannels all move
+    // together; the receiver also maps a stale stored "azan" type to v2.
+    const _as = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AlarmScheduler.java", "utf8");
+    const _ar = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AlarmReceiver.java", "utf8");
+    check("Fix #24: azan alarm entries post on channel azan-v2",
+      buildPrayerAlarmList().filter(a=>a.type==="azan-v2").length===5, "5 v2 azan entries");
+    check("Fix #24: JS creates the azan-v2 channel with the azan sound",
+      src.includes('createChannel({ id: "azan-v2"') && src.includes('sound: "azan.mp3"'), "v2 channel");
+    check("Fix #24: no azan entry still uses the old channel",
+      !src.includes('type: "azan"') && !src.includes('createChannel({ id: "azan",'), "old channel gone");
+    check("Fix #24: next-azan status reads the v2 entries",
+      src.includes('a.type==="azan-v2"'), "nextAzanInfo v2");
+    check("Fix #24: native ensureChannels creates azan-v2 with R.raw.azan and deletes the old azan channel",
+      _as.includes('createChannel(nm, ctx, "azan-v2"') && _as.includes("R.raw.azan") && _as.includes('deleteNotificationChannel("azan")'), "native v2");
+    check("Fix #24: AlarmReceiver maps a stale stored 'azan' type to azan-v2",
+      _ar.includes('if (type.equals("azan")) type = "azan-v2"'), "stale mapping");
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);
