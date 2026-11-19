@@ -2726,18 +2726,25 @@ function renderGreet(){
   if (settings.profileName){
     el.classList.remove("hidden");
     el.textContent = `আসসালামু আলাইকুম, ${settings.profileName} 🤍`;
-  } else el.classList.add("hidden");
+    el.style.cursor = "pointer";
+    el.title = Lb("নাম বদলাতে ট্যাপ করুন", "Tap to change your name");
+    el.onclick = ()=>{ editingProfile = true; renderLoginState(); showView("settings"); }; // Fix #27: tapping the salam re-opens the profile form for editing (wired here, not in init, so it survives every re-render)
+  } else { el.classList.add("hidden"); el.style.cursor = ""; el.title = ""; el.onclick = null; }
 }
-/* Login (Fix #3 + Fix #5): the Gmail "login" is local-only — no account,
-   no server. Once saved, the WHOLE profile form disappears — only the
-   user's name in the salam greeting (renderGreet) and a small saved line
-   with a delete button remain. Clearing the profile brings the form back.
+/* Login (Fix #3 + Fix #5 + Fix #27): the Gmail "login" is local-only — no
+   account, no server. Once saved, the WHOLE profile form disappears AND
+   the saved line with its delete button disappears too (Fix #27, user
+   21:23: after login nothing of the profile block stays) — only the
+   user's name in the salam greeting (renderGreet) remains. Tapping that
+   salam re-opens the form (editingProfile) so the name can still be
+   changed or cleared; saving or clearing hides everything again.
    There is NO profile-photo feature. */
+let editingProfile = false;
 function renderLoginState(){
   const saved = !!(settings.profileName || settings.gmail);
   const form = $("#profile-form"), sv = $("#profile-saved");
-  if (form) form.classList.toggle("hidden", saved);
-  if (sv) sv.classList.toggle("hidden", !saved);
+  if (form) form.classList.toggle("hidden", saved && !editingProfile);
+  if (sv) sv.classList.toggle("hidden", !saved || !editingProfile);
   const nm = $("#profile-saved-name");
   if (nm) nm.textContent = settings.profileName || settings.gmail || "";
   const btn = $("#btn-gmail-login");
@@ -4198,13 +4205,15 @@ async function scheduleNativeDaily(){
 }
 
 /* ---------------- Durood & Astaghfirullah interval reminders ---------
-   Durood (Fix #5): an ON/OFF switch plus the SAME −30..+30 minute
-   slider (1-minute steps) as the prayer-time adjuster — middle (0) is
-   the exact standard 30-minute interval. Astaghfirullah keeps the
-   10 / 20 / 30 minute chips. While the app is open the reminder fires
-   in-app (durood audio + toast); in the Android app the next 24
-   occurrences are also scheduled as local notifications so they arrive
-   even when the app is closed. Re-synced on open and on every change. - */
+   Durood (Fix #5) and Astaghfirullah (Fix #28): an ON/OFF switch plus
+   the SAME −30..+30 minute slider (1-minute steps) as the prayer-time
+   adjuster — middle (0) is the exact standard 30-minute interval.
+   Astaghfirullah used to keep the 10 / 20 / 30 minute chips; the user
+   (21:26) asked for the same slider as durood above, so the chips are
+   gone. While the app is open the reminder fires in-app (durood audio
+   + toast); in the Android app the next 24 occurrences are also
+   scheduled as local notifications so they arrive even when the app is
+   closed. Re-synced on open and on every change. - */
 const REM_OPTS = [10, 20, 30];
 const DUROOD_REM_BASE = 401, ASTAGH_REM_BASE = 501, DHIKR_REM_COUNT = 24;
 const DUROOD_AR = "اللَّهُمَّ صَلِّ وَسَلِّمْ عَلَى نَبِيِّنَا مُحَمَّدٍ";
@@ -4309,7 +4318,7 @@ function renderReminderSettings(){
   const box = $("#reminder-settings"); if (!box) return;
   box.innerHTML =
     remPanel("durood", "📿", "দরুদ শরিফ রিমাইন্ডার", "Durood Sharif reminder", !!settings.duroodRemOn, settings.duroodRemMin || 30, true) +
-    remPanel("astagh", "🤲", "আস্তাগফিরুল্লাহ রিমাইন্ডার", "Astaghfirullah reminder", !!settings.astaghRemOn, settings.astaghRemMin || 30, false);
+    remPanel("astagh", "🤲", "আস্তাগফিরুল্লাহ রিমাইন্ডার", "Astaghfirullah reminder", !!settings.astaghRemOn, settings.astaghRemMin || 30, true); // Fix #28: same −30..+30 slider as durood above (user 21:26 — the 10/20/30 chips are gone, the slider replaces them)
   const dOn = $("#rem-durood-on"), aOn = $("#rem-astagh-on");
   if (dOn) dOn.onchange = e=>{ settings.duroodRemOn = e.target.checked; lastDuroodRemAt = Date.now();
     saveSettings(); scheduleNativeDhikr(); renderReminderSettings();
@@ -5035,7 +5044,6 @@ function applyLang(){
 }
 function fillSettings(){
   const du = $("#set-durood"); if (du) du.checked = !!settings.duroodOnUnlock;
-  const al = $("#set-autoloc"); if (al) al.checked = !!settings.autoLoc;
   const pn = $("#set-profile-name"); if (pn) pn.value = settings.profileName || "";
   const gm = $("#set-profile-gmail"); if (gm) gm.value = settings.gmail || "";
   renderGreet(); renderLoginState();
@@ -5061,7 +5069,9 @@ async function saveSettingsFromUI(){
   settings.reciter = $("#set-reciter").value;
   settings.theme = $("#set-dark").checked ? "dark" : "light";
   settings.duroodOnUnlock = $("#set-durood").checked;
-  settings.autoLoc = $("#set-autoloc").checked;
+  // Fix #29: the Auto Location toggle is gone from Settings (its one
+  // place is the home 📍 pill → location setup modal) — settings.autoLoc
+  // keeps its saved value and is no longer read from a form field here.
   syncDuroodToggleNative();
   applyTheme();
   saveSettings(); toast(t("saved"));
@@ -5101,19 +5111,17 @@ function bindEvents(){
   $("#btn-go-learn").onclick=()=>showView("learn");
   $("#btn-back-learn").onclick=()=>showView("home");
   $("#btn-mark-read").onclick=()=>toggleSurahRead(currentSurah);
-  $("#btn-save-profile").onclick=()=>{ settings.profileName = $("#set-profile-name").value.trim(); settings.gmail = $("#set-profile-gmail").value.trim(); saveSettings(); renderGreet(); renderLoginState(); toast(t("saved")); };
+  $("#btn-save-profile").onclick=()=>{ settings.profileName = $("#set-profile-name").value.trim(); settings.gmail = $("#set-profile-gmail").value.trim(); saveSettings(); editingProfile = false; renderGreet(); renderLoginState(); toast(t("saved")); };
   $("#btn-gmail-login").onclick=()=>{ const g = $("#set-profile-gmail").value.trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(g)){ toast(Lb("সঠিক Gmail ঠিকানা লিখুন", "Enter a valid Gmail address")); return; }
-    settings.gmail = g; saveSettings(); renderLoginState();
+    settings.gmail = g; saveSettings(); editingProfile = false; renderLoginState();
     toast(Lb("Gmail দিয়ে লগইন হয়েছে 🤍", "Logged in with Gmail 🤍"));
     showView("home"); };
-  $("#btn-clear-profile").onclick=()=>{ settings.profileName = ""; settings.gmail = ""; $("#set-profile-name").value = ""; $("#set-profile-gmail").value = ""; saveSettings(); renderGreet(); renderLoginState(); toast(Lb("মুছে ফেলা হয়েছে", "Removed")); };
-  $("#btn-detect-loc").onclick=()=>detectLocation(false);
+  $("#btn-clear-profile").onclick=()=>{ settings.profileName = ""; settings.gmail = ""; $("#set-profile-name").value = ""; $("#set-profile-gmail").value = ""; saveSettings(); editingProfile = false; renderGreet(); renderLoginState(); toast(Lb("মুছে ফেলা হয়েছে", "Removed")); };
   const bhdl = $("#btn-home-detect-loc"); if (bhdl) bhdl.onclick=()=>detectLocation(false);
   $("#set-durood").onchange=e=>{ settings.duroodOnUnlock = e.target.checked; saveSettings(); syncDuroodToggleNative(); };
   const sdEl = $("#set-daily");
   if (sdEl) sdEl.onchange=e=>{ settings.dailyNotif = e.target.checked; saveSettings(); scheduleNativeDaily(); maybeFireDailyWebNotif(); };
-  $("#set-autoloc").onchange=e=>{ settings.autoLoc = e.target.checked; saveSettings(); if (settings.autoLoc) detectLocation(true); };
   const slEl = $("#set-lang");
   if (slEl) slEl.onchange=e=>{ settings.lang = e.target.value; saveSettings(); applyLang(); };
   $("#set-dark").onchange=e=>{ settings.theme = e.target.checked?"dark":"light"; saveSettings(); applyTheme(); };

@@ -50,13 +50,14 @@ globalThis.validSurahMeta=validSurahMeta;
 globalThis.SEHRI_ID=SEHRI_ID; globalThis.IFTAR_ID=IFTAR_ID; globalThis.TAHAJJUD_ID=TAHAJJUD_ID; globalThis.DUHA_ID=DUHA_ID;
 globalThis.renderCalendarPage=renderCalendarPage; globalThis.openPrayerDetail=openPrayerDetail;
 globalThis.updateDetailTime=updateDetailTime; globalThis.renderAlarmPage=renderAlarmPage;
-globalThis.renderLoginState=renderLoginState; globalThis.renderReminderSettings=renderReminderSettings; globalThis.dhikrMinFromOffset=dhikrMinFromOffset; globalThis.renderTracker=renderTracker; globalThis.renderFastHadith=renderFastHadith;
+globalThis.renderLoginState=renderLoginState; globalThis.renderGreet=renderGreet; globalThis.renderReminderSettings=renderReminderSettings; globalThis.dhikrMinFromOffset=dhikrMinFromOffset; globalThis.remPanel=remPanel; globalThis.remSliderLabel=remSliderLabel; globalThis.renderTracker=renderTracker; globalThis.renderFastHadith=renderFastHadith;
 globalThis.renderFastSchedule=renderFastSchedule; globalThis.renderFasting=renderFasting;
 globalThis.FASTING_HADITHS=FASTING_HADITHS; globalThis.PREAZAN_TEXTS=PREAZAN_TEXTS;
 globalThis.TAHAJJUD_TEXT=TAHAJJUD_TEXT; globalThis.ALARM_SOUNDS=ALARM_SOUNDS;
 globalThis.PREAZAN_IDS=PREAZAN_IDS; globalThis.PREAZAN5_IDS=PREAZAN5_IDS; globalThis.AZAN_IDS=AZAN_IDS;
 globalThis.getDetailDraft=()=>detailDraft; globalThis.getDetailId=()=>detailId;
 globalThis.__setTimings = v => { timings = v; };
+globalThis.__setEditingProfile = v => { editingProfile = v; }; // Fix #27 test hook: the save/clear handlers live in init (past the harness cut), so tests drive the edit flag through this hook
 globalThis.pname=pname; globalThis.Lb=Lb; globalThis.num=num; globalThis.t=t;
 globalThis.migrateAlarmSounds=migrateAlarmSounds;
 globalThis.normalizeSounds=normalizeSounds; globalThis.toggleDetailSound=toggleDetailSound;
@@ -86,8 +87,8 @@ check("no profile photo markup in HTML",
   !html.includes("hdr-avatar") && !html.includes("profile-photo-input") && !html.includes("btn-change-photo") && !html.includes("gmail-status"));
 check("renderLoginState is a function", typeof renderLoginState === "function");
 settings.profileName = "Abu huryra"; settings.gmail = "tonmyboss@gmail.com"; renderLoginState();
-check("profile form hidden after save, saved row shown with name",
-  els["#profile-form"].classList.contains("hidden") && !els["#profile-saved"].classList.contains("hidden") && els["#profile-saved-name"].textContent === "Abu huryra");
+check("Fix #27: after save, BOTH the profile form and the saved row are hidden (only the name in the salam remains)",
+  els["#profile-form"].classList.contains("hidden") && els["#profile-saved"].classList.contains("hidden") && els["#profile-saved-name"].textContent === "Abu huryra");
 settings.profileName = ""; settings.gmail = ""; renderLoginState();
 check("profile form returns after profile is cleared",
   !els["#profile-form"].classList.contains("hidden") && els["#profile-saved"].classList.contains("hidden"));
@@ -337,8 +338,8 @@ const remHtml = els["#reminder-settings"].innerHTML;
 check("durood reminder has −30..+30 slider, 1-min steps, middle = exact time",
   remHtml.includes('data-rem-slider="durood"') && remHtml.includes('min="-30"') && remHtml.includes('max="30"') && remHtml.includes('step="1"') && remHtml.includes('value="0"') && remHtml.includes("সঠিক সময়"));
 check("durood reminder has no fixed chips any more", !remHtml.includes('data-rem-min="durood:'));
-check("astaghfirullah reminder still has 10/20/30 chips",
-  remHtml.includes('data-rem-min="astagh:10"') && remHtml.includes('data-rem-min="astagh:30"'));
+check("Fix #28: astaghfirullah reminder now has the same slider as durood (no 10/20/30 chips)",
+  remHtml.includes('data-rem-slider="astagh"') && !remHtml.includes('data-rem-min="astagh:'));
 settings.duroodRemMin = 35; renderReminderSettings();
 check("durood slider value follows the saved interval (35 min → +5)",
   els["#reminder-settings"].innerHTML.includes('data-rem-slider="durood"') && els["#reminder-settings"].innerHTML.includes('value="5"'));
@@ -781,8 +782,8 @@ Object.assign(settings, _savedTz);
     const _views = ["home","notif","quran","reader","tasbih","duas","learn","ruqyah","qibla","fasting","alarm","prayer-detail","calendar","settings","privacy"];
     check("Fix #20: all 15 views exist in the app",
       _views.every(v=>html.includes(`id="view-${v}"`)), `${_views.length} views`);
-    const _sets = ["set-adhan","set-autoloc","set-azan","set-daily","set-dark","set-durood","set-lang","set-method","set-notif","set-profile-gmail","set-profile-name","set-reciter","set-school"];
-    check("Fix #20: all 13 settings controls exist",
+    const _sets = ["set-adhan","set-azan","set-daily","set-dark","set-durood","set-lang","set-method","set-notif","set-profile-gmail","set-profile-name","set-reciter","set-school"]; // Fix #29: set-autoloc is gone (Auto Location lives in one place — the home 📍 pill → location setup modal)
+    check("Fix #20: all 12 settings controls exist",
       _sets.every(s=>html.includes(`id="${s}"`)), `${_sets.length} controls`);
     check("Fix #20: ruqyah + privacy views exist",
       html.includes('id="view-ruqyah"') && html.includes('id="view-privacy"'), "present");
@@ -909,7 +910,7 @@ Object.assign(settings, _savedTz);
     const _jakim20 = { Fajr:343, Sunrise:424, Dhuhr:781, Asr:984, Maghrib:1138, Isha:1211 };
     const _close = (t, ref) => t && ["Fajr","Sunrise","Dhuhr","Asr","Maghrib","Isha"].every(k=>Math.abs(toMin(t[k])-ref[k])<=2);
     check("Fix #26: local calc matches JAKIM 19 Nov Ipoh for all 5 prayers + Sunrise (±2 min)",
-      _close(t19n, _jakim), t19n ? ["Fajr","Sunrise","Dhuhr","Asr","Maghrib","Isha"].map(k=>k+" "+t19[k]).join(" ") : "null");
+      _close(t19n, _jakim), t19n ? ["Fajr","Sunrise","Dhuhr","Asr","Maghrib","Isha"].map(k=>k+" "+t19n[k]).join(" ") : "null");
     check("Fix #26: local calc matches JAKIM 20 Nov Ipoh (Fajr 05:43, rest identical) (±2 min)",
       _close(t20n, _jakim20), t20n ? t20n.Fajr + " " + t20.Maghrib : "null");
     check("Fix #26: Malaysia auto-selects JAKIM method 17 and Shafi'i Asr (not Hanafi)",
@@ -964,6 +965,86 @@ Object.assign(settings, _savedTz);
       _ringCases26.map(([h,m])=>{ const e=_ring26(h,m); return `${h}:${String(m).padStart(2,"0")}→${e.id}/${e.state}@${e.at.getHours()}:${String(e.at.getMinutes()).padStart(2,"0")}`; }).join(" "));
     globalThis.Date = RealDate26;
     Object.assign(settings, _saved26);
+
+    // ---- Fix #27: after login, nothing of the profile block stays ----
+    // The user (21:23): after login, the saved-profile line ("✓ …") and
+    // its "মুছুন" button must NOT remain — only the name in the salam
+    // greeting above stays. The profile is still editable: tapping the
+    // salam re-opens the form (edit mode), and saving hides it all again.
+    const _saved27 = { profileName: settings.profileName, gmail: settings.gmail };
+    settings.profileName = "Abu huryra"; settings.gmail = "tonmyboss@gmail.com";
+    renderGreet(); renderLoginState();
+    check("Fix #27: after login the salam shows the name, and the profile form + saved row are both hidden",
+      els["#greet-line"].textContent === "আসসালামু আলাইকুম, Abu huryra 🤍" &&
+      els["#profile-form"].classList.contains("hidden") &&
+      els["#profile-saved"].classList.contains("hidden"),
+      els["#greet-line"].textContent);
+    check("Fix #27: the salam is tappable (pointer cursor + hint) so the name can still be changed",
+      els["#greet-line"].style.cursor === "pointer" &&
+      els["#greet-line"].title === "নাম বদলাতে ট্যাপ করুন" &&
+      typeof els["#greet-line"].onclick === "function", "salam tap wired");
+    els["#greet-line"].onclick(); // tap the salam → edit mode
+    check("Fix #27: tapping the salam re-opens the profile form AND the saved row (with its মুছুন button)",
+      !els["#profile-form"].classList.contains("hidden") &&
+      !els["#profile-saved"].classList.contains("hidden"),
+      "edit mode open");
+    // The save button's handler lives in init (past the harness cut), so
+    // drive the same state change the handler makes via the hook.
+    __setEditingProfile(false); renderLoginState();
+    check("Fix #27: saving again hides the form and the saved row once more",
+      els["#profile-form"].classList.contains("hidden") &&
+      els["#profile-saved"].classList.contains("hidden") &&
+      settings.profileName === "Abu huryra", "hidden again");
+    settings.profileName = _saved27.profileName; settings.gmail = _saved27.gmail;
+    renderGreet(); renderLoginState();
+
+    // ---- Fix #28: Astaghfirullah reminder has the SAME slider as durood ----
+    // The user (21:26): above (durood) there is an adjust slider; below
+    // (Astaghfirullah) it must be the same — the 10/20/30 chips are gone,
+    // replaced by the −30..+30 (1-min step) slider. His current 20-min
+    // setting must survive the change exactly (offset −10 → 20 min).
+    const _saved28 = { astaghRemMin: settings.astaghRemMin, astaghRemOn: settings.astaghRemOn,
+      duroodRemMin: settings.duroodRemMin, duroodRemOn: settings.duroodRemOn };
+    settings.astaghRemMin = 20; settings.astaghRemOn = true;
+    const _astaghHtml = remPanel("astagh", "🤲", "আস্তাগফিরুল্লাহ রিমাইন্ডার", "Astaghfirullah reminder", true, 20, true);
+    check("Fix #28: the Astaghfirullah panel now uses the slider (not the 10/20/30 chips)",
+      _astaghHtml.includes('data-rem-slider="astagh"') && !_astaghHtml.includes("data-rem-min=") &&
+      _astaghHtml.includes('min="-30"') && _astaghHtml.includes('max="30"') && _astaghHtml.includes('step="1"'),
+      "slider, no chips");
+    check("Fix #28: the slider keeps his current 20-minute setting (offset −10)",
+      _astaghHtml.includes('value="-10"') && _astaghHtml.includes("২০ মিনিট"),
+      "20 min kept");
+    check("Fix #28: the slider label says the reminder comes every 20 minutes",
+      remSliderLabel("astagh", 20, -10).includes("২০ মিনিট") &&
+      remSliderLabel("astagh", 30, 0).includes("৩০ মিনিট"),
+      "label ok");
+    check("Fix #28: durood and astagh panels are built the same way (both sliders)",
+      remPanel("durood", "📿", "দরুদ শরিফ রিমাইন্ডার", "Durood Sharif reminder", true, 30, true).includes('data-rem-slider="durood"') &&
+      src.includes('remPanel("astagh"') && src.includes('settings.astaghRemMin || 30, true)'),
+      "both sliders");
+    settings.astaghRemMin = _saved28.astaghRemMin; settings.astaghRemOn = _saved28.astaghRemOn;
+    settings.duroodRemMin = _saved28.duroodRemMin; settings.duroodRemOn = _saved28.duroodRemOn;
+
+    // ---- Fix #29: Auto Location lives in ONE place, not in Settings ----
+    // The user (21:28): the Auto Location option stays in one place —
+    // remove it from inside Settings. The one place is the home 📍 pill
+    // → the location setup modal (GPS Allow button). The saved
+    // settings.autoLoc value keeps working; only its Settings UI is gone.
+    check("Fix #29: no Auto Location toggle or detect button left in Settings HTML",
+      !html.includes('id="set-autoloc"') && !html.includes('id="btn-detect-loc"') &&
+      !html.includes("autoLocLabel") && !html.includes("autoLocDesc"),
+      "removed from Settings");
+    check("Fix #29: no #set-autoloc / #btn-detect-loc references left in app.js (they would crash on null)",
+      !src.includes('"#set-autoloc"') && !src.includes('"#btn-detect-loc"'),
+      "no stale refs");
+    check("Fix #29: the one place remains — home 📍 pill opens the location setup modal with its GPS Allow button",
+      src.includes('pillLoc.onclick=()=>openLocSetup(false)') &&
+      html.includes('id="btn-loc-allow"') && html.includes('id="loc-setup"') &&
+      html.includes("GPS দিয়ে অটো সেট করুন"),
+      "pill → modal → GPS");
+    check("Fix #29: autoLoc still defaults on and still gates auto-detect on launch",
+      settings.autoLoc === true && src.includes("if (settings.autoLoc && !settings.locManual) detectLocation(true)"),
+      "behaviour kept");
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);
