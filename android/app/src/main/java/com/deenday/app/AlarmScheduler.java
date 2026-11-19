@@ -139,10 +139,18 @@ public final class AlarmScheduler {
                     NotificationManager.IMPORTANCE_DEFAULT, -1);
             createChannel(nm, ctx, "duha", "Duha", "Duha prayer alarm",
                     NotificationManager.IMPORTANCE_DEFAULT, R.raw.reminder);
-            createChannel(nm, ctx, "dhikr-durood", "Durood reminders", "Durood Sharif reminders",
-                    NotificationManager.IMPORTANCE_DEFAULT, R.raw.durood);
-            createChannel(nm, ctx, "dhikr-istighfar", "Istighfar reminders", "Astaghfirullah reminders",
-                    NotificationManager.IMPORTANCE_DEFAULT, R.raw.istighfar);
+            // Fix #18: the old dhikr channels were created WITHOUT a
+            // working sound on the user's phone — a notification arrived
+            // but no audio played — and Android never updates an
+            // existing channel's sound, so the only reliable repair is
+            // fresh channel IDs. Delete the old (possibly silent) ones
+            // and create v2 channels with the sound + HIGH importance.
+            nm.deleteNotificationChannel("dhikr-durood");
+            nm.deleteNotificationChannel("dhikr-istighfar");
+            createChannel(nm, ctx, "dhikr-durood-v2", "Durood reminders", "Durood Sharif reminders",
+                    NotificationManager.IMPORTANCE_HIGH, R.raw.durood);
+            createChannel(nm, ctx, "dhikr-istighfar-v2", "Istighfar reminders", "Astaghfirullah reminders",
+                    NotificationManager.IMPORTANCE_HIGH, R.raw.istighfar);
         } catch (Exception ignored) {}
     }
 
