@@ -410,6 +410,16 @@ hr.sep{border:none; border-top:1px solid var(--line); margin:14px 0}
 
 /* detail page: slider + sounds */
 .adj-slider{width:100%; accent-color:var(--emerald); margin:14px 0 6px}
+/* home: Alarm | Calendar row + Top Features (Fix #6, reference design) */
+.home-nav-row{display:flex; align-items:center; padding:8px 10px}
+.home-nav-btn{flex:1; background:none; border:none; color:var(--gold-d); font-size:16px; font-weight:700; padding:10px 4px; cursor:pointer}
+[data-theme="dark"] .home-nav-btn{color:var(--gold-l)}
+.home-nav-div{width:1px; height:26px; background:var(--line); flex:none}
+.feat-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:14px}
+.feat-item{display:flex; flex-direction:column; align-items:center; gap:8px; background:none; border:none; cursor:pointer; color:var(--text); font-size:14px; padding:4px 0}
+.feat-ic,.feat-ring{width:58px; height:58px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:26px; background:var(--card); border:1.5px solid var(--gold)}
+.feat-ring{font-size:15px; font-weight:700; color:var(--gold-d)}
+[data-theme="dark"] .feat-ring{color:var(--gold-l)}
 .sound-row{display:flex; justify-content:space-between; align-items:center; padding:11px 2px; border-bottom:1px solid var(--line); cursor:pointer}
 .sound-row:last-child{border-bottom:none}
 .sound-row.on{background:rgba(212,175,55,.12); border-radius:10px; padding-left:10px; padding-right:10px}
