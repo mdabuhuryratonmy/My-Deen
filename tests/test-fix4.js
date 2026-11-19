@@ -27,6 +27,9 @@ globalThis.computeTimingsLocal=computeTimingsLocal; globalThis.effSchool=effScho
 globalThis.locNow=locNow; globalThis.locAbs=locAbs; globalThis.todayKey=todayKey; globalThis.ddmmyyyy=ddmmyyyy; globalThis.__getTimings=()=>timings;
 globalThis.buildPrayerAlarmList=buildPrayerAlarmList; globalThis.renderPrayers=renderPrayers;
 globalThis.renderForbidden=renderForbidden;
+globalThis.syncPrayerAlarms=syncPrayerAlarms; globalThis.refreshAlarmStatus=refreshAlarmStatus;
+globalThis.renderAlarmStatus=renderAlarmStatus; globalThis.nextAzanInfo=nextAzanInfo;
+globalThis.__getAlarmStatus=()=>alarmStatus;
 globalThis.renderCalendarPage=renderCalendarPage; globalThis.openPrayerDetail=openPrayerDetail;
 globalThis.updateDetailTime=updateDetailTime; globalThis.renderAlarmPage=renderAlarmPage;
 globalThis.renderLoginState=renderLoginState; globalThis.renderReminderSettings=renderReminderSettings; globalThis.dhikrMinFromOffset=dhikrMinFromOffset; globalThis.renderTracker=renderTracker; globalThis.renderFastHadith=renderFastHadith;
@@ -597,6 +600,46 @@ Object.assign(settings, _savedTz);
     check("Fix #13: network failure falls back to the local bearing", Math.abs(__getQiblaDeg() - 119) < 0.5, String(__getQiblaDeg()));
     globalThis.fetch = _realFetch;
     Object.assign(settings, _savedQ);
+
+    // ---- Fix #19: azan never rang at Maghrib on the fresh install ----
+    // The exact-alarm permission was missing, so every alarm was
+    // silently skipped and the app never said so. Now the sync result
+    // is recorded, the status is shown (banner + Alarm page), and
+    // alarms re-sync on foreground.
+    const _mockPA = (sched, status) => {
+      globalThis.Capacitor = { Plugins: {
+        PrayerAlarm: {
+          scheduleAlarms: async()=>sched,
+          getStatus: async()=>status,
+          requestPermissions: async()=>({notifications:true, exactAlarm:true}),
+        },
+        LocalNotifications: { cancel: async()=>({}), requestPermissions: async()=>({display:"granted"}) },
+      }};
+    };
+    const RealDate19 = Date;
+    const _tz19 = settings.tzName; settings.tzName = "";
+    _mockPA({scheduled:0, skipped:5}, {notificationsGranted:false, exactAlarmGranted:false, alarmsScheduled:0});
+    await syncPrayerAlarms(); await refreshAlarmStatus();
+    check("Fix #19: skipped alarms are recorded and the Home warning banner shows",
+      __getAlarmStatus().skipped === 5 && els["#alarm-warn"].hidden === false && els["#alarm-warn"].innerHTML.includes("আজানের অ্যালার্ম সেট হয়নি"),
+      els["#alarm-warn"].innerHTML.slice(0, 80));
+    _mockPA({scheduled:35, skipped:0}, {notificationsGranted:true, exactAlarmGranted:true, alarmsScheduled:35});
+    const t19 = new Date(); t19.setHours(17,0,0,0);
+    globalThis.Date = class extends RealDate19 {
+      constructor(...a){ super(...(a.length ? a : [t19.getTime()])); }
+      static now(){ return t19.getTime(); }
+    };
+    await syncPrayerAlarms(); await refreshAlarmStatus();
+    check("Fix #19: when all alarms are armed the banner hides and the status shows the next azan (Maghrib)",
+      __getAlarmStatus().skipped === 0 && els["#alarm-warn"].hidden === true && els["#alarm-status"].innerHTML.includes("মাগরিব"),
+      els["#alarm-status"].innerHTML.slice(0, 100));
+    globalThis.Date = RealDate19; settings.tzName = _tz19;
+    delete globalThis.Capacitor;
+    check("Fix #19: foreground re-syncs alarms (visibilitychange handler calls syncPrayerAlarms + refreshAlarmStatus)",
+      /visibilitychange[\s\S]{0,200}syncPrayerAlarms\(\); refreshAlarmStatus\(\)/.test(src), "foreground resync");
+    check("Fix #19: native stores only armed alarms (getStatus count is honest)",
+      fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/PrayerAlarmPlugin.java", "utf8").includes("if (AlarmScheduler.schedule(getContext(), a)) { scheduled++; next.put(a); }"),
+      "store armed only");
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);
