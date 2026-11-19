@@ -87,11 +87,15 @@ check("no profile photo markup in HTML",
   !html.includes("hdr-avatar") && !html.includes("profile-photo-input") && !html.includes("btn-change-photo") && !html.includes("gmail-status"));
 check("renderLoginState is a function", typeof renderLoginState === "function");
 settings.profileName = "Abu huryra"; settings.gmail = "tonmyboss@gmail.com"; renderLoginState();
-check("Fix #27: after save, BOTH the profile form and the saved row are hidden (only the name in the salam remains)",
-  els["#profile-form"].classList.contains("hidden") && els["#profile-saved"].classList.contains("hidden") && els["#profile-saved-name"].textContent === "Abu huryra");
+check("Fix #34 (keeps Fix #27): after save the form + saved row are hidden, but the name row with the 'নাম বদলান' button IS visible",
+  els["#profile-form"].classList.contains("hidden") && els["#profile-saved"].classList.contains("hidden") &&
+  !els["#profile-current"].classList.contains("hidden") && els["#profile-current-name"].textContent === "Abu huryra");
+settings.profileName = ""; settings.gmail = "tonmyboss@gmail.com"; renderLoginState();
+check("Fix #34: a saved Gmail alone no longer counts as a profile — the name form stays visible",
+  !els["#profile-form"].classList.contains("hidden") && els["#profile-current"].classList.contains("hidden"));
 settings.profileName = ""; settings.gmail = ""; renderLoginState();
-check("profile form returns after profile is cleared",
-  !els["#profile-form"].classList.contains("hidden") && els["#profile-saved"].classList.contains("hidden"));
+check("profile form returns after profile is cleared (name row hidden again)",
+  !els["#profile-form"].classList.contains("hidden") && els["#profile-saved"].classList.contains("hidden") && els["#profile-current"].classList.contains("hidden"));
 
 // ---- Fix #4 defaults ----
 check("offsets include Duha/Tahajjud/forbidden/Sehri/Iftar",
@@ -812,7 +816,7 @@ Object.assign(settings, _savedTz);
     const _views = ["home","notif","quran","reader","tasbih","duas","learn","ruqyah","qibla","fasting","alarm","prayer-detail","calendar","settings","privacy"];
     check("Fix #20: all 15 views exist in the app",
       _views.every(v=>html.includes(`id="view-${v}"`)), `${_views.length} views`);
-    const _sets = ["set-adhan","set-azan","set-daily","set-dark","set-durood","set-lang","set-method","set-notif","set-profile-gmail","set-profile-name","set-reciter","set-school"]; // Fix #29: set-autoloc is gone (Auto Location lives in one place — the home 📍 pill → location setup modal)
+    const _sets = ["set-adhan","set-azan","set-daily","set-dark","set-durood","set-lang","set-method","set-notif","btn-edit-profile","set-profile-name","set-reciter","set-school"]; // Fix #29: set-autoloc is gone (Auto Location lives in one place — the home 📍 pill → location setup modal). Fix #34: set-profile-gmail is gone (profile is name-only, no Gmail login); btn-edit-profile is the new name-change control.
     check("Fix #20: all 12 settings controls exist",
       _sets.every(s=>html.includes(`id="${s}"`)), `${_sets.length} controls`);
     check("Fix #20: ruqyah + privacy views exist",
@@ -1002,11 +1006,13 @@ Object.assign(settings, _savedTz);
     globalThis.Date = RealDate26;
     Object.assign(settings, _saved26);
 
-    // ---- Fix #27: after login, nothing of the profile block stays ----
-    // The user (21:23): after login, the saved-profile line ("✓ …") and
-    // its "মুছুন" button must NOT remain — only the name in the salam
-    // greeting above stays. The profile is still editable: tapping the
-    // salam re-opens the form (edit mode), and saving hides it all again.
+    // ---- Fix #27 updated by Fix #34: after login the name row stays ----
+    // The user (21:23) wanted the saved-profile line ("✓ …") and its
+    // "মুছুন" button gone after login — that stays. But (22:10) he could
+    // not see where to write/change his name, because the whole card went
+    // empty. So now the card shows the saved name with a clear
+    // "✏️ নাম বদলান" button instead; the name write/change option is
+    // always visible, and there is NO Gmail login anywhere.
     const _saved27 = { profileName: settings.profileName, gmail: settings.gmail };
     settings.profileName = "Abu huryra"; settings.gmail = "tonmyboss@gmail.com";
     renderGreet(); renderLoginState();
@@ -1015,6 +1021,11 @@ Object.assign(settings, _savedTz);
       els["#profile-form"].classList.contains("hidden") &&
       els["#profile-saved"].classList.contains("hidden"),
       els["#greet-line"].textContent);
+    check("Fix #34: after login the name row with the 'নাম বদলান' button IS visible in the profile card",
+      !els["#profile-current"].classList.contains("hidden") &&
+      els["#profile-current-name"].textContent === "Abu huryra" &&
+      html.includes('id="btn-edit-profile"') && html.includes("নাম বদলান"),
+      "name row visible");
     check("Fix #27: the salam is tappable (pointer cursor + hint) so the name can still be changed",
       els["#greet-line"].style.cursor === "pointer" &&
       els["#greet-line"].title === "নাম বদলাতে ট্যাপ করুন" &&
@@ -1022,15 +1033,31 @@ Object.assign(settings, _savedTz);
     els["#greet-line"].onclick(); // tap the salam → edit mode
     check("Fix #27: tapping the salam re-opens the profile form AND the saved row (with its মুছুন button)",
       !els["#profile-form"].classList.contains("hidden") &&
-      !els["#profile-saved"].classList.contains("hidden"),
+      !els["#profile-saved"].classList.contains("hidden") &&
+      els["#profile-current"].classList.contains("hidden"),
       "edit mode open");
+    check("Fix #34: in edit mode the name box already holds the current name (no blank retype)",
+      els["#set-profile-name"].value === "Abu huryra", "prefilled");
     // The save button's handler lives in init (past the harness cut), so
     // drive the same state change the handler makes via the hook.
     __setEditingProfile(false); renderLoginState();
     check("Fix #27: saving again hides the form and the saved row once more",
       els["#profile-form"].classList.contains("hidden") &&
       els["#profile-saved"].classList.contains("hidden") &&
+      !els["#profile-current"].classList.contains("hidden") &&
       settings.profileName === "Abu huryra", "hidden again");
+    check("Fix #34: no Gmail login anywhere — no Gmail button, field or login text in the HTML or JS",
+      !html.includes('btn-gmail-login') && !html.includes('set-profile-gmail') &&
+      !html.includes('Gmail দিয়ে লগইন') &&
+      !src.includes('btn-gmail-login') && !src.includes('set-profile-gmail'),
+      "no Gmail login");
+    check("Fix #34: the 'নাম বদলান' button is wired to re-open the form in edit mode",
+      src.includes('$("#btn-edit-profile")') && src.includes('editingProfile = true; renderLoginState()') &&
+      src.includes('pn.focus()'), "edit button wired");
+    check("Fix #34: saving the profile needs just the name (no Gmail read in the save handler)",
+      src.includes('settings.profileName = $("#set-profile-name").value.trim(); saveSettings();') &&
+      !src.includes('settings.gmail = $("#set-profile-gmail")'),
+      "name-only save");
     settings.profileName = _saved27.profileName; settings.gmail = _saved27.gmail;
     renderGreet(); renderLoginState();
 

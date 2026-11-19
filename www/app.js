@@ -2731,24 +2731,33 @@ function renderGreet(){
     el.onclick = ()=>{ editingProfile = true; renderLoginState(); showView("settings"); }; // Fix #27: tapping the salam re-opens the profile form for editing (wired here, not in init, so it survives every re-render)
   } else { el.classList.add("hidden"); el.style.cursor = ""; el.title = ""; el.onclick = null; }
 }
-/* Login (Fix #3 + Fix #5 + Fix #27): the Gmail "login" is local-only — no
-   account, no server. Once saved, the WHOLE profile form disappears AND
-   the saved line with its delete button disappears too (Fix #27, user
-   21:23: after login nothing of the profile block stays) — only the
-   user's name in the salam greeting (renderGreet) remains. Tapping that
-   salam re-opens the form (editingProfile) so the name can still be
-   changed or cleared; saving or clearing hides everything again.
-   There is NO profile-photo feature. */
+/* Login (Fix #3 + Fix #5 + Fix #27 + Fix #34): the profile is NAME-ONLY
+   and local-only — no account, no server, NO Gmail login at all (the
+   Gmail field and its login button were removed, user 22:10). Once saved,
+   the form disappears AND the old saved line ("✓ …" + মুছুন) stays hidden
+   (Fix #27) — but the profile card is NOT empty any more: it shows the
+   saved name with a clear "✏️ নাম বদলান" button (Fix #34, user 22:10:
+   he could not see where to write/change his name), so the name
+   write/change option is always visible. Tapping that button — or the
+   salam greeting in the header — re-opens the form in edit mode, with
+   the current name already filled in; saving hides the form again and
+   the name row returns. There is NO profile-photo feature. */
 let editingProfile = false;
 function renderLoginState(){
-  const saved = !!(settings.profileName || settings.gmail);
-  const form = $("#profile-form"), sv = $("#profile-saved");
+  const saved = !!settings.profileName;
+  const form = $("#profile-form"), sv = $("#profile-saved"), cur = $("#profile-current");
   if (form) form.classList.toggle("hidden", saved && !editingProfile);
   if (sv) sv.classList.toggle("hidden", !saved || !editingProfile);
+  if (cur) cur.classList.toggle("hidden", !saved || editingProfile);
   const nm = $("#profile-saved-name");
-  if (nm) nm.textContent = settings.profileName || settings.gmail || "";
-  const btn = $("#btn-gmail-login");
-  if (btn) btn.classList.toggle("hidden", !!settings.gmail);
+  if (nm) nm.textContent = settings.profileName || "";
+  const cn = $("#profile-current-name");
+  if (cn) cn.textContent = settings.profileName || "";
+  /* Fix #34: when the form is shown for editing, the name box already
+     holds the current name — the user edits it, never retypes from a
+     blank box. */
+  const pn = $("#set-profile-name");
+  if (pn && form && !form.classList.contains("hidden")) pn.value = settings.profileName || "";
 }
 
 /* ---------------- Quran ---------------- */
@@ -5056,7 +5065,6 @@ function applyLang(){
   document.documentElement.lang = settings.lang;
   document.documentElement.dir = isRTL() ? "rtl" : "ltr";
   const sl = $("#set-lang"); if (sl) sl.value = settings.lang;
-  const gl = $("#btn-gmail-login"); if (gl) gl.textContent = Lb("Gmail দিয়ে লগইন করুন", "Log in with Gmail");
   const ss = $("#surah-search"); if (ss) ss.placeholder = t("searchSurah");
   const ja = $("#jump-ayah"); if (ja) ja.placeholder = t("ayahPlaceholder");
   naflBuiltKey = ""; // force the Nafl card to rebuild in the new language
@@ -5066,7 +5074,6 @@ function applyLang(){
 function fillSettings(){
   const du = $("#set-durood"); if (du) du.checked = !!settings.duroodOnUnlock;
   const pn = $("#set-profile-name"); if (pn) pn.value = settings.profileName || "";
-  const gm = $("#set-profile-gmail"); if (gm) gm.value = settings.gmail || "";
   renderGreet(); renderLoginState();
   const sl0 = $("#set-lang");
   if (sl0) sl0.innerHTML = LANGS.map(l=>`<option value="${l.id}" ${settings.lang===l.id?"selected":""}>${l.native} (${l.name})</option>`).join("");
@@ -5132,13 +5139,12 @@ function bindEvents(){
   $("#btn-go-learn").onclick=()=>showView("learn");
   $("#btn-back-learn").onclick=()=>showView("home");
   $("#btn-mark-read").onclick=()=>toggleSurahRead(currentSurah);
-  $("#btn-save-profile").onclick=()=>{ settings.profileName = $("#set-profile-name").value.trim(); settings.gmail = $("#set-profile-gmail").value.trim(); saveSettings(); editingProfile = false; renderGreet(); renderLoginState(); toast(t("saved")); };
-  $("#btn-gmail-login").onclick=()=>{ const g = $("#set-profile-gmail").value.trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(g)){ toast(Lb("সঠিক Gmail ঠিকানা লিখুন", "Enter a valid Gmail address")); return; }
-    settings.gmail = g; saveSettings(); editingProfile = false; renderLoginState();
-    toast(Lb("Gmail দিয়ে লগইন হয়েছে 🤍", "Logged in with Gmail 🤍"));
-    showView("home"); };
-  $("#btn-clear-profile").onclick=()=>{ settings.profileName = ""; settings.gmail = ""; $("#set-profile-name").value = ""; $("#set-profile-gmail").value = ""; saveSettings(); editingProfile = false; renderGreet(); renderLoginState(); toast(Lb("মুছে ফেলা হয়েছে", "Removed")); };
+  /* Fix #34: the profile is name-only — saving needs just the name, no
+     Gmail login. The "নাম বদলান" button re-opens the form in edit mode
+     (the name box is prefilled by renderLoginState). */
+  $("#btn-save-profile").onclick=()=>{ settings.profileName = $("#set-profile-name").value.trim(); saveSettings(); editingProfile = false; renderGreet(); renderLoginState(); toast(t("saved")); };
+  const be = $("#btn-edit-profile"); if (be) be.onclick=()=>{ editingProfile = true; renderLoginState(); const pn = $("#set-profile-name"); if (pn) pn.focus(); };
+  $("#btn-clear-profile").onclick=()=>{ settings.profileName = ""; settings.gmail = ""; $("#set-profile-name").value = ""; saveSettings(); editingProfile = false; renderGreet(); renderLoginState(); toast(Lb("মুছে ফেলা হয়েছে", "Removed")); };
   const bhdl = $("#btn-home-detect-loc"); if (bhdl) bhdl.onclick=()=>detectLocation(false);
   $("#set-durood").onchange=e=>{ settings.duroodOnUnlock = e.target.checked; saveSettings(); syncDuroodToggleNative(); };
   const sdEl = $("#set-daily");

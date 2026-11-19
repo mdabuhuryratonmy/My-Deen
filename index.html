@@ -359,16 +359,21 @@
       <div class="card">
         <h2 data-i18n="profileTitle">প্রোফাইল</h2>
         <div id="profile-form">
-          <p class="muted small">আপনার নাম ও Gmail ঠিকানা শুধু আপনার ফোনেই থাকে — কোনো সার্ভারে যায় না, কোনো পাসওয়ার্ড লাগে না।</p>
+          <p class="muted small">আপনার নাম শুধু আপনার ফোনেই থাকে — কোনো সার্ভারে যায় না, কোনো লগইন লাগে না।</p>
           <label data-i18n="yourName">আপনার নাম</label>
           <input type="text" id="set-profile-name" placeholder="নাম">
-          <label>Gmail ঠিকানা</label>
-          <input type="email" id="set-profile-gmail" placeholder="যেমন: example@gmail.com" autocomplete="email">
-          <div class="row mt">
-            <button class="btn gold block" id="btn-gmail-login">Gmail দিয়ে লগইন করুন</button>
-          </div>
           <div class="row mt">
             <button class="btn block" id="btn-save-profile" data-i18n="saveBtn">সংরক্ষণ করুন</button>
+          </div>
+        </div>
+        <!-- Fix #34: after saving, the form hides but the profile card is
+             NOT empty — it shows the saved name with a clear "নাম বদলান"
+             button, so the user can always see where to write/change it.
+             No Gmail login anywhere: the profile is name-only. -->
+        <div id="profile-current" class="hidden">
+          <p>👤 <span id="profile-current-name"></span></p>
+          <div class="row mt">
+            <button class="btn gold block" id="btn-edit-profile">✏️ নাম বদলান</button>
           </div>
         </div>
         <div id="profile-saved" class="hidden">
