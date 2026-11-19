@@ -4205,16 +4205,17 @@ async function scheduleNativeDaily(){
 }
 
 /* ---------------- Durood & Astaghfirullah interval reminders ---------
-   Durood (Fix #5) and Astaghfirullah (Fix #28): an ON/OFF switch plus
-   the SAME −30..+30 minute slider (1-minute steps) as the prayer-time
-   adjuster — middle (0) is the exact standard 30-minute interval.
-   Astaghfirullah used to keep the 10 / 20 / 30 minute chips; the user
-   (21:26) asked for the same slider as durood above, so the chips are
-   gone. While the app is open the reminder fires in-app (durood audio
-   + toast); in the Android app the next 24 occurrences are also
-   scheduled as local notifications so they arrive even when the app is
-   closed. Re-synced on open and on every change. - */
-const REM_OPTS = [10, 20, 30];
+   Fix #31 (user 21:55): an ON/OFF switch plus − / + buttons — each tap
+   moves the interval by exactly 1 minute (1..60). No slider, no offset,
+   no preset position, nothing like the namaz (prayer-time) adjuster:
+   the big number in the middle IS the interval in minutes. History: the
+   reminders once had 10/20/30 chips, then (Fix #5/#28) the same −30..+30
+   offset slider as the prayer adjuster — the user found that confusing
+   ("২৫ মিনিট আগে" makes no sense for an interval), so the slider is gone.
+   While the app is open the reminder fires in-app (durood audio + toast);
+   in the Android app the next 24 occurrences are also scheduled as local
+   notifications so they arrive even when the app is closed. Re-synced on
+   open and on every change. - */
 const DUROOD_REM_BASE = 401, ASTAGH_REM_BASE = 501, DHIKR_REM_COUNT = 24;
 const DUROOD_AR = "اللَّهُمَّ صَلِّ وَسَلِّمْ عَلَى نَبِيِّنَا مُحَمَّدٍ";
 const ASTAGH_AR = "أَسْتَغْفِرُ اللَّهَ";
@@ -4288,26 +4289,25 @@ async function scheduleNativeDhikr(){
     }
   } catch(e){ /* native-only; never break the web app */ }
 }
-/* Offset (−30..+30) → effective reminder interval in minutes (base 30),
-   clamped so it stays a real interval. */
-function dhikrMinFromOffset(off){ return Math.min(60, Math.max(1, 30 + off)); }
-function remSliderLabel(kind, eff, off){
+/* Interval clamp for the dhikr reminders (Fix #31): the interval is just
+   a number of minutes, 1..60. No offset, no preset position. */
+function clampDhikrMin(m){ return Math.min(60, Math.max(1, m)); }
+function remStepLabel(kind, m){
   const on = kind === "durood" ? !!settings.duroodRemOn : !!settings.astaghRemOn;
   if (!on) return Lb("বন্ধ আছে — চালু করতে ওপরের সুইচ অন করুন।", "Off — turn the switch on to enable.");
-  return off === 0
-    ? Lb(`সঠিক সময় — প্রতি ${num(eff)} মিনিট পর পর রিমাইন্ডার আসবে।`, `Exact time — a reminder arrives every ${eff} minutes.`)
-    : Lb(`প্রতি ${num(eff)} মিনিট পর পর রিমাইন্ডার আসবে (${off > 0 ? "+" : ""}${num(off)} মিনিট)।`, `A reminder arrives every ${eff} minutes (${off > 0 ? "+" : ""}${off} min).`);
+  return Lb(`চালু আছে — প্রতি ${num(m)} মিনিট পর পর রিমাইন্ডার আসবে।`, `On — a reminder arrives every ${m} minutes.`);
 }
-function remPanel(kind, icon, titleBn, titleEn, on, min, useSlider){
-  const off = Math.min(30, Math.max(-30, (min || 30) - 30));
-  const eff = dhikrMinFromOffset(off);
-  const ctl = useSlider
-    ? `<input type="range" class="adj-slider" data-rem-slider="${kind}" min="-30" max="30" step="1" value="${off}">
-    <p class="muted small" style="margin:8px 0 0" id="rem-${kind}-label">${remSliderLabel(kind, eff, off)}</p>`
-    : `<div class="row wrap">${REM_OPTS.map(m=>`<button class="chip ${m===min ? "on" : ""}" data-rem-min="${kind}:${m}">${Lb(`${num(m)} মিনিট পর পর`, `Every ${m} min`)}</button>`).join("")}</div>
-    <p class="muted small" style="margin:8px 0 0">${on
-      ? Lb(`চালু আছে — প্রতি ${num(min)} মিনিট পর পর রিমাইন্ডার আসবে।`, `On — a reminder arrives every ${min} minutes.`)
-      : Lb("বন্ধ আছে — চালু করতে ওপরের সুইচ অন করুন।", "Off — turn the switch on to enable.")}</p>`;
+function remPanel(kind, icon, titleBn, titleEn, on, min){
+  const m = clampDhikrMin(min || 30);
+  /* Fix #31: no slider, no offset, nothing like the namaz adjuster — just
+     − / + buttons; each tap moves the interval by 1 minute. The big number
+     in the middle IS the interval; the line below it says it in words. */
+  const ctl = `<div class="row" style="gap:10px;align-items:center;justify-content:center;margin-top:8px">
+    <button class="btn" data-rem-step="${kind}:-1" aria-label="কমান">−</button>
+    <span style="font-size:20px;font-weight:700;min-width:96px;text-align:center">${num(m)} ${Lb("মিনিট", "min")}</span>
+    <button class="btn" data-rem-step="${kind}:+1" aria-label="বাড়ান">+</button>
+  </div>
+  <p class="muted small" style="margin:8px 0 0;text-align:center" id="rem-${kind}-label">${remStepLabel(kind, m)}</p>`;
   return `<div class="adj-panel">
     <div class="adj-head"><span>${icon} ${Lb(titleBn, titleEn)}</span>
       <label class="switch"><input type="checkbox" id="rem-${kind}-on" ${on ? "checked" : ""}><span class="slider"></span></label></div>
@@ -4317,8 +4317,8 @@ function remPanel(kind, icon, titleBn, titleEn, on, min, useSlider){
 function renderReminderSettings(){
   const box = $("#reminder-settings"); if (!box) return;
   box.innerHTML =
-    remPanel("durood", "📿", "দরুদ শরিফ রিমাইন্ডার", "Durood Sharif reminder", !!settings.duroodRemOn, settings.duroodRemMin || 30, true) +
-    remPanel("astagh", "🤲", "আস্তাগফিরুল্লাহ রিমাইন্ডার", "Astaghfirullah reminder", !!settings.astaghRemOn, settings.astaghRemMin || 30, true); // Fix #28: same −30..+30 slider as durood above (user 21:26 — the 10/20/30 chips are gone, the slider replaces them)
+    remPanel("durood", "📿", "দরুদ শরিফ রিমাইন্ডার", "Durood Sharif reminder", !!settings.duroodRemOn, settings.duroodRemMin || 30) +
+    remPanel("astagh", "🤲", "আস্তাগফিরুল্লাহ রিমাইন্ডার", "Astaghfirullah reminder", !!settings.astaghRemOn, settings.astaghRemMin || 30);
   const dOn = $("#rem-durood-on"), aOn = $("#rem-astagh-on");
   if (dOn) dOn.onchange = e=>{ settings.duroodRemOn = e.target.checked; lastDuroodRemAt = Date.now();
     saveSettings(); scheduleNativeDhikr(); renderReminderSettings();
@@ -4326,28 +4326,16 @@ function renderReminderSettings(){
   if (aOn) aOn.onchange = e=>{ settings.astaghRemOn = e.target.checked; lastAstaghRemAt = Date.now();
     saveSettings(); scheduleNativeDhikr(); renderReminderSettings();
     toast(settings.astaghRemOn ? Lb("আস্তাগফিরুল্লাহ রিমাইন্ডার চালু ✓", "Astaghfirullah reminder on ✓") : Lb("আস্তাগফিরুল্লাহ রিমাইন্ডার বন্ধ", "Astaghfirullah reminder off")); };
-  $$("#reminder-settings [data-rem-min]").forEach(b=>b.onclick=()=>{
-    const parts = b.dataset.remMin.split(":"); const kind = parts[0], m = +parts[1];
+  /* Fix #31: − / + stepper — each tap moves the interval by exactly 1
+     minute (clamped 1..60) and saves + re-syncs immediately. No slider,
+     no offset, no preset position, nothing like the namaz adjuster. */
+  $$("#reminder-settings [data-rem-step]").forEach(b=>b.onclick=()=>{
+    const parts = b.dataset.remStep.split(":"); const kind = parts[0], d = +parts[1];
+    const cur = kind === "durood" ? (settings.duroodRemMin || 30) : (settings.astaghRemMin || 30);
+    const m = clampDhikrMin(cur + d);
     if (kind === "durood"){ settings.duroodRemMin = m; settings.duroodRemOn = true; lastDuroodRemAt = Date.now(); }
     else { settings.astaghRemMin = m; settings.astaghRemOn = true; lastAstaghRemAt = Date.now(); }
     saveSettings(); scheduleNativeDhikr(); renderReminderSettings();
-    toast(Lb(`রিমাইন্ডার: প্রতি ${num(m)} মিনিট পর পর ✓`, `Reminder: every ${m} min ✓`));
-  });
-  /* Durood slider (Fix #5): drag updates the interval live; releasing
-     the slider saves it and re-syncs the native notifications. */
-  $$("#reminder-settings [data-rem-slider]").forEach(s=>s.oninput=()=>{
-    const kind = s.dataset.remSlider, off = +s.value;
-    const m = dhikrMinFromOffset(off);
-    if (kind === "durood"){ settings.duroodRemMin = m; settings.duroodRemOn = true; lastDuroodRemAt = Date.now(); }
-    else { settings.astaghRemMin = m; settings.astaghRemOn = true; lastAstaghRemAt = Date.now(); }
-    const lab = $("#rem-" + kind + "-label");
-    if (lab) lab.textContent = remSliderLabel(kind, m, off);
-    const sw = $("#rem-" + kind + "-on"); if (sw) sw.checked = true;
-  });
-  $$("#reminder-settings [data-rem-slider]").forEach(s=>s.onchange=()=>{
-    const kind = s.dataset.remSlider;
-    const m = kind === "durood" ? settings.duroodRemMin : settings.astaghRemMin;
-    saveSettings(); scheduleNativeDhikr();
     toast(Lb(`রিমাইন্ডার: প্রতি ${num(m)} মিনিট পর পর ✓`, `Reminder: every ${m} min ✓`));
   });
   const dl = $("#daily-label");

@@ -50,7 +50,7 @@ globalThis.validSurahMeta=validSurahMeta;
 globalThis.SEHRI_ID=SEHRI_ID; globalThis.IFTAR_ID=IFTAR_ID; globalThis.TAHAJJUD_ID=TAHAJJUD_ID; globalThis.DUHA_ID=DUHA_ID;
 globalThis.renderCalendarPage=renderCalendarPage; globalThis.openPrayerDetail=openPrayerDetail;
 globalThis.updateDetailTime=updateDetailTime; globalThis.renderAlarmPage=renderAlarmPage;
-globalThis.renderLoginState=renderLoginState; globalThis.renderGreet=renderGreet; globalThis.renderReminderSettings=renderReminderSettings; globalThis.dhikrMinFromOffset=dhikrMinFromOffset; globalThis.remPanel=remPanel; globalThis.remSliderLabel=remSliderLabel; globalThis.renderTracker=renderTracker; globalThis.renderFastHadith=renderFastHadith;
+globalThis.renderLoginState=renderLoginState; globalThis.renderGreet=renderGreet; globalThis.renderReminderSettings=renderReminderSettings; globalThis.clampDhikrMin=clampDhikrMin; globalThis.remPanel=remPanel; globalThis.remStepLabel=remStepLabel; globalThis.renderTracker=renderTracker; globalThis.renderFastHadith=renderFastHadith;
 globalThis.renderFastSchedule=renderFastSchedule; globalThis.renderFasting=renderFasting;
 globalThis.FASTING_HADITHS=FASTING_HADITHS; globalThis.PREAZAN_TEXTS=PREAZAN_TEXTS;
 globalThis.TAHAJJUD_TEXT=TAHAJJUD_TEXT; globalThis.ALARM_SOUNDS=ALARM_SOUNDS;
@@ -329,20 +329,22 @@ check("no manual-location wording left in app.js",
 check("loc-setup modal keeps GPS + Later only",
   html.includes('id="btn-loc-allow"') && html.includes('id="btn-loc-close"'));
 
-// ---- Fix #5 (part 2): Durood reminder uses the prayer-style slider ----
-check("dhikrMinFromOffset: 0→30, +5→35, −10→20, clamps at 1 and 60",
-  typeof dhikrMinFromOffset === "function" && dhikrMinFromOffset(0)===30 && dhikrMinFromOffset(5)===35 && dhikrMinFromOffset(-10)===20 && dhikrMinFromOffset(-30)===1 && dhikrMinFromOffset(30)===60);
+// ---- Fix #5 (part 2) rewritten by Fix #31: − / + stepper, 1 min per tap ----
+check("clampDhikrMin: 30→30, 0→1, 61→60, 10→10",
+  typeof clampDhikrMin === "function" && clampDhikrMin(30)===30 && clampDhikrMin(0)===1 && clampDhikrMin(61)===60 && clampDhikrMin(10)===10);
 settings.duroodRemOn = true; settings.duroodRemMin = 30; settings.astaghRemOn = true; settings.astaghRemMin = 30;
 renderReminderSettings();
 const remHtml = els["#reminder-settings"].innerHTML;
-check("durood reminder has −30..+30 slider, 1-min steps, middle = exact time",
-  remHtml.includes('data-rem-slider="durood"') && remHtml.includes('min="-30"') && remHtml.includes('max="30"') && remHtml.includes('step="1"') && remHtml.includes('value="0"') && remHtml.includes("সঠিক সময়"));
-check("durood reminder has no fixed chips any more", !remHtml.includes('data-rem-min="durood:'));
-check("Fix #28: astaghfirullah reminder now has the same slider as durood (no 10/20/30 chips)",
-  remHtml.includes('data-rem-slider="astagh"') && !remHtml.includes('data-rem-min="astagh:'));
+check("Fix #31: durood reminder has − / + buttons and the interval number, no slider",
+  remHtml.includes('data-rem-step="durood:-1"') && remHtml.includes('data-rem-step="durood:+1"') &&
+  remHtml.includes("৩০") && !remHtml.includes('data-rem-slider=') && !remHtml.includes('type="range"') &&
+  !remHtml.includes("আগে") && !remHtml.includes("সঠিক সময়"));
+check("Fix #31: no fixed chips any more (neither reminder)", !remHtml.includes('data-rem-min='));
+check("Fix #28 rewritten by Fix #31: astaghfirullah reminder has the same − / + stepper as durood",
+  remHtml.includes('data-rem-step="astagh:-1"') && remHtml.includes('data-rem-step="astagh:+1"'));
 settings.duroodRemMin = 35; renderReminderSettings();
-check("durood slider value follows the saved interval (35 min → +5)",
-  els["#reminder-settings"].innerHTML.includes('data-rem-slider="durood"') && els["#reminder-settings"].innerHTML.includes('value="5"'));
+check("Fix #31: the big number follows the saved interval (35 min)",
+  els["#reminder-settings"].innerHTML.includes("৩৫") && !els["#reminder-settings"].innerHTML.includes('data-rem-slider='));
 settings.duroodRemMin = 30;
 
 // ---- Fix #6: home matches the reference design (no ads) ----
@@ -998,30 +1000,29 @@ Object.assign(settings, _savedTz);
     settings.profileName = _saved27.profileName; settings.gmail = _saved27.gmail;
     renderGreet(); renderLoginState();
 
-    // ---- Fix #28: Astaghfirullah reminder has the SAME slider as durood ----
-    // The user (21:26): above (durood) there is an adjust slider; below
-    // (Astaghfirullah) it must be the same — the 10/20/30 chips are gone,
-    // replaced by the −30..+30 (1-min step) slider. His current 20-min
-    // setting must survive the change exactly (offset −10 → 20 min).
+    // ---- Fix #28 rewritten by Fix #31: Astaghfirullah has the SAME stepper as durood ----
+    // The user (21:26) first asked for the same slider as durood; then
+    // (21:55) he replaced the slider itself with − / + buttons. His
+    // current 20-min setting must survive the change exactly.
     const _saved28 = { astaghRemMin: settings.astaghRemMin, astaghRemOn: settings.astaghRemOn,
       duroodRemMin: settings.duroodRemMin, duroodRemOn: settings.duroodRemOn };
     settings.astaghRemMin = 20; settings.astaghRemOn = true;
-    const _astaghHtml = remPanel("astagh", "🤲", "আস্তাগফিরুল্লাহ রিমাইন্ডার", "Astaghfirullah reminder", true, 20, true);
-    check("Fix #28: the Astaghfirullah panel now uses the slider (not the 10/20/30 chips)",
-      _astaghHtml.includes('data-rem-slider="astagh"') && !_astaghHtml.includes("data-rem-min=") &&
-      _astaghHtml.includes('min="-30"') && _astaghHtml.includes('max="30"') && _astaghHtml.includes('step="1"'),
-      "slider, no chips");
-    check("Fix #28: the slider keeps his current 20-minute setting (offset −10)",
-      _astaghHtml.includes('value="-10"') && _astaghHtml.includes("২০ মিনিট"),
+    const _astaghHtml = remPanel("astagh", "🤲", "আস্তাগফিরুল্লাহ রিমাইন্ডার", "Astaghfirullah reminder", true, 20);
+    check("Fix #28: the Astaghfirullah panel now uses the stepper (not chips, not a slider)",
+      _astaghHtml.includes('data-rem-step="astagh:-1"') && _astaghHtml.includes('data-rem-step="astagh:+1"') &&
+      !_astaghHtml.includes("data-rem-min=") && !_astaghHtml.includes("data-rem-slider="),
+      "stepper, no chips/slider");
+    check("Fix #28: the stepper keeps his current 20-minute setting exactly",
+      _astaghHtml.includes("২০") && _astaghHtml.includes("২০ মিনিট"),
       "20 min kept");
-    check("Fix #28: the slider label says the reminder comes every 20 minutes",
-      remSliderLabel("astagh", 20, -10).includes("২০ মিনিট") &&
-      remSliderLabel("astagh", 30, 0).includes("৩০ মিনিট"),
+    check("Fix #28: the stepper label says the reminder comes every 20 minutes",
+      remStepLabel("astagh", 20).includes("২০ মিনিট") &&
+      remStepLabel("astagh", 30).includes("৩০ মিনিট"),
       "label ok");
-    check("Fix #28: durood and astagh panels are built the same way (both sliders)",
-      remPanel("durood", "📿", "দরুদ শরিফ রিমাইন্ডার", "Durood Sharif reminder", true, 30, true).includes('data-rem-slider="durood"') &&
-      src.includes('remPanel("astagh"') && src.includes('settings.astaghRemMin || 30, true)'),
-      "both sliders");
+    check("Fix #28: durood and astagh panels are built the same way (both steppers)",
+      remPanel("durood", "📿", "দরুদ শরিফ রিমাইন্ডার", "Durood Sharif reminder", true, 30).includes('data-rem-step="durood:+1"') &&
+      src.includes('remPanel("astagh"') && src.includes('settings.astaghRemMin || 30)'),
+      "both steppers");
     settings.astaghRemMin = _saved28.astaghRemMin; settings.astaghRemOn = _saved28.astaghRemOn;
     settings.duroodRemMin = _saved28.duroodRemMin; settings.duroodRemOn = _saved28.duroodRemOn;
 
@@ -1069,6 +1070,34 @@ Object.assign(settings, _savedTz);
     check("Fix #30: the five views themselves still exist (only the nav buttons were removed)",
       ["view-quran","view-tasbih","view-duas","view-qibla","view-fasting"].every(v=>html.includes(`id="${v}"`)),
       "views intact");
+
+    // ---- Fix #31: − / + stepper instead of the offset slider ----
+    // The user (21:55): just increase/decrease, no time set beforehand,
+    // NOT like the namaz option — + / − buttons, 1 minute per tap.
+    const _both = remPanel("durood", "📿", "দরুদ শরিফ রিমাইন্ডার", "Durood Sharif reminder", true, 10) +
+      remPanel("astagh", "🤲", "আস্তাগফিরুল্লাহ রিমাইন্ডার", "Astaghfirullah reminder", true, 2);
+    check("Fix #31: both panels show the plain interval number with − / + buttons (his current 10 and 2 min)",
+      _both.includes("১০") && _both.includes("২") &&
+      _both.includes('data-rem-step="durood:+1"') && _both.includes('data-rem-step="astagh:-1"'),
+      "10 and 2 min");
+    check("Fix #31: no slider, offset or আগে/পরে language anywhere in the reminder panels",
+      !_both.includes("range") && !_both.includes("আগে") && !_both.includes("পরে") &&
+      !_both.includes("সঠিক সময়") && !_both.includes("অফসেট"),
+      "plain numbers");
+    check("Fix #31: the slider code is fully gone from app.js (no data-rem-slider, no offset helper)",
+      !src.includes("data-rem-slider") && !src.includes("dhikrMinFromOffset") && !src.includes("remSliderLabel"),
+      "slider removed");
+    check("Fix #31: the stepper wiring is in the source (each tap ±1, clamped 1..60, saves + re-syncs)",
+      src.includes('data-rem-step') && src.includes("clampDhikrMin(cur + d)") &&
+      src.includes("saveSettings(); scheduleNativeDhikr(); renderReminderSettings();"),
+      "wired");
+    check("Fix #31: the namaz (prayer-time) adjuster itself is untouched — only the reminder changed",
+      html.includes('id="detail-slider"') && html.includes("Time Adjustment"),
+      "prayer slider stays");
+    check("Fix #31: stepper clamps at the edges (1 min and 60 min show correctly)",
+      remPanel("durood", "📿", "দরুদ শরিফ রিমাইন্ডার", "Durood Sharif reminder", true, 1).includes("১") &&
+      remPanel("astagh", "🤲", "আস্তাগফিরুল্লাহ রিমাইন্ডার", "Astaghfirullah reminder", true, 99).includes("৬০"),
+      "1 and 60");
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);
