@@ -1807,7 +1807,7 @@ const Lb = (bn, en) => { const l = settings.lang; if (l==="bn") return bn;
 /* ---------------- settings ---------------- */
 const DEFAULTS = {city:"", country:"", lat:null, lon:null, method:0, school:1,
   lang:"en", theme:"dark", azan:true, adhan:"a1", reciter:"ar.alafasy", notif:false, tasbihTarget:33,
-  autoLoc:true, useCoords:false, profileName:"", gmail:"", profilePhoto:"", duroodOnUnlock:true, learnMadhhab:"hanafi",
+  autoLoc:true, useCoords:false, profileName:"", gmail:"", duroodOnUnlock:true, learnMadhhab:"hanafi",
   dailyNotif:true, duroodRemOn:true, duroodRemMin:30, astaghRemOn:true, astaghRemMin:30,
   /* Location identity: locId names the CURRENT location ("c:lat,lon" for
      coordinate locations, "n:city|country" for city-name ones). The
@@ -1817,7 +1817,16 @@ const DEFAULTS = {city:"", country:"", lat:null, lon:null, method:0, school:1,
      locManual marks a location the user typed themselves — automatic
      GPS detection must never override it. */
   locId:"", coordsLoc:"", tzName:"", tzLoc:"", locManual:false,
-  offsets:{Fajr:0, Dhuhr:0, Asr:0, Maghrib:0, Isha:0}};
+  offsets:{Fajr:0, Dhuhr:0, Asr:0, Maghrib:0, Isha:0, Duha:0, Tahajjud:0, ForbMorning:0, ForbNoon:0, ForbEvening:0, Sehri:0, Iftar:0},
+  /* Per-item alarm switches (Fix #4 §8): each fard prayer, the two nafl
+     prayers, the three forbidden windows, and Sehri/Iftar can be toggled
+     separately. Fard alarms default ON (azan is on by default); the rest
+     default OFF until the user turns them on. */
+  alarmOn:{Fajr:true, Dhuhr:true, Asr:true, Maghrib:true, Isha:true, Duha:false, Tahajjud:false, ForbMorning:false, ForbNoon:false, ForbEvening:false, Sehri:false, Iftar:false},
+  /* Per-item alarm sound (Fix #4 §9): silent | beep | ring | name
+     (announce the prayer name — the default) | notification | azan. */
+  alarmSound:{Fajr:"name", Dhuhr:"name", Asr:"name", Maghrib:"name", Isha:"name", Duha:"name", Tahajjud:"name", ForbMorning:"notification", ForbNoon:"notification", ForbEvening:"notification", Sehri:"notification", Iftar:"notification"},
+  permAsked:false};
 let settings = {...DEFAULTS};
 /* True when this device already has saved settings (a returning user).
    A saved language choice is always respected; only a first-run user —
@@ -1825,6 +1834,12 @@ let settings = {...DEFAULTS};
    English as the default. */
 const HAD_SAVED_SETTINGS = !!LS.getItem("dd_settings");
 try { Object.assign(settings, JSON.parse(LS.getItem("dd_settings") || "{}")); } catch(e){}
+/* Nested setting objects merge shallowly above, so an older saved
+   settings object would drop the new keys — fill them from DEFAULTS. */
+settings.offsets = {...DEFAULTS.offsets, ...(settings.offsets||{})};
+settings.alarmOn = {...DEFAULTS.alarmOn, ...(settings.alarmOn||{})};
+settings.alarmSound = {...DEFAULTS.alarmSound, ...(settings.alarmSound||{})};
+delete settings.profilePhoto; // removed feature (Fix #3): never stored again
 function saveSettings(){ try { LS.setItem("dd_settings", JSON.stringify(settings)); } catch(e){} }
 /* Location is NEVER pre-set (owner's rule, 2026-11-17): no default city,
    no saved city carried over. This one-time wipe clears any location an
@@ -1930,6 +1945,8 @@ const PRAYERS = [
 const PRAYER_IDS = ["Fajr","Dhuhr","Asr","Maghrib","Isha"];
 let timings = null, hijriInfo = null, timingsDate = null;
 function toMin(hhmm){ const m = String(hhmm).match(/(\d+):(\d+)/); return m ? (+m[1])*60 + (+m[2]) : null; }
+/* Minutes (0–1439, wrapping) → "HH:MM". */
+function minsToHHMM(m){ m = ((m % 1440) + 1440) % 1440; return `${pad2(Math.floor(m/60))}:${pad2(m%60)}`; }
 function fmtTime(hhmm){ if(!hhmm) return "—"; const m = hhmm.match(/(\d+):(\d+)/); if(!m) return hhmm;
   const h=+m[1], mm=m[2]; const h12 = h%12===0?12:h%12; const ap = h<12 ? "AM":"PM";
   if (settings.lang==="bn") return `${num(h12)}:${num(mm)} ${h<12?"সকাল":"দুপুর/রাত"}`;
@@ -2208,12 +2225,9 @@ function nextPrayer(now=new Date()){
   }
   return {id:"Fajr", mins: toMin(timings.Fajr)+1440, tomorrow:true};
 }
-/* Azan offset (earlier/later) is adjusted by tapping a prayer row on the
-   Home screen: the row expands an adjuster panel for that prayer only.
-   openAdj holds the prayer id whose panel is open (survives the 1-second
-   re-render of the prayer list). */
-let openAdj = null;
-const ADJ_OPTS = [-30,-20,-15,-10,-5,0,5,10,15,20,30];
+/* Azan offset (earlier/later) is set on the per-prayer detail page
+   (Fix #4 §9): a slider from -30 to +30 minutes in 1-minute steps.
+   offsetText / adjTimeStr describe an offset for display. */
 function offsetText(o){
   if (o===0) return Lb("সময়মতো", "On time");
   const n = num(Math.abs(o));
@@ -2226,6 +2240,68 @@ function adjTimeStr(pid, o){
   const m = ((base + o) % 1440 + 1440) % 1440;
   return fmtTime(`${pad2(Math.floor(m/60))}:${pad2(m%60)}`);
 }
+/* Prayer window: a prayer is valid from its start until the next
+   prayer's start (Fajr → Sunrise, Dhuhr → Asr, Asr → Maghrib,
+   Maghrib → Isha, Isha → next day's Fajr). */
+function prayerWindowEnd(pid, now=new Date()){
+  const order = ["Fajr","Sunrise","Dhuhr","Asr","Maghrib","Isha"];
+  const i = order.indexOf(pid);
+  if (i < 0) return null;
+  if (pid === "Isha"){
+    const tm = computeTimingsLocal(new Date(now.getFullYear(), now.getMonth(), now.getDate()+1));
+    return tm ? toMin(tm.Fajr) + 1440 : toMin(timings.Fajr) + 1440;
+  }
+  const nextId = order[i+1];
+  const t = toMin(timings[nextId]);
+  return t == null ? null : t;
+}
+/* Forbidden windows (Fix #4 §1): morning = sunrise → sunrise+15,
+   midday = dhuhr−10 → dhuhr, evening = maghrib−25 → maghrib. */
+function forbiddenWindows(){
+  if (!timings) return [];
+  const sunrise = toMin(timings.Sunrise), dhuhr = toMin(timings.Dhuhr), magh = toMin(timings.Maghrib);
+  if (sunrise==null || dhuhr==null || magh==null) return [];
+  return [
+    {id:"ForbMorning", bn:"নিষিদ্ধ সময় (সকাল)", en:"Forbidden time (morning)", start:sunrise, end:sunrise+15},
+    {id:"ForbNoon", bn:"নিষিদ্ধ সময় (দুপুর)", en:"Forbidden time (midday)", start:dhuhr-10, end:dhuhr},
+    {id:"ForbEvening", bn:"নিষিদ্ধ সময় (সন্ধ্যা)", en:"Forbidden time (evening)", start:magh-25, end:magh}
+  ];
+}
+/* The countdown ring (Fix #4 §1) shows the NEXT event — the next prayer,
+   the start of Tahajjud (last third of the night), or the next forbidden
+   window — whichever comes first. If we are inside a forbidden window,
+   the ring counts down to its end instead. Returns {name, at: Date,
+   prev: Date, kind, id}. */
+function nextEvent(now=new Date()){
+  const dayStart = new Date(now); dayStart.setHours(0,0,0,0);
+  const atMin = m => { const d = new Date(dayStart); d.setMinutes(m); return d; };
+  const cands = [];
+  for (const p of PRAYER_IDS){
+    const tm = toMin(timings[p]); if (tm==null) continue;
+    cands.push({kind:"prayer", id:p, name:pname(p), at:atMin(tm + (settings.offsets[p] || 0))});
+  }
+  const lt = toMin(timings.Lastthird);
+  if (lt != null) cands.push({kind:"tahajjud", id:"Tahajjud", name:Lb("তাহাজ্জুদ", "Tahajjud"), at:atMin(lt)});
+  for (const w of forbiddenWindows()){
+    cands.push({kind:"forbidden", id:w.id, name:Lb(w.bn, w.en), at:atMin(w.start), end:atMin(w.end)});
+  }
+  // inside a forbidden window? count down to its end
+  for (const w of forbiddenWindows()){
+    const s = atMin(w.start), e = atMin(w.end);
+    if (now >= s && now < e) return {kind:"forbidden", id:w.id, name:Lb(w.bn, w.en), at:e, prev:s};
+  }
+  cands.sort((a,b)=>a.at - b.at);
+  let next = cands.find(c=>c.at > now);
+  if (!next){ // everything today passed — tomorrow's first prayer
+    const f = toMin(timings.Fajr);
+    const at = atMin(f + (settings.offsets.Fajr || 0)); at.setDate(at.getDate()+1);
+    next = {kind:"prayer", id:"Fajr", name:pname("Fajr"), at};
+  }
+  const prev = cands.filter(c=>c.at <= now).sort((a,b)=>b.at - a.at)[0];
+  next.prev = prev ? prev.at : new Date(next.at.getTime() - 3600000);
+  return next;
+}
+const PRAYER_ICONS = {Fajr:"🌅", Dhuhr:"☀️", Asr:"🌤️", Maghrib:"🌇", Isha:"🌙"};
 function renderPrayers(){
   const list = $("#prayer-list");
   if(!timings){
@@ -2240,54 +2316,50 @@ function renderPrayers(){
   const now = new Date(); const nx = nextPrayer(now);
   $("#prayer-city").textContent = hasLocation() ? `${settings.city}, ${settings.country}` : "—";
   renderHomeLocation();
-  list.innerHTML = PRAYERS.map(p=>{
-    const isNext = p.id===nx.id && !nx.tomorrow;
-    const isAzan = PRAYER_IDS.includes(p.id);
-    const done = isAzan && isDone(p.id);
-    const off = isAzan ? (settings.offsets[p.id] || 0) : 0;
-    const open = isAzan && openAdj===p.id;
-    const name = pname(p.id);
-    let small = "";
-    if (p.id==="Sunrise") small = Lb("সূর্য ওঠে", "Sunrise");
-    else if (isAzan) small = `<span class="azan-line">🔔 ${Lb("আজান", "Azan")}: ${offsetText(off)}${off!==0?` • ${adjTimeStr(p.id, off)}`:""}</span>`;
-    let html = `<div class="prayer-row ${isNext?"next":""} ${isAzan?"tappable":""} ${open?"open":""}" ${isAzan?`data-adj="${p.id}" role="button" tabindex="0" title="${Lb("আজানের সময় আগে-পরে করুন", "Adjust azan time")}"`:""}>
-      <div class="p-name">${name}${isNext?' <span class="gold">●</span>':""}<small>${small}</small></div>
-      <div class="row">${isAzan?`<button class="dotbtn" data-pray="${p.id}" title="নামাজ পড়েছি">${done?"✅":"⭕"}</button>`:""}
-      <span class="p-time">${fmtTime(timings[p.id])}</span></div></div>`;
-    if (open){
-      html += `<div class="adj-panel">
-        <div class="adj-head"><span>🔔 ${name} — ${Lb("আজানের সময় আগে-পরে করুন", "Adjust azan time")}</span><b>${adjTimeStr(p.id, off)}</b></div>
-        <div class="row wrap">${ADJ_OPTS.map(o=>`<button class="chip ${o===off?"on":""}" data-adj-opt="${p.id}:${o}">${offsetText(o)}</button>`).join("")}</div>
-        <p class="muted small" style="margin:8px 0 0">${Lb(`নামাজ ${fmtTime(timings[p.id])} — আজান বাজবে <b>${adjTimeStr(p.id, off)}</b> (${offsetText(off)})। চাপ দিলেই সংরক্ষণ হয়ে যাবে।`, `Prayer ${fmtTime(timings[p.id])} — azan at <b>${adjTimeStr(p.id, off)}</b> (${offsetText(off)}). Tapping saves instantly.`)}</p>
-      </div>`;
-    }
-    return html;
+  list.innerHTML = PRAYER_IDS.map(pid=>{
+    const p = PRAYERS.find(x=>x.id===pid);
+    const isNext = pid===nx.id && !nx.tomorrow;
+    const done = isDone(pid);
+    const off = settings.offsets[pid] || 0;
+    const name = pname(pid);
+    const end = prayerWindowEnd(pid, now);
+    const range = end==null ? fmtTime(timings[pid]) : `${fmtTime(timings[pid])} – ${fmtTime(`${pad2(Math.floor((end%1440)/60))}:${pad2(end%60)}`)}`;
+    const small = `<span class="azan-line">🔔 ${Lb("আজান", "Azan")}: ${offsetText(off)}${off!==0?` • ${adjTimeStr(pid, off)}`:""}</span>`;
+    const dot = (isNext || off!==0) ? `<span class="orange-dot" aria-hidden="true"></span>` : "";
+    return `<div class="prayer-row ${isNext?"next":""} tappable" data-detail="${pid}" role="button" tabindex="0" title="${Lb("অ্যালার্ম সেটিংস খুলুন", "Open alarm settings")}">
+      <div class="p-name"><span class="p-ic">${PRAYER_ICONS[pid]||"🕌"}</span>${name}${dot}<small>${range}<br>${small}</small></div>
+      <div class="row"><button class="dotbtn" data-pray="${pid}" title="নামাজ পড়েছি">${done?"✅":"⭕"}</button>
+      <span class="p-time">${fmtTime(timings[pid])}</span></div></div>`;
   }).join("");
   $$("#prayer-list [data-pray]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); togglePrayer(b.dataset.pray); });
-  $$("#prayer-list [data-adj]").forEach(r=>{
-    r.onclick=e=>{ if (e.target.closest("[data-pray]") || e.target.closest("[data-adj-opt]")) return;
-      openAdj = openAdj===r.dataset.adj ? null : r.dataset.adj; renderPrayers(); };
-    r.onkeydown=e=>{ if (e.key==="Enter" || e.key===" "){ e.preventDefault();
-      openAdj = openAdj===r.dataset.adj ? null : r.dataset.adj; renderPrayers(); } };
+  $$("#prayer-list [data-detail]").forEach(r=>{
+    r.onclick=e=>{ if (e.target.closest("[data-pray]")) return; openPrayerDetail(r.dataset.detail); };
+    r.onkeydown=e=>{ if (e.key==="Enter" || e.key===" "){ e.preventDefault(); openPrayerDetail(r.dataset.detail); } };
   });
-  $$("#prayer-list [data-adj-opt]").forEach(b=>b.onclick=e=>{ e.stopPropagation();
-    const parts = b.dataset.adjOpt.split(":"); const pid = parts[0], o = +parts[1];
-    settings.offsets[pid] = o; saveSettings(); scheduleNativeAzan(); renderPrayers();
-    const pr = PRAYERS.find(x=>x.id===pid);
-    toast(Lb(`${pr.bn}র আজান: ${offsetText(o)} (${adjTimeStr(pid, o)}) ✓`, `${pr.en} azan: ${offsetText(o)} (${adjTimeStr(pid, o)}) ✓`));
-  });
-  // countdown
-  const target = new Date(now); target.setHours(0,0,0,0);
-  target.setMinutes(nx.mins % 1440); if (nx.tomorrow) target.setDate(target.getDate()+1);
-  const diff = Math.max(0, target - now);
+  // countdown ring: next event (prayer / tahajjud / forbidden window)
+  const ev = nextEvent(now);
+  const diff = Math.max(0, ev.at - now);
   const h = Math.floor(diff/3600000), m = Math.floor(diff%3600000/60000), s = Math.floor(diff%60000/1000);
-  const nm = PRAYERS.find(p=>p.id===nx.id);
-  $("#next-name").textContent = pname(nm.id);
-  $("#next-count").textContent = `${num(pad2(h))}:${num(pad2(m))}:${num(pad2(s))}`;
-  $("#next-time").textContent = fmtTime(timings[nx.id]) + (nx.tomorrow ? (Lb(" (আগামীকাল)", " (tomorrow)")) : "");
+  const ringName = $("#ring-name"), ringCount = $("#ring-count"), ringFg = $("#ring-fg"),
+        ringLabel = $("#ring-label"), ringSub = $("#ring-sub");
+  if (ringName) ringName.textContent = ev.name;
+  if (ringCount) ringCount.textContent = `${num(pad2(h))}:${num(pad2(m))}:${num(pad2(s))}`;
+  if (ringLabel) ringLabel.textContent = ev.kind==="prayer" ? Lb("পরের নামাজ", "Next prayer")
+    : ev.kind==="tahajjud" ? Lb("তাহাজ্জুদ", "Tahajjud") : Lb("নিষিদ্ধ সময়", "Forbidden time");
+  if (ringSub) ringSub.textContent = Lb("শেষ হতে বাকি", "Time remaining");
+  if (ringFg){
+    const C = 2*Math.PI*96;
+    const prog = Math.min(1, Math.max(0, (now - ev.prev) / (ev.at - ev.prev)));
+    ringFg.style.strokeDasharray = String(C);
+    ringFg.style.strokeDashoffset = String(C * (1 - prog));
+  }
+  const hero = $("#ring-hero"); if (hero) hero.dataset.sky = skyPeriod();
+  const pl = $("#pill-loc");
+  if (pl) pl.textContent = hasLocation() ? `📍 ${settings.city}, ${settings.country}` : `📍 ${Lb("অবস্থান সেট করুন", "Set location")}`;
+  const ps = $("#pill-sun");
+  if (ps) ps.textContent = `🌅 ${fmtTime(timings.Sunrise)} • 🌇 ${fmtTime(timings.Sunset)}`;
   renderNafl();
   renderForbidden();
-  const hero = $("#sky-hero"); if (hero) hero.dataset.sky = skyPeriod();
   updateNaflStrip();
 }
 
@@ -2349,7 +2421,7 @@ const NAFL_ICONS = {
   cloudsun:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="6.5" r="2.4"/><path d="M7 1.8v1.2M2.3 6.5h1.2M3.6 3l.9.9"/><path d="M8 20h9.2a4.2 4.2 0 0 0 .9-8.3 5.8 5.8 0 0 0-11.3 1.2A3.9 3.9 0 0 0 8 20Z"/></svg>`,
   moon:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13.5A8 8 0 1 1 10.5 4a6.5 6.5 0 0 0 9.5 9.5Z"/><path d="M17.8 2.8l.55 1.5 1.5.55-1.5.55-.55 1.5-.55-1.5-1.5-.55 1.5-.55Z"/></svg>`
 };
-let naflExpanded = false, naflRefOpen = false, naflBuiltKey = "";
+let naflBuiltKey = "";
 function renderNafl(){
   if (!timings) return;
   const key = [timingsDate, settings.lang, settings.city, settings.country].join("|");
@@ -2369,17 +2441,9 @@ function renderNafl(){
       <span class="nafl-name">${r.name}</span>
       <span class="nafl-val">${r.val}${r.sub?`<small class="nafl-sub"><i class="dot"></i>${r.sub}</small>`:""}</span>
     </div>`).join("");
-  const extra = [
-    ["sun", nt("ishraq"), fmt24(sunrise+15)],
-    ["moon", nt("sehriEnds"), fmt24(toMin(timings.Imsak))],
-    ["cloudsun", nt("iftarAt"), fmt24(maghrib)]
-  ];
-  $("#nafl-extra").innerHTML = extra.map((r,i)=>`<div class="nafl-row" style="--i:${i}">
-      <span class="nafl-ic">${NAFL_ICONS[r[0]]}</span>
-      <span class="nafl-name">${r[1]}</span><span class="nafl-val">${r[2]}</span></div>`).join("");
+  const ref = $("#nafl-ref"); if (ref) ref.textContent = nt("refNote");
   $("#nafl-sehri-label").textContent = nt("nextSehri");
   $("#nafl-iftar-label").textContent = nt("nextIftar");
-  const el = $("#nafl-expand-label"); if (el) el.textContent = naflExpanded ? nt("viewLess") : nt("viewMore");
   updateNaflStrip();
 }
 /* Per-second tick for the Sehri/Iftar strip: static times + the live
@@ -2547,48 +2611,14 @@ function renderGreet(){
     el.textContent = `আসসালামু আলাইকুম, ${settings.profileName} 🤍`;
   } else el.classList.add("hidden");
 }
-function renderGmailStatus(){
-  const el = $("#gmail-status"); if (!el) return;
-  if (settings.gmail){
-    el.classList.remove("hidden");
-    el.textContent = (Lb("✅ লগইন করা আছে: ", "✅ Logged in as: ")) + settings.gmail;
-  } else el.classList.add("hidden");
-}
-/* Profile photo: stored ONLY on this phone (localStorage, downscaled to
-   256px JPEG so it stays small). Shown in the profile card and as a small
-   circle in the header. No photo is ever uploaded anywhere. */
-function renderProfilePhoto(){
-  const big = $("#profile-avatar"), hdr = $("#hdr-avatar");
-  const photo = settings.profilePhoto || "";
-  if (big){
-    if (photo){ big.innerHTML = `<img src="${photo}" alt="">`; }
-    else { const initial = (settings.profileName || settings.gmail || "?").trim().charAt(0).toUpperCase() || "?"; big.innerHTML = `<span>${initial}</span>`; }
-  }
-  if (hdr){
-    if (photo){ hdr.src = photo; hdr.classList.remove("hidden"); }
-    else hdr.classList.add("hidden");
-  }
-}
-function handleProfilePhotoFile(file){
-  if (!file || !file.type || file.type.indexOf("image/") !== 0) return;
-  const reader = new FileReader();
-  reader.onload = ()=>{
-    const img = new Image();
-    img.onload = ()=>{
-      try {
-        const size = 256, c = document.createElement("canvas");
-        c.width = size; c.height = size;
-        const ctx = c.getContext("2d");
-        const s = Math.min(img.width, img.height), sx = (img.width - s) / 2, sy = (img.height - s) / 2;
-        ctx.drawImage(img, sx, sy, s, s, 0, 0, size, size);
-        settings.profilePhoto = c.toDataURL("image/jpeg", 0.85);
-        saveSettings(); renderProfilePhoto();
-        toast(Lb("প্রোফাইল ছবি সেভ হয়েছে 🤍", "Profile photo saved 🤍"));
-      } catch(e){ toast(Lb("ছবি সেভ হয়নি — আবার চেষ্টা করুন", "Photo could not be saved — try again")); }
-    };
-    img.src = reader.result;
-  };
-  reader.readAsDataURL(file);
+/* Login (Fix #3): the Gmail "login" is local-only — no account, no server.
+   Once logged in, the login button disappears and NOTHING else is shown —
+   no "লগইন করা আছে" line, no email address — only the user's name in the
+   salam greeting above (renderGreet). Clearing the profile brings the
+   login button back. There is NO profile-photo feature. */
+function renderLoginState(){
+  const btn = $("#btn-gmail-login");
+  if (btn) btn.classList.toggle("hidden", !!settings.gmail);
 }
 
 /* ---------------- Quran ---------------- */
@@ -2845,11 +2875,19 @@ function renderDuas(){
   $("#dua-list").innerHTML = list.map(d=>{
     const idx = (window.DUAS||[]).indexOf(d);
     const isS = saved.includes(idx);
+    const audioKind = (d.ar||"").includes("صَلِّ وَسَلِّمْ عَلَى نَبِيِّنَا") ? "durood"
+      : (d.ar||"").includes("أَسْتَغْفِرُ") ? "istighfar" : "";
+    const playBtn = audioKind ? `<button class="mini-btn" data-play-dua="${audioKind}" title="${Lb("শুনুন","Listen")}">▶ ${Lb("শুনুন","Listen")}</button>` : "";
     return `<div class="dua"><div class="d-ar arabic">${d.ar}</div>
     <div class="d-tr">${d.tr}</div><div class="d-bn">${d.bn}</div>
-    <div class="row" style="justify-content:flex-end">
+    <div class="row" style="justify-content:flex-end">${playBtn}
     <button class="mini-btn ${isS?"on":""}" data-save-dua="${idx}">${isS?"🔖 সংরক্ষিত ✓":"🔖 সংরক্ষণ"}</button></div></div>`;
   }).join("") || `<p class="muted">এই বিভাগে কোনো দোয়া নেই।</p>`;
+  $$("#dua-list [data-play-dua]").forEach(b=>b.onclick=()=>{
+    const kind = b.dataset.playDua;
+    const a = $(kind==="durood" ? "#audio-durood" : "#audio-istighfar");
+    if (a){ a.currentTime = 0; a.play().catch(()=>toast(Lb("অডিও পাওয়া যায়নি", "Audio not available"))); }
+  });
   $$("#dua-list [data-save-dua]").forEach(b=>b.onclick=()=>{
     const i=+b.dataset.saveDua; let s=store.get("dua_saved",[]);
     const ix=s.indexOf(i); if(ix>=0) s.splice(ix,1); else s.push(i);
@@ -3608,6 +3646,47 @@ async function fetchHijriMonth(){
   } catch(e){ hijriMonthData = null; }
   renderFasting();
 }
+/* ---------------- Fasting timetable page (Fix #4 §11) -------------
+   Big countdown ring (at night → Sehri, in the day → Iftar), swipeable
+   hadith cards about fasting, and the Sehri/Iftar schedule — tapping a
+   bell sets that Sehri/Iftar alarm (green = on, grey = off). */
+const FASTING_HADITHS = [
+  {ar:"الصِّيَامُ جُنَّةٌ", bn:"রোজা ঢালস্বরূপ।", ref:"সহিহ বুখারি ১৮৯৪"},
+  {ar:"لِلصَّائِمِ فَرْحَتَانِ: فَرْحَةٌ عِنْدَ فِطْرِهِ، وَفَرْحَةٌ عِنْدَ لِقَاءِ رَبِّهِ", bn:"রোজাদারের জন্য দুটি আনন্দ রয়েছে: একটি ইফতারের সময়, আরেকটি তার রবের সঙ্গে সাক্ষাতের সময়।", ref:"সহিহ বুখারি ১৯০৪"},
+  {ar:"مَنْ صَامَ رَمَضَانَ إِيمَانًا وَاحْتِسَابًا غُفِرَ لَهُ مَا تَقَدَّمَ مِنْ ذَنْبِهِ", bn:"যে ব্যক্তি ঈমান ও সওয়াবের আশায় রমজানের রোজা রাখে, তার আগের সব গুনাহ মাফ করে দেওয়া হয়।", ref:"সহিহ বুখারি ৩৮"},
+  {ar:"مَنْ فَطَّرَ صَائِمًا كَانَ لَهُ مِثْلُ أَجْرِهِ", bn:"যে ব্যক্তি কোনো রোজাদারকে ইফতার করায়, সে তার সমান সওয়াব পাবে।", ref:"জামি' তিরমিজি ৮০৭"}
+];
+let fastHadithIdx = 0;
+function renderFastHadith(){
+  const box = $("#fast-hadith"); if (!box) return;
+  const h = FASTING_HADITHS[fastHadithIdx % FASTING_HADITHS.length];
+  box.innerHTML = `<div class="fast-hadith-card"><div class="n-ar arabic">${h.ar}</div>
+    <div class="n-bn">${h.bn}</div><div class="n-date">${h.ref}</div></div>`;
+  const dots = $("#fast-hadith-dots");
+  if (dots) dots.innerHTML = FASTING_HADITHS.map((_,i)=>
+    `<button class="dot ${i===fastHadithIdx % FASTING_HADITHS.length ? "on" : ""}" data-fh="${i}" aria-label="হাদিস ${num(i+1)}"></button>`).join("");
+  $$("#fast-hadith-dots [data-fh]").forEach(b=>b.onclick=()=>{ fastHadithIdx = +b.dataset.fh; renderFastHadith(); });
+}
+function renderFastSchedule(){
+  const box = $("#fast-schedule"); if (!box || !timings) return;
+  const rows = [
+    {key:"Sehri", label:Lb("পরবর্তী সাহরি", "Next Sehri"), time:fmtTime(minsToHHMM(toMin(timings.Imsak) + (settings.offsets.Sehri||0)))},
+    {key:"Iftar", label:Lb("পরবর্তী ইফতার", "Next Iftar"), time:fmtTime(minsToHHMM(toMin(timings.Maghrib) + (settings.offsets.Iftar||0)))}
+  ];
+  box.innerHTML = rows.map(r=>{
+    const on = !!settings.alarmOn[r.key];
+    return `<div class="prayer-row"><div class="p-name">${r.label}</div>
+      <div class="row"><span class="p-time">${r.time}</span>
+      <button class="bell-btn ${on?"on":""}" data-fast-bell="${r.key}" title="${Lb("অ্যালার্ম", "Alarm")}">${on?"🔔":"🔕"}</button></div></div>`;
+  }).join("");
+  $$("#fast-schedule [data-fast-bell]").forEach(b=>b.onclick=()=>{
+    const k = b.dataset.fastBell;
+    settings.alarmOn[k] = !settings.alarmOn[k]; saveSettings(); syncPrayerAlarms(); renderFastSchedule();
+    toast(settings.alarmOn[k]
+      ? Lb(`${k==="Sehri"?"সাহরির":"ইফতারের"} অ্যালার্ম চালু ✓`, `${k==="Sehri"?"Sehri":"Iftar"} alarm on ✓`)
+      : Lb(`${k==="Sehri"?"সাহরির":"ইফতারের"} অ্যালার্ম বন্ধ`, `${k==="Sehri"?"Sehri":"Iftar"} alarm off`));
+  });
+}
 function renderFasting(){
   const box = $("#fast-list");
   const items = [];
@@ -3647,20 +3726,242 @@ function renderFasting(){
         <b>${num(d.date.gregorian.day)} ${d.date.gregorian.month.en}</b></div>`;
     }).join("");
   }
-  // countdown to next suhoor/iftar
+  // big countdown ring: at night → Sehri, in the day → Iftar
   if (timings){
     const now2 = new Date(); const mins = now2.getHours()*60+now2.getMinutes();
     const imsak = toMin(timings.Imsak), magh = toMin(timings.Maghrib);
-    let label, target;
-    if (mins < imsak){ label = Lb("সেহরি শেষ হতে বাকি", "Suhoor ends in"); target = imsak; }
-    else if (mins < magh){ label = Lb("ইফতার হতে বাকি", "Iftar in"); target = magh; }
-    else { label = Lb("আগামীকাল সেহরি শেষ (ইমসাক)", "Tomorrow Suhoor ends (Imsak)"); target = imsak+1440; }
-    const diff = target - mins;
-    const hh = Math.floor(diff/60), mm = diff%60;
-    $("#fast-countdown").innerHTML = `<div class="center"><div class="muted">${label}</div>
-      <div class="qibla-deg">${Lb(`${bnNum(hh)} ঘণ্টা ${bnNum(mm)} মিনিট`, `${hh}h ${mm}m`)}</div>
-      <div class="muted small">${Lb("সেহরি", "Suhoor")}: ${fmtTime(timings.Imsak)} &nbsp;•&nbsp; ${Lb("ইফতার", "Iftar")}: ${fmtTime(timings.Maghrib)}</div></div>`;
+    let label, sub, target, prev;
+    if (mins < imsak){ label = Lb("পরবর্তী সাহরি", "Next Sehri"); sub = Lb("সাহরির বাকি", "Time to Sehri"); target = imsak; prev = magh - 1440; }
+    else if (mins < magh){ label = Lb("পরবর্তী ইফতার", "Next Iftar"); sub = Lb("ইফতারের বাকি", "Time to Iftar"); target = magh; prev = imsak; }
+    else { label = Lb("পরবর্তী সাহরি", "Next Sehri"); sub = Lb("সাহরির বাকি", "Time to Sehri"); target = imsak + 1440; prev = magh; }
+    const nowSec = now2.getHours()*3600 + now2.getMinutes()*60 + now2.getSeconds();
+    const diff = Math.max(0, target*60 - nowSec);
+    const hh = Math.floor(diff/3600), mm = Math.floor(diff%3600/60), ss = diff%60;
+    const fl = $("#fast-ring-label"), fc = $("#fast-ring-count"), fs = $("#fast-ring-sub"), ffg = $("#fast-ring-fg");
+    if (fl) fl.textContent = label;
+    if (fc) fc.textContent = `${num(pad2(hh))}:${num(pad2(mm))}:${num(pad2(ss))}`;
+    if (fs) fs.textContent = sub;
+    if (ffg){
+      const C = 2*Math.PI*96;
+      const prog = Math.min(1, Math.max(0, (mins - prev) / (target - prev)));
+      ffg.style.strokeDasharray = String(C);
+      ffg.style.strokeDashoffset = String(C * (1 - prog));
+    }
   }
+  renderFastHadith();
+  renderFastSchedule();
+}
+
+/* ---------------- Alarm page + per-prayer detail page (Fix #4 §8–§9) --
+   Alarm page: master toggle (settings.azan) + fard (5) + nafl (Duha,
+   Tahajjud) + forbidden (3) rows, each individually toggleable; tapping
+   a row opens its detail page. Detail page: toggle, Time Adjustment
+   slider (-30..+30, 1-minute steps, middle = Exact time), Alarm Sound
+   list (each with a ▶ preview), Save button. The offset set here is the
+   SAME settings.offsets value the azan scheduler uses, so the prayer
+   time itself is adjusted with the same slider. ------------------------ */
+const ALARM_ITEMS = {
+  fard: ["Fajr","Dhuhr","Asr","Maghrib","Isha"],
+  nafl: ["Duha","Tahajjud"],
+  forbidden: ["ForbMorning","ForbNoon","ForbEvening"]
+};
+function alarmItemName(id){
+  if (PRAYER_IDS.includes(id)) return pname(id);
+  if (id==="Duha") return nt("duha");
+  if (id==="Tahajjud") return Lb("তাহাজ্জুদ", "Tahajjud");
+  const w = forbiddenWindows().find(x=>x.id===id);
+  if (w) return Lb(w.bn, w.en);
+  return id;
+}
+function alarmItemTime(id){
+  if (!timings) return "—";
+  if (PRAYER_IDS.includes(id)) return adjTimeStr(id, settings.offsets[id]||0);
+  if (id==="Duha") return fmtTime(minsToHHMM(toMin(timings.Sunrise)+15+(settings.offsets.Duha||0)));
+  if (id==="Tahajjud") return fmtTime(minsToHHMM(toMin(timings.Lastthird)+(settings.offsets.Tahajjud||0)));
+  const w = forbiddenWindows().find(x=>x.id===id);
+  if (w) return `${fmtTime(minsToHHMM(w.start+(settings.offsets[id]||0)))} – ${fmtTime(minsToHHMM(w.end+(settings.offsets[id]||0)))}`;
+  return "—";
+}
+function alarmRowHtml(id){
+  const on = !!settings.alarmOn[id];
+  return `<div class="prayer-row tappable" data-alarm-item="${id}" role="button" tabindex="0">
+    <div class="p-name">${alarmItemName(id)}<small>🔔 ${on?Lb("ঠিক সময়ে", "On time"):Lb("বন্ধ", "Off")} • ${alarmItemTime(id)}</small></div>
+    <div class="row"><label class="switch"><input type="checkbox" data-alarm-toggle="${id}" ${on?"checked":""}><span class="slider"></span></label></div></div>`;
+}
+function renderAlarmPage(){
+  const m = $("#alarm-master"); if (m) m.checked = !!settings.azan;
+  const f = $("#alarm-fard"); if (f) f.innerHTML = ALARM_ITEMS.fard.map(alarmRowHtml).join("");
+  const n = $("#alarm-nafl"); if (n) n.innerHTML = ALARM_ITEMS.nafl.map(alarmRowHtml).join("");
+  const fb = $("#alarm-forbidden"); if (fb) fb.innerHTML = ALARM_ITEMS.forbidden.map(alarmRowHtml).join("");
+  $$("#view-alarm [data-alarm-toggle]").forEach(t=>t.onchange=e=>{
+    e.stopPropagation();
+    const id = t.dataset.alarmToggle;
+    settings.alarmOn[id] = t.checked; saveSettings(); syncPrayerAlarms(); renderAlarmPage();
+  });
+  $$("#view-alarm [data-alarm-item]").forEach(r=>{
+    r.onclick=e=>{ if (e.target.closest("[data-alarm-toggle]")) return; openPrayerDetail(r.dataset.alarmItem); };
+    r.onkeydown=e=>{ if (e.key==="Enter" || e.key===" "){ e.preventDefault(); openPrayerDetail(r.dataset.alarmItem); } };
+  });
+}
+let detailId = null, detailDraft = null;
+const ALARM_SOUNDS = [
+  {id:"silent", bn:"নিঃশব্দ", en:"Silent"},
+  {id:"beep", bn:"বিপ", en:"Beep"},
+  {id:"ring", bn:"রিং", en:"Ring"},
+  {id:"name", bn:"ওয়াক্তের নাম", en:"Prayer name"},
+  {id:"notification", bn:"নোটিফিকেশন", en:"Notification"},
+  {id:"azan", bn:"আজান", en:"Azan"}
+];
+function openPrayerDetail(id){
+  detailId = id;
+  detailDraft = { on: !!settings.alarmOn[id], offset: settings.offsets[id]||0, sound: settings.alarmSound[id]||"name" };
+  renderDetailPage();
+  showView("prayer-detail");
+}
+function detailBaseMin(id){
+  if (!timings) return null;
+  if (PRAYER_IDS.includes(id)) return toMin(timings[id]);
+  if (id==="Duha") return toMin(timings.Sunrise)+15;
+  if (id==="Tahajjud") return toMin(timings.Lastthird);
+  const w = forbiddenWindows().find(x=>x.id===id);
+  return w ? w.start : null;
+}
+function renderDetailPage(){
+  if (!detailId) return;
+  const t = $("#detail-title"); if (t) t.textContent = alarmItemName(detailId);
+  const tg = $("#detail-toggle"); if (tg) tg.checked = !!detailDraft.on;
+  const sl = $("#detail-slider"); if (sl) sl.value = String(detailDraft.offset);
+  updateDetailTime();
+  renderDetailSounds();
+}
+function updateDetailTime(){
+  const base = detailBaseMin(detailId); if (base==null) return;
+  const set = fmtTime(minsToHHMM(base + detailDraft.offset));
+  const ex = $("#detail-exact");
+  if (ex) ex.textContent = detailDraft.offset===0 ? Lb("Exact time", "Exact time") : offsetText(detailDraft.offset);
+  const dt = $("#detail-time");
+  if (dt) dt.textContent = `${Lb("সেট করা সময়", "Set time")}: ${set}`;
+}
+function renderDetailSounds(){
+  const box = $("#detail-sounds"); if (!box) return;
+  box.innerHTML = ALARM_SOUNDS.map(s=>`<div class="sound-row ${detailDraft.sound===s.id?"on":""}" data-sound="${s.id}" role="button" tabindex="0">
+    <span class="sound-name">${Lb(s.bn, s.en)}${s.id==="name"?" ("+Lb("ডিফল্ট","Default")+")":""}</span>
+    <span class="row"><span class="sound-check">${detailDraft.sound===s.id?"✅":""}</span>
+    <button class="mini-btn" data-preview="${s.id}" title="${Lb("শুনুন","Preview")}">▶</button></span></div>`).join("");
+  $$("#detail-sounds [data-sound]").forEach(r=>r.onclick=e=>{
+    if (e.target.closest("[data-preview]")) return;
+    detailDraft.sound = r.dataset.sound; renderDetailSounds();
+  });
+  $$("#detail-sounds [data-preview]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); previewAlarmSound(b.dataset.preview); });
+}
+function previewAlarmSound(sound){
+  stopAyahAudio();
+  if (sound==="silent") return;
+  if (sound==="beep" || sound==="ring"){ beepPreview(sound==="ring"); return; }
+  if (sound==="name"){
+    const name = detailId ? alarmItemName(detailId) : "";
+    speakText(Lb(`${name}র নামাজের সময় হয়েছে`, `It is time for ${name} prayer`));
+    return;
+  }
+  if (sound==="notification"){ const a = $("#audio-reminder"); if (a){ a.currentTime=0; a.play().catch(()=>{}); } return; }
+  if (sound==="azan"){ const a = $("#audio-azan"); if (a){ a.currentTime=0; a.play().catch(()=>{}); } return; }
+}
+/* Short WebAudio beep / phone-ring preview (no file needed). */
+function beepPreview(ring){
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    const ctx = new AC();
+    const tone = (f, t0, dur)=>{ const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.value = f; o.type = "sine";
+      g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.25, t0+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+      o.connect(g); g.connect(ctx.destination); o.start(t0); o.stop(t0+dur+0.05); };
+    if (!ring){ tone(880, ctx.currentTime, 0.25); tone(880, ctx.currentTime+0.35, 0.25); }
+    else { tone(1046, ctx.currentTime, 0.4); tone(1318, ctx.currentTime+0.5, 0.4); tone(1046, ctx.currentTime+1.0, 0.4); }
+    setTimeout(()=>{ try{ ctx.close(); }catch(e){} }, 2200);
+  } catch(e){}
+}
+function speakText(text){
+  try {
+    if (!("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = settings.lang === "bn" ? "bn-BD" : "en-US";
+    window.speechSynthesis.speak(u);
+  } catch(e){}
+}
+function saveDetailPage(){
+  if (!detailId || !detailDraft) return;
+  settings.alarmOn[detailId] = !!detailDraft.on;
+  settings.offsets[detailId] = detailDraft.offset;
+  settings.alarmSound[detailId] = detailDraft.sound;
+  saveSettings(); syncPrayerAlarms(); renderAlarmPage();
+  toast(Lb("সংরক্ষণ হয়েছে ✓", "Saved ✓"));
+  showView("alarm");
+}
+
+/* ---------------- Calendar page (Fix #4 §10) -----------------------
+   Day cards (not a long thin table), one after another, scrollable.
+   Month + year dropdowns on top. Each card: green header (English date
+   + weekday + Hijri date + share icon), prayer lines, a second line
+   (sunrise, sunset, Sehri, Iftar), and the forbidden times. Times are
+   computed on-device for each day (computeTimingsLocal) — no network. */
+const GREG_BN_MONTHS = ["জানুয়ারি","ফেব্রুয়ারি","মার্চ","এপ্রিল","মে","জুন","জুলাই","আগস্ট","সেপ্টেম্বর","অক্টোবর","নভেম্বর","ডিসেম্বর"];
+const GREG_BN_WEEKDAYS = ["রবিবার","সোমবার","মঙ্গলবার","বুধবার","বৃহস্পতিবার","শুক্রবার","শনিবার"];
+const GREG_EN_MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const GREG_EN_WEEKDAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+let calMonth = new Date().getMonth(), calYear = new Date().getFullYear();
+function renderCalendarPage(){
+  const ms = $("#cal-month"), ys = $("#cal-year");
+  if (ms && !ms.options.length){
+    ms.innerHTML = GREG_BN_MONTHS.map((m,i)=>`<option value="${i}">${m}</option>`).join("");
+    const y0 = new Date().getFullYear();
+    ys.innerHTML = [y0-1, y0, y0+1].map(y=>`<option value="${y}">${bnNum(y)}</option>`).join("");
+    ms.onchange = ()=>{ calMonth = +ms.value; renderCalendarPage(); };
+    ys.onchange = ()=>{ calYear = +ys.value; renderCalendarPage(); };
+  }
+  if (ms) ms.value = String(calMonth);
+  if (ys) ys.value = String(calYear);
+  const box = $("#cal-days"); if (!box) return;
+  if (!hasLocation()){ box.innerHTML = `<div class="card"><p class="muted">${Lb("নামাজের সময় দেখতে আগে আপনার অবস্থান সেট করুন।", "Set your location first to see prayer times.")}</p></div>`; return; }
+  const days = new Date(calYear, calMonth+1, 0).getDate();
+  let html = "";
+  for (let d = 1; d <= days; d++){
+    const date = new Date(calYear, calMonth, d);
+    const t = computeTimingsLocal(date);
+    if (!t) continue;
+    const hj = hijriFromGregorian(date);
+    const head = Lb(`${bnNum(d)} ${GREG_BN_MONTHS[calMonth]}, ${bnNum(calYear)} — ${GREG_BN_WEEKDAYS[date.getDay()]} / ${bnNum(hj.day)} ${escHtml(hj.month.en)}, ${bnNum(hj.year)}`,
+      `${d} ${GREG_EN_MONTHS[calMonth]} ${calYear} — ${GREG_EN_WEEKDAYS[date.getDay()]} / ${hj.day} ${escHtml(hj.month.en)}, ${hj.year}`);
+    const prayLines = PRAYER_IDS.map(pid=>`<div class="cal-line"><span>${pname(pid)}</span><b>${fmtTime(t[pid])}</b></div>`).join("");
+    const second = `<div class="cal-line"><span>${Lb("সূর্যোদয়","Sunrise")}</span><b>${fmtTime(t.Sunrise)}</b></div>
+      <div class="cal-line"><span>${Lb("সূর্যাস্ত","Sunset")}</span><b>${fmtTime(t.Sunset)}</b></div>
+      <div class="cal-line"><span>${Lb("সাহরি","Sehri")}</span><b>${fmtTime(t.Imsak)}</b></div>
+      <div class="cal-line"><span>${Lb("ইফতার","Iftar")}</span><b>${fmtTime(t.Maghrib)}</b></div>`;
+    const sr = toMin(t.Sunrise), dh = toMin(t.Dhuhr), mg = toMin(t.Maghrib);
+    const forb = `<div class="cal-forb">${Lb("সালাতের নিষিদ্ধ সময়", "Forbidden prayer times")}: ${fmtTime(t.Sunrise)} – ${fmtTime(minsToHHMM(sr+15))} • ${fmtTime(minsToHHMM(dh-10))} – ${fmtTime(t.Dhuhr)} • ${fmtTime(minsToHHMM(mg-25))} – ${fmtTime(t.Maghrib)}</div>`;
+    html += `<div class="card cal-card"><div class="cal-head"><span>${head}</span>
+      <button class="mini-btn" data-cal-share="${d}" title="${Lb("শেয়ার","Share")}">↗️</button></div>
+      ${prayLines}${second}${forb}</div>`;
+  }
+  box.innerHTML = html || `<div class="card"><p class="muted">${Lb("তথ্য পাওয়া যায়নি।", "No data available.")}</p></div>`;
+  $$("#cal-days [data-cal-share]").forEach(b=>b.onclick=()=>{
+    const d = +b.dataset.calShare;
+    const date = new Date(calYear, calMonth, d);
+    const t = computeTimingsLocal(date); if (!t) return;
+    const text = `${bnNum(d)} ${GREG_BN_MONTHS[calMonth]} ${bnNum(calYear)} — ${Lb("নামাজের সময়", "Prayer times")}: ` +
+      PRAYER_IDS.map(pid=>`${pname(pid)} ${fmtTime(t[pid])}`).join(", ");
+    shareText(text);
+  });
+}
+
+/* Share helper: Web Share API when available, clipboard fallback. */
+async function shareText(text){
+  try {
+    if (navigator.share){ await navigator.share({ text }); return; }
+  } catch(e){}
+  try { await navigator.clipboard.writeText(text); toast(Lb("কপি হয়েছে ✓", "Copied ✓")); }
+  catch(e){ toast(text); }
 }
 
 /* ---------------- Durood on phone unlock ----------------
@@ -3767,6 +4068,8 @@ function fireDhikrReminder(kind){
         { body: DUROOD_AR, icon:"icons/icon-192.png" }); } catch(e){}
     }
   } else {
+    const a = $("#audio-istighfar");
+    if (a){ a.currentTime = 0; a.play().catch(()=>{}); }
     toast("🤲 " + Lb("আস্তাগফিরুল্লাহ পড়ুন", "Recite Astaghfirullah") + ": " + ASTAGH_AR);
     if (settings.notif && "Notification" in window && Notification.permission === "granted"){
       try { new Notification("My Deen — " + Lb("ইস্তিগফার", "Istighfar"),
@@ -3789,13 +4092,20 @@ async function scheduleNativeDhikr(){
   try {
     if (typeof window.Capacitor === "undefined" || !window.Capacitor.Plugins) return;
     const LN = window.Capacitor.Plugins.LocalNotifications; if (!LN) return;
-    await LN.createChannel({ id: "dhikr", name: "Dhikr reminders",
-      description: "Durood Sharif and Astaghfirullah reminders", importance: 4, vibration: true });
+    // Fix #4 §6: a dhikr reminder notification also PLAYS its audio —
+    // each kind gets its own channel with its own sound (durood.mp3 /
+    // istighfar.mp3), because Android 8+ plays the CHANNEL sound.
+    await LN.createChannel({ id: "dhikr-durood", name: "Durood reminders",
+      description: "Durood Sharif reminders", sound: "durood.mp3", importance: 4, vibration: true });
+    await LN.createChannel({ id: "dhikr-istighfar", name: "Istighfar reminders",
+      description: "Astaghfirullah reminders", sound: "istighfar.mp3", importance: 4, vibration: true });
     const jobs = [
       { on: settings.duroodRemOn, min: settings.duroodRemMin || 30, base: DUROOD_REM_BASE,
+        channelId: "dhikr-durood", sound: "durood.mp3",
         title: "My Deen — " + Lb("দরুদ শরিফ", "Durood Sharif"),
         body: DUROOD_AR + " — " + Lb("দরুদ পড়ুন", "Recite Durood upon the Prophet ﷺ") },
       { on: settings.astaghRemOn, min: settings.astaghRemMin || 30, base: ASTAGH_REM_BASE,
+        channelId: "dhikr-istighfar", sound: "istighfar.mp3",
         title: "My Deen — " + Lb("ইস্তিগফার", "Istighfar"),
         body: ASTAGH_AR + " — " + Lb("আস্তাগফিরুল্লাহ পড়ুন, আল্লাহর কাছে ক্ষমা চান", "Recite Astaghfirullah — seek Allah's forgiveness") }
     ];
@@ -3806,7 +4116,7 @@ async function scheduleNativeDhikr(){
       const now = Date.now(), list = [];
       for (let k = 1; k <= DHIKR_REM_COUNT; k++){
         list.push({ id: j.base + k - 1, title: j.title, body: j.body,
-          schedule: { at: new Date(now + k * j.min * 60000), allowWhileIdle: true }, channelId: "dhikr" });
+          schedule: { at: new Date(now + k * j.min * 60000), allowWhileIdle: true }, channelId: j.channelId, sound: j.sound });
       }
       if (list.length) await LN.schedule({ notifications: list });
     }
@@ -3874,6 +4184,7 @@ function checkAzan(){
   const now = new Date(); const key = `${todayKey()}_${now.getHours()}:${now.getMinutes()}`;
   const mins = now.getHours()*60 + now.getMinutes();
   for (const p of PRAYER_IDS){
+    if (!settings.alarmOn[p]) continue;
     const at = toMin(timings[p]) + (settings.offsets[p] || 0);
     if (at===mins && !rungToday[key+p]){ rungToday[key+p]=true; playAzan(); toast(`🕌 ${Lb("নামাজের সময় হয়েছে", "Time for prayer")} — ${p}`); }
   }
@@ -3960,33 +4271,120 @@ async function setupNativeAzanActions(){
     });
   } catch(e){ /* native-only; never break the web app */ }
 }
-async function scheduleNativeAzan(){
+/* Pre-azan texts (Fix #4 §7) — the user's exact Bengali wording, not
+   one letter changed. A notification with this text arrives 2 minutes
+   before every fard prayer; the azan follows 1–2 minutes later. */
+const PREAZAN_TEXTS = {
+  Fajr: "ফজরের নামাজের সময় হয়েছে, ঘুম থেকে উঠে মিসওয়াক করে নামাজের প্রস্তুতি নিন",
+  Dhuhr: "যোহরের নামাজের সময় হয়েছে, মিসওয়াক করে নামাজের প্রস্তুতি নিন",
+  Asr: "আসরের নামাজের সময় হয়েছে, মিসওয়াক করে নামাজের প্রস্তুতি নিন",
+  Maghrib: "মাগরিবের নামাজের সময় হয়েছে, মিসওয়াক করে নামাজের প্রস্তুতি নিন",
+  Isha: "ইশার নামাজের সময় হয়েছে, মিসওয়াক করে নামাজের প্রস্তুতি নিন"
+};
+const TAHAJJUD_TEXT = "তাহাজ্জুদের সময় হয়েছে, উঠে নামাজের প্রস্তুতি নিন";
+const PREAZAN_IDS = [31,32,33,34,35];
+const TAHAJJUD_ID = 36, SEHRI_ID = 37, IFTAR_ID = 38;
+const FORB_IDS = [41,42,43], DUHA_ID = 44;
+/* One list of everything the exact-alarm scheduler must fire. Each entry:
+   {id, at: Date, type, title, body, sound, prayerId}. `sound` is one of
+   azan | durood | istighfar | reminder | none and maps to a res/raw mp3
+   on the native side (and to an LN channel sound in the fallback).
+   Every entry is the NEXT occurrence of that item. */
+function buildPrayerAlarmList(){
+  if (!timings) return [];
+  const now = new Date();
+  const dayStart = new Date(now); dayStart.setHours(0,0,0,0);
+  const atMin = m => { const d = new Date(dayStart); d.setMinutes(m); return d; };
+  const nextOcc = d => { if (d <= now) d.setDate(d.getDate()+1); return d; };
+  const list = [];
+  const soundFor = id => {
+    const s = settings.alarmSound[id] || "name";
+    if (s === "silent") return "none";
+    if (s === "azan") return "azan";
+    return "reminder"; // beep / ring / name / notification → default reminder sound
+  };
+  PRAYER_IDS.forEach((id, i)=>{
+    if (!settings.alarmOn[id]) return;
+    const base = toMin(timings[id]); if (base == null) return;
+    const at = nextOcc(atMin(base + (settings.offsets[id] || 0)));
+    const name = pname(id);
+    list.push({ id: AZAN_IDS[i], at, type: "azan", title: "My Deen — " + name,
+      body: Lb("মিসওয়াক ও অজু করে নামাজের জন্য প্রস্তুত হোন", "Use miswak and perform wudu to prepare for prayer"),
+      sound: soundFor(id), prayerId: id });
+    // pre-azan: 2 minutes before the azan, exact Bengali text
+    const preAt = new Date(at.getTime() - 2*60000);
+    if (preAt <= now) preAt.setDate(preAt.getDate()+1);
+    list.push({ id: PREAZAN_IDS[i], at: preAt, type: "preazan",
+      title: "My Deen — " + name, body: PREAZAN_TEXTS[id], sound: "none", prayerId: id });
+  });
+  // Tahajjud: notification ONLY, never an azan — and only when its
+  // alarm is set (Fix #4 §7).
+  if (settings.alarmOn.Tahajjud){
+    const lt = toMin(timings.Lastthird);
+    if (lt != null){
+      const at = nextOcc(atMin(lt + (settings.offsets.Tahajjud||0)));
+      list.push({ id: TAHAJJUD_ID, at, type: "tahajjud", title: "My Deen — " + Lb("তাহাজ্জুদ", "Tahajjud"),
+        body: TAHAJJUD_TEXT, sound: "none", prayerId: "Tahajjud" });
+    }
+  }
+  if (settings.alarmOn.Sehri){
+    const im = toMin(timings.Imsak);
+    if (im != null) list.push({ id: SEHRI_ID, at: nextOcc(atMin(im + (settings.offsets.Sehri||0))), type: "sehri",
+      title: "My Deen — " + Lb("সাহরি", "Sehri"), body: Lb("সাহরির সময় হয়েছে", "It is time for Sehri"), sound: "reminder", prayerId: "Sehri" });
+  }
+  if (settings.alarmOn.Iftar){
+    const mg = toMin(timings.Maghrib);
+    if (mg != null) list.push({ id: IFTAR_ID, at: nextOcc(atMin(mg + (settings.offsets.Iftar||0))), type: "iftar",
+      title: "My Deen — " + Lb("ইফতার", "Iftar"), body: Lb("ইফতারের সময় হয়েছে", "It is time for Iftar"), sound: "reminder", prayerId: "Iftar" });
+  }
+  forbiddenWindows().forEach((w, i)=>{
+    if (!settings.alarmOn[w.id]) return;
+    list.push({ id: FORB_IDS[i], at: nextOcc(atMin(w.start + (settings.offsets[w.id]||0))), type: "forbidden",
+      title: "My Deen — " + Lb(w.bn, w.en),
+      body: Lb("সালাতের নিষিদ্ধ সময় শুরু হয়েছে", "A forbidden prayer time has begun"), sound: "none", prayerId: w.id });
+  });
+  if (settings.alarmOn.Duha){
+    const sr = toMin(timings.Sunrise);
+    if (sr != null) list.push({ id: DUHA_ID, at: nextOcc(atMin(sr + 15 + (settings.offsets.Duha||0))), type: "duha",
+      title: "My Deen — " + nt("duha"), body: Lb("দুহার নামাজের সময় হয়েছে", "It is time for Duha prayer"), sound: soundFor("Duha"), prayerId: "Duha" });
+  }
+  return list;
+}
+/* The one entry point for (re)scheduling prayer-time alarms. Preferred:
+   the native exact-alarm plugin (Fix #4 §5) — survives reboot via
+   BootReceiver and fires even when the app is killed. Fallback:
+   Capacitor LocalNotifications (the old path). The prayer check / hurry
+   flow is LN-only in both cases. */
+async function syncPrayerAlarms(){
+  const PA = (typeof window.Capacitor !== "undefined" && window.Capacitor.Plugins)
+    ? window.Capacitor.Plugins.PrayerAlarm : null;
+  if (PA && PA.scheduleAlarms){
+    try {
+      const list = buildPrayerAlarmList();
+      await PA.scheduleAlarms({ alarms: list.map(a=>({ id:a.id, at:a.at.getTime(), type:a.type, title:a.title, body:a.body, sound:a.sound, prayerId:a.prayerId })) });
+      await scheduleNativeAzanChecks();
+      return;
+    } catch(e){ /* fall through to the LN path */ }
+  }
+  await scheduleNativeAzan();
+}
+/* Prayer check (5 min later) + hurry reminder (15 min later) — LN only,
+   shared by both scheduling paths. */
+async function scheduleNativeAzanChecks(){
   try {
     if (typeof window.Capacitor === "undefined" || !window.Capacitor.Plugins) return;
     const LN = window.Capacitor.Plugins.LocalNotifications;
     if (!LN || !timings || !settings.azan) return;
-    const perm = await LN.requestPermissions();
-    if (perm && perm.display && perm.display !== "granted") return;
-    // Channels: Android 8+ plays the CHANNEL sound, so each sound gets its own channel.
-    await LN.createChannel({ id: "azan", name: "Azan", description: "Prayer time azan alerts", sound: "azan.mp3", importance: 5, vibration: true });
     await LN.createChannel({ id: "hurry", name: "Prayer reminders", description: "Voice reminders to pray", sound: "reminder.mp3", importance: 4, vibration: true });
     await LN.createChannel({ id: "check", name: "Prayer check", description: "Did you pray?", importance: 4, vibration: true });
     const now = new Date();
     const notifs = [];
     PRAYER_IDS.forEach((id, i)=>{
+      if (!settings.alarmOn[id]) return;
       const base = toMin(timings[id]); if (base == null) return;
-      const mins = base + (settings.offsets[id] || 0);
-      const at = new Date(now); at.setHours(0, 0, 0, 0); at.setMinutes(mins);
-      if (at <= now) at.setDate(at.getDate() + 1); // next occurrence
-      const nm = PRAYERS.find(x=>x.id===id);
-      const name = pname(nm.id);
-      const miswak = Lb("মিসওয়াক ও অজু করে নামাজের জন্য প্রস্তুত হোন", "Use miswak and perform wudu to prepare for prayer");
-      notifs.push({
-        id: AZAN_IDS[i], title: "My Deen — " + name,
-        body: miswak,
-        schedule: { at, repeats: true, allowWhileIdle: true },
-        channelId: "azan", sound: "azan.mp3"
-      });
+      const at = new Date(now); at.setHours(0, 0, 0, 0); at.setMinutes(base + (settings.offsets[id] || 0));
+      if (at <= now) at.setDate(at.getDate() + 1);
+      const name = pname(id);
       notifs.push({
         id: CHECK_IDS[i], title: "My Deen",
         body: Lb(`নামাজ পড়েছো কিনা? (${name})`, `Did you pray? (${name})`),
@@ -4000,8 +4398,36 @@ async function scheduleNativeAzan(){
         channelId: "hurry", sound: "reminder.mp3"
       });
     });
-    await LN.cancel({ notifications: [...AZAN_IDS, ...CHECK_IDS, ...HURRY_IDS].map(id=>({id})) });
+    await LN.cancel({ notifications: [...CHECK_IDS, ...HURRY_IDS].map(id=>({id})) });
     if (notifs.length) await LN.schedule({ notifications: notifs });
+  } catch (e) { /* native-only; never break the web app */ }
+}
+async function scheduleNativeAzan(){
+  try {
+    if (typeof window.Capacitor === "undefined" || !window.Capacitor.Plugins) return;
+    const LN = window.Capacitor.Plugins.LocalNotifications;
+    if (!LN || !timings || !settings.azan) return;
+    const perm = await LN.requestPermissions();
+    if (perm && perm.display && perm.display !== "granted") return;
+    // Channels: Android 8+ plays the CHANNEL sound, so each sound gets its own channel.
+    await LN.createChannel({ id: "azan", name: "Azan", description: "Prayer time azan alerts", sound: "azan.mp3", importance: 5, vibration: true });
+    await LN.createChannel({ id: "preazan", name: "Pre-azan reminders", description: "2 minutes before prayer time", importance: 4, vibration: true });
+    await LN.createChannel({ id: "tahajjud", name: "Tahajjud", description: "Tahajjud notification (no azan)", importance: 4, vibration: true });
+    await LN.createChannel({ id: "sehri", name: "Sehri", description: "Sehri alarm", importance: 4, vibration: true });
+    await LN.createChannel({ id: "iftar", name: "Iftar", description: "Iftar alarm", importance: 4, vibration: true });
+    await LN.createChannel({ id: "forbidden", name: "Forbidden times", description: "Forbidden prayer time alerts", importance: 4, vibration: true });
+    await LN.createChannel({ id: "duha", name: "Duha", description: "Duha prayer alarm", sound: "reminder.mp3", importance: 4, vibration: true });
+    const soundFile = s => s==="azan" ? "azan.mp3" : s==="durood" ? "durood.mp3" : s==="istighfar" ? "istighfar.mp3" : s==="reminder" ? "reminder.mp3" : undefined;
+    const notifs = buildPrayerAlarmList().map(a=>{
+      const n = { id: a.id, title: a.title, body: a.body,
+        schedule: { at: a.at, repeats: true, allowWhileIdle: true }, channelId: a.type };
+      const sf = soundFile(a.sound);
+      if (sf) n.sound = sf;
+      return n;
+    });
+    await LN.cancel({ notifications: [...AZAN_IDS, ...PREAZAN_IDS, TAHAJJUD_ID, SEHRI_ID, IFTAR_ID, ...FORB_IDS, DUHA_ID].map(id=>({id})) });
+    if (notifs.length) await LN.schedule({ notifications: notifs });
+    await scheduleNativeAzanChecks();
   } catch (e) { /* native-only; never break the web app */ }
 }
 
@@ -4308,9 +4734,38 @@ function showView(v){
   if (v==="learn") renderLearn();
   if (v==="qibla"){ renderQibla(); startCompass(); }
   if (v==="fasting") renderFasting();
+  if (v==="alarm") renderAlarmPage();
+  if (v==="calendar") renderCalendarPage();
+  if (v==="prayer-detail") renderDetailPage();
   if (v==="notif"){ renderNotifFeed(); store.set("notif_seen", todayKey()); updateNotifBadge(); }
   if (v==="settings") fillSettings();
   window.scrollTo(0,0);
+}
+
+/* First-launch permission flow (Fix #4 §5): the app takes every
+   permission it needs from the phone — location (asked by the setup
+   screen), notifications, and exact alarms (Android 12+: a Settings
+   page the user switches on once). Runs once on first launch; the
+   Settings button re-runs it any time. */
+async function requestAllPermissions(){
+  try {
+    const PA = (typeof window.Capacitor !== "undefined" && window.Capacitor.Plugins)
+      ? window.Capacitor.Plugins.PrayerAlarm : null;
+    if (PA && PA.requestPermissions){
+      toast(Lb("সঠিক সময়ে আজান বাজাতে অনুমতিগুলো দিন 🤍", "Please grant the permissions so the azan rings on time 🤍"));
+      await PA.requestPermissions();
+    } else if ("Notification" in window && Notification.permission !== "granted"){
+      await Notification.requestPermission();
+    }
+    settings.permAsked = true; saveSettings();
+    syncPrayerAlarms();
+  } catch(e){}
+}
+function maybeAskPermissions(){
+  if (settings.permAsked) return;
+  // Ask shortly after startup so the language chooser / location
+  // setup (also first-run) is not covered by the system prompt.
+  setTimeout(()=>requestAllPermissions(), 2500);
 }
 let currentQTab = "all";
 function applyTheme(){ document.documentElement.setAttribute("data-theme", settings.theme);
@@ -4332,7 +4787,7 @@ function fillSettings(){
   const al = $("#set-autoloc"); if (al) al.checked = !!settings.autoLoc;
   const pn = $("#set-profile-name"); if (pn) pn.value = settings.profileName || "";
   const gm = $("#set-profile-gmail"); if (gm) gm.value = settings.gmail || "";
-  renderGreet(); renderGmailStatus(); renderProfilePhoto();
+  renderGreet(); renderLoginState();
   const sl0 = $("#set-lang");
   if (sl0) sl0.innerHTML = LANGS.map(l=>`<option value="${l.id}" ${settings.lang===l.id?"selected":""}>${l.native} (${l.name})</option>`).join("");
   $("#set-city").value = settings.city; $("#set-country").value = settings.country;
@@ -4389,7 +4844,10 @@ async function initPrayers(){
   const ok = await fetchTimings();
   renderDates(); renderPrayers(); renderHomeLocation(); renderTracker(); renderFasting(); renderQuranProgress(); updateNotifBadge();
   if (ok) fetchHijriMonth();
-  scheduleNativeAzan(); // Android only; no-op on the web
+  // Fix #4: syncPrayerAlarms() IS the scheduler (plugin when present,
+  // LN fallback otherwise). Calling scheduleNativeAzan() too would
+  // double-schedule every azan (ids 1–5 via LN AND the native plugin).
+  syncPrayerAlarms(); // exact alarms (native plugin) or LN fallback — Android only
   scheduleNativeDaily(); // daily hadith & verse, 7 AM — Android only
   scheduleNativeDhikr(); // durood / astaghfirullah interval reminders — Android only
 }
@@ -4413,19 +4871,13 @@ function bindEvents(){
   $("#btn-go-learn").onclick=()=>showView("learn");
   $("#btn-back-learn").onclick=()=>showView("home");
   $("#btn-mark-read").onclick=()=>toggleSurahRead(currentSurah);
-  $("#btn-save-profile").onclick=()=>{ settings.profileName = $("#set-profile-name").value.trim(); settings.gmail = $("#set-profile-gmail").value.trim(); saveSettings(); renderGreet(); renderGmailStatus(); renderProfilePhoto(); toast(t("saved")); };
-  const pp = $("#profile-photo-input");
-  if (pp) pp.onchange=e=>{ const f = e.target.files && e.target.files[0]; if (f) handleProfilePhotoFile(f); pp.value = ""; };
-  const ppBtn = $("#btn-change-photo");
-  if (ppBtn) ppBtn.onclick=()=>{ const i = $("#profile-photo-input"); if (i) i.click(); };
-  const tdBtn = $("#btn-test-durood");
-  if (tdBtn) tdBtn.onclick=()=>{ playDurood(true); toast(Lb("দরুদ বাজছে 🔊", "Playing durood 🔊")); };
+  $("#btn-save-profile").onclick=()=>{ settings.profileName = $("#set-profile-name").value.trim(); settings.gmail = $("#set-profile-gmail").value.trim(); saveSettings(); renderGreet(); renderLoginState(); toast(t("saved")); };
   $("#btn-gmail-login").onclick=()=>{ const g = $("#set-profile-gmail").value.trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(g)){ toast(Lb("সঠিক Gmail ঠিকানা লিখুন", "Enter a valid Gmail address")); return; }
-    settings.gmail = g; saveSettings(); renderGmailStatus();
+    settings.gmail = g; saveSettings(); renderLoginState();
     toast(Lb("Gmail দিয়ে লগইন হয়েছে 🤍", "Logged in with Gmail 🤍"));
     showView("home"); };
-  $("#btn-clear-profile").onclick=()=>{ settings.profileName = ""; settings.gmail = ""; settings.profilePhoto = ""; $("#set-profile-name").value = ""; $("#set-profile-gmail").value = ""; saveSettings(); renderGreet(); renderGmailStatus(); renderProfilePhoto(); toast(Lb("মুছে ফেলা হয়েছে", "Removed")); };
+  $("#btn-clear-profile").onclick=()=>{ settings.profileName = ""; settings.gmail = ""; $("#set-profile-name").value = ""; $("#set-profile-gmail").value = ""; saveSettings(); renderGreet(); renderLoginState(); toast(Lb("মুছে ফেলা হয়েছে", "Removed")); };
   $("#btn-detect-loc").onclick=()=>detectLocation(false);
   $("#btn-home-detect-loc").onclick=()=>detectLocation(false);
   $("#set-durood").onchange=e=>{ settings.duroodOnUnlock = e.target.checked; saveSettings(); syncDuroodToggleNative(); };
@@ -4437,12 +4889,47 @@ function bindEvents(){
   $("#set-dark").onchange=e=>{ settings.theme = e.target.checked?"dark":"light"; saveSettings(); applyTheme(); };
   $("#btn-save-settings").onclick=saveSettingsFromUI;
   $("#btn-go-fasting").onclick=()=>showView("fasting");
-  const nxBtn = $("#btn-nafl-expand");
-  if (nxBtn) nxBtn.onclick=()=>{ naflExpanded = !naflExpanded;
-    $("#nafl-more").classList.toggle("open", naflExpanded);
-    nxBtn.classList.toggle("open", naflExpanded);
-    nxBtn.setAttribute("aria-expanded", String(naflExpanded));
-    $("#nafl-expand-label").textContent = naflExpanded ? nt("viewLess") : nt("viewMore"); };
+  // Fix #4: home buttons, reference toggles, share, alarm + calendar + detail pages
+  const shareBtn = $("#btn-share");
+  if (shareBtn) shareBtn.onclick=()=>{
+    if (!timings){ toast(Lb("নামাজের সময় এখনো লোড হয়নি", "Prayer times are not loaded yet")); return; }
+    const today = Lb(`${bnNum(new Date().getDate())} ${GREG_BN_MONTHS[new Date().getMonth()]} — ${settings.city || ""}`, new Date().toDateString());
+    shareText(`My Deen — ${today}\n` + PRAYER_IDS.map(pid=>`${pname(pid)}: ${fmtTime(timings[pid])}`).join(" • "));
+  };
+  const goAlarm = $("#btn-go-alarm"); if (goAlarm) goAlarm.onclick=()=>showView("alarm");
+  const goCal = $("#btn-go-calendar"); if (goCal) goCal.onclick=()=>showView("calendar");
+  const backAlarm = $("#btn-back-alarm"); if (backAlarm) backAlarm.onclick=()=>showView("home");
+  const backCal = $("#btn-back-calendar"); if (backCal) backCal.onclick=()=>showView("home");
+  const backFast = $("#btn-back-fasting"); if (backFast) backFast.onclick=()=>showView("home");
+  const backDetail = $("#btn-back-detail"); if (backDetail) backDetail.onclick=()=>showView("alarm");
+  const saveDetail = $("#btn-detail-save"); if (saveDetail) saveDetail.onclick=()=>saveDetailPage();
+  const dSlider = $("#detail-slider");
+  if (dSlider) dSlider.oninput=()=>{ if (detailDraft){ detailDraft.offset = +dSlider.value; updateDetailTime(); } };
+  const dToggle = $("#detail-toggle");
+  if (dToggle) dToggle.onchange=()=>{ if (detailDraft) detailDraft.on = dToggle.checked; };
+  const aMaster = $("#alarm-master");
+  if (aMaster) aMaster.onchange=()=>{ settings.azan = aMaster.checked; saveSettings(); syncPrayerAlarms(); renderAlarmPage();
+    toast(settings.azan ? Lb("সকল নামাজের অ্যালার্ম চালু ✓", "All prayer alarms on ✓") : Lb("সকল নামাজের অ্যালার্ম বন্ধ", "All prayer alarms off")); };
+  const forbRef = $("#btn-forbidden-ref");
+  if (forbRef) forbRef.onclick=()=>{ const r = $("#forbidden-ref"); if (r) r.classList.toggle("hidden"); };
+  const naflRef = $("#btn-nafl-ref");
+  if (naflRef) naflRef.onclick=()=>{ const r = $("#nafl-ref"); if (r) r.classList.toggle("hidden"); };
+  const permBtn = $("#btn-permissions");
+  if (permBtn) permBtn.onclick=()=>requestAllPermissions();
+  // Fasting hadith swipe (left/right) on the hadith card.
+  const fh = $("#fast-hadith");
+  if (fh){
+    let sx = null;
+    fh.addEventListener("touchstart", e=>{ sx = e.changedTouches[0].clientX; }, {passive:true});
+    fh.addEventListener("touchend", e=>{
+      if (sx == null) return;
+      const dx = e.changedTouches[0].clientX - sx; sx = null;
+      if (Math.abs(dx) > 40){
+        fastHadithIdx = (fastHadithIdx + (dx < 0 ? 1 : FASTING_HADITHS.length - 1)) % FASTING_HADITHS.length;
+        renderFastHadith();
+      }
+    }, {passive:true});
+  }
   $("#btn-back-quran").onclick=()=>showView("quran");
   $("#btn-back-duas").onclick=()=>showView("duas");
   $("#btn-back-settings").onclick=()=>showView("settings");
@@ -4516,6 +5003,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   if (!hasLocation()) step(()=>openLocSetup());
   step(()=>maybeFireDailyWebNotif());
   step(()=>syncDuroodToggleNative()); step(()=>maybePlayDuroodOnForeground());
+  step(()=>maybeAskPermissions()); // Fix #4 §5: first-launch permission flow
   document.addEventListener("visibilitychange", ()=>{ if (!document.hidden) maybePlayDuroodOnForeground(); });
   window.addEventListener("focus", ()=>maybePlayDuroodOnForeground());
   // Prayer times load FIRST: a slow or failed Quran-list download must
