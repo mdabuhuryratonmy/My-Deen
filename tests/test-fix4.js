@@ -1190,6 +1190,33 @@ Object.assign(settings, _savedTz);
       src.includes('settings.duroodRemSound = e.target.checked') &&
       src.includes('settings.astaghRemSound = e.target.checked'),
       "wired");
+
+    // ---- Fix #35: durood plays ONLY on phone unlock, never on app open ----
+    // The user (22:13): opening the app must have nothing to do with
+    // durood playing. The web layer's "best-effort" hook (play on open /
+    // foreground / focus) is fully removed; the only unlock durood is the
+    // native receiver on the real ACTION_USER_PRESENT broadcast.
+    check("Fix #35: the play-on-open hook is fully gone (no function, no calls)",
+      !src.includes("function maybePlayDuroodOnForeground") &&
+      !src.includes("maybePlayDuroodOnForeground()"),
+      "hook removed");
+    check("Fix #35: init only syncs the unlock toggle natively — it does not play durood",
+      src.includes("step(()=>syncDuroodToggleNative()); // Fix #35") &&
+      !src.includes("step(()=>maybePlayDuroodOnForeground())"),
+      "init clean");
+    check("Fix #35: no foreground/focus listener plays durood any more (the alarm resync listener stays)",
+      !/visibilitychange.*maybePlayDurood|focus.*maybePlayDurood/.test(src) &&
+      src.includes('document.addEventListener("visibilitychange", ()=>{ if (!document.hidden){ resyncCountdown(); syncPrayerAlarms();'),
+      "listeners clean");
+    const _dur = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodUnlockReceiver.java", "utf8");
+    check("Fix #35: the native unlock receiver fires ONLY on the real USER_PRESENT unlock broadcast",
+      _dur.includes('Intent.ACTION_USER_PRESENT.equals(intent.getAction())') &&
+      _dur.includes("goAsync()") && _dur.includes("R.raw.durood"),
+      "unlock only");
+    check("Fix #35: the durood REMINDER still plays its audio at its set time (only the open-hook is gone)",
+      src.includes("function playDurood(force)") &&
+      src.includes('if (settings.duroodRemSound !== false) playDurood(true)'),
+      "reminder kept");
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);

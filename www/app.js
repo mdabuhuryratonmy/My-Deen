@@ -4130,14 +4130,20 @@ async function shareText(text){
 }
 
 /* ---------------- Durood on phone unlock ----------------
-   Best-effort in the web layer: when the app is opened or comes back to
-   the foreground (which is what happens right after unlocking the phone),
-   play the durood audio if the toggle is ON (default ON), at most once
-   every 5 minutes. The native APK ALSO has a BroadcastReceiver for the
-   real ACTION_USER_PRESENT unlock event (see android/app/src/main/java/
-   com/deenday/app/DuroodUnlockReceiver.java) whose on/off state is synced
-   from this toggle via the DuroodUnlock Capacitor plugin. The PWA cannot
-   detect phone unlock at all — it can only play when opened. ------------ */
+   Fix #35 (user 22:13): durood plays ONLY when the phone is unlocked,
+   exactly once — opening the app has NOTHING to do with it. The web
+   layer used to play durood when the app opened or came back to the
+   foreground ("best-effort unlock", at most once per 5 min) — that hook
+   is fully removed (maybePlayDuroodOnForeground is gone, with its init
+   call and its visibilitychange/focus listeners). The ONLY unlock durood
+   is the native APK's BroadcastReceiver for the real ACTION_USER_PRESENT
+   event (see android/app/src/main/java/com/deenday/app/
+   DuroodUnlockReceiver.java — goAsync, one 3.72 s clip, exactly once
+   per unlock), whose on/off state is synced from this toggle via the
+   DuroodUnlock Capacitor plugin. The PWA cannot detect phone unlock at
+   all, so on the web there is no unlock durood — only the durood
+   REMINDER (its own switch + interval, Fix #33) still plays audio at
+   its set time, through playDurood(true) in fireDhikrReminder. -------- */
 let lastDuroodAt = 0;
 function playDurood(force){
   const now = Date.now();
@@ -4145,9 +4151,6 @@ function playDurood(force){
   lastDuroodAt = now;
   const a = $("#audio-durood");
   if (a){ a.currentTime = 0; a.play().catch(()=>{}); }
-}
-function maybePlayDuroodOnForeground(){
-  if (settings.duroodOnUnlock) playDurood(false);
 }
 function syncDuroodToggleNative(){
   try {
@@ -5287,10 +5290,8 @@ document.addEventListener("DOMContentLoaded", async ()=>{
      There is no pre-set city to fall back to, ever. */
   if (!hasLocation()) step(()=>openLocSetup());
   step(()=>maybeFireDailyWebNotif());
-  step(()=>syncDuroodToggleNative()); step(()=>maybePlayDuroodOnForeground());
+  step(()=>syncDuroodToggleNative()); // Fix #35: no durood on open — the unlock durood is native-only (USER_PRESENT)
   step(()=>maybeAskPermissions()); // Fix #4 §5: first-launch permission flow
-  document.addEventListener("visibilitychange", ()=>{ if (!document.hidden) maybePlayDuroodOnForeground(); });
-  window.addEventListener("focus", ()=>maybePlayDuroodOnForeground());
   // Prayer times load FIRST: a slow or failed Quran-list download must
   // never block them (previously one stalled fetch froze both).
   step(()=>initPrayers());
