@@ -26,8 +26,8 @@ const BN_DIG = "০১২৩৪৫৬৭৮৯";
 const bnNum = n => num(n); // locale digits (bn / fa / Arabic-Indic / Latin) via i18n num()
 const escHtml = v => String(v == null ? "" : v).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const pad2 = n => String(n).padStart(2, "0");
-const todayKey = (d=new Date()) => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
-const ddmmyyyy = (d=new Date()) => `${pad2(d.getDate())}-${pad2(d.getMonth()+1)}-${d.getFullYear()}`;
+const todayKey = (d=locNow()) => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+const ddmmyyyy = (d=locNow()) => `${pad2(d.getDate())}-${pad2(d.getMonth()+1)}-${d.getFullYear()}`;
 
 /* ---------------- i18n ----------------
    16 languages. English is the DEFAULT for new users; a saved language
@@ -133,7 +133,7 @@ const STR = {  en: {
     clearBtn:"Clear",
     settingsTitle:"Settings",
     autoLocLabel:"📍 Detect location automatically",
-    autoLocDesc:"When on, your city is set automatically from GPS (permission required). When off, the city below is used.",
+    autoLocDesc:"When on, your city is set automatically from GPS (permission required).",
     detectNow:"📍 Detect location now",
     cityLabel:"City",
     countryLabel:"Country",
@@ -358,7 +358,7 @@ const STR = {  en: {
     clearBtn:"মুছুন",
     settingsTitle:"সেটিংস",
     autoLocLabel:"📍 অবস্থান স্বয়ংক্রিয়ভাবে নির্ণয় করুন",
-    autoLocDesc:"চালু থাকলে GPS থেকে আপনার শহর নিজে থেকেই সেট হবে (অনুমতি দিতে হবে)। বন্ধ থাকলে নিচের শহর ব্যবহার হবে।",
+    autoLocDesc:"চালু থাকলে GPS থেকে আপনার শহর নিজে থেকেই সেট হবে (অনুমতি দিতে হবে)।",
     detectNow:"📍 এখনই অবস্থান নির্ণয় করুন",
     cityLabel:"শহর",
     countryLabel:"দেশ",
@@ -1805,7 +1805,7 @@ const Lb = (bn, en) => { const l = settings.lang; if (l==="bn") return bn;
   return en; };
 
 /* ---------------- settings ---------------- */
-const DEFAULTS = {city:"", country:"", lat:null, lon:null, method:0, school:1,
+const DEFAULTS = {city:"", country:"", lat:null, lon:null, method:0, school:0, schoolExplicit:false,
   lang:"en", theme:"dark", azan:true, adhan:"a1", reciter:"ar.alafasy", notif:false, tasbihTarget:33,
   autoLoc:true, useCoords:false, profileName:"", gmail:"", duroodOnUnlock:true, learnMadhhab:"hanafi",
   dailyNotif:true, duroodRemOn:true, duroodRemMin:30, astaghRemOn:true, astaghRemMin:30,
@@ -1823,9 +1823,11 @@ const DEFAULTS = {city:"", country:"", lat:null, lon:null, method:0, school:1,
      separately. Fard alarms default ON (azan is on by default); the rest
      default OFF until the user turns them on. */
   alarmOn:{Fajr:true, Dhuhr:true, Asr:true, Maghrib:true, Isha:true, Duha:false, Tahajjud:false, ForbMorning:false, ForbNoon:false, ForbEvening:false, Sehri:false, Iftar:false},
-  /* Per-item alarm sound (Fix #4 §9): silent | beep | ring | name
-     (announce the prayer name — the default) | notification | azan. */
-  alarmSound:{Fajr:"name", Dhuhr:"name", Asr:"name", Maghrib:"name", Isha:"name", Duha:"name", Tahajjud:"name", ForbMorning:"notification", ForbNoon:"notification", ForbEvening:"notification", Sehri:"notification", Iftar:"notification"},
+  /* Per-item alarm sound (Fix #4 §9; Fix #10): an ARRAY of up to 2
+     sounds, played together. "name" (announce the prayer name) is the
+     permanent default and is always selected; the user may add one more
+     (azan / notification / beep / ring). "silent" stands alone. */
+  alarmSound:{Fajr:["name"], Dhuhr:["name"], Asr:["name"], Maghrib:["name"], Isha:["name"], Duha:["name"], Tahajjud:["name"], ForbMorning:["name"], ForbNoon:["name"], ForbEvening:["name"], Sehri:["name"], Iftar:["name"]},
   permAsked:false};
 let settings = {...DEFAULTS};
 /* True when this device already has saved settings (a returning user).
@@ -1839,6 +1841,22 @@ try { Object.assign(settings, JSON.parse(LS.getItem("dd_settings") || "{}")); } 
 settings.offsets = {...DEFAULTS.offsets, ...(settings.offsets||{})};
 settings.alarmOn = {...DEFAULTS.alarmOn, ...(settings.alarmOn||{})};
 settings.alarmSound = {...DEFAULTS.alarmSound, ...(settings.alarmSound||{})};
+/* Fix #10: alarm sound is now a multi-select ARRAY (max 2, "name" always
+   included unless the choice is silent alone). Older saved values were
+   single strings — normalize them, keeping the old choice as the extra
+   sound next to the permanent "name" default. */
+const VALID_SOUNDS = ["silent","beep","ring","name","notification","azan"];
+function normalizeSounds(v){
+  let arr = Array.isArray(v) ? v.slice() : (typeof v === "string" && v ? [v] : []);
+  if (arr.includes("silent")) return ["silent"];
+  arr = arr.filter(s=>VALID_SOUNDS.includes(s));
+  if (!arr.includes("name")) arr.unshift("name");
+  return arr.slice(0, 2);
+}
+function migrateAlarmSounds(){
+  Object.keys(settings.alarmSound||{}).forEach(k=>{ settings.alarmSound[k]=normalizeSounds(settings.alarmSound[k]); });
+}
+migrateAlarmSounds();
 delete settings.profilePhoto; // removed feature (Fix #3): never stored again
 function saveSettings(){ try { LS.setItem("dd_settings", JSON.stringify(settings)); } catch(e){} }
 /* Location is NEVER pre-set (owner's rule, 2026-11-17): no default city,
@@ -1894,6 +1912,18 @@ function methodForRegion(){
   return 3; // Muslim World League — general default
 }
 const effMethod = () => settings.method > 0 ? settings.method : methodForRegion();
+/* Asr school (Fix #11): the region's madhhab is the default — Shafi'i
+   (factor 1) in Malaysia/Singapore/Indonesia, Hanafi (factor 2) in
+   South Asia — so Asr matches the local published times (JAKIM Asr in
+   Ipoh is 16:24, not the Hanafi 17:18). An explicit pick in
+   Settings → "Asr madhab" always wins (schoolExplicit). */
+function schoolForRegion(){
+  const c = (settings.country || "").toLowerCase();
+  if (c.includes("malaysia") || c.includes("singapore") || c.includes("indonesia") || c.includes("brunei")) return 0;
+  if (c.includes("bangladesh") || c.includes("pakistan") || c.includes("india") || c.includes("sri lanka") || c.includes("nepal")) return 1;
+  return 0;
+}
+const effSchool = () => settings.schoolExplicit ? settings.school : schoolForRegion();
 const store = {
   get(k, d){ try { const v = LS.getItem("dd_"+k); return v==null? d : JSON.parse(v); } catch(e){ return d; } },
   set(k, v){ try { LS.setItem("dd_"+k, JSON.stringify(v)); } catch(e){} }
@@ -2058,20 +2088,26 @@ const CITY_COORDS = {
    Tagged with the location's own locId, like API-resolved coordinates,
    so they are only ever used for THIS city. */
 function resolveCityCoordsOffline(){
-  if (settings.lat != null && settings.lon != null) return;
   if (!settings.city) return;
   const hit = CITY_COORDS[String(settings.city).trim().toLowerCase()];
   if (!hit) return;
   if (!settings.locId) settings.locId = cityKeyOf(settings.city, settings.country);
+  /* Fix #12: fill the timezone from the built-in table even when
+     coordinates already exist (GPS / an older save) — without it,
+     locNow() falls back to the device clock until the API answers,
+     and offline the timezone bug would come back. */
+  if ((!settings.tzName || settings.tzLoc !== settings.locId) && hit[2]){
+    settings.tzName = hit[2]; settings.tzLoc = settings.locId; saveSettings();
+  }
+  if (settings.lat != null && settings.lon != null) return;
   settings.lat = hit[0]; settings.lon = hit[1];
   settings.coordsLoc = settings.locId;
-  settings.tzName = hit[2]; settings.tzLoc = settings.locId;
   saveSettings();
 }
 async function fetchTimings(){
   /* No location set yet → no times at all (never a default city). */
   if (!hasLocation()){ timings = null; return false; }
-  const date = ddmmyyyy();
+  const date = ddmmyyyy(locNow());
   resolveCityCoordsOffline();
   /* On-device calculation FIRST whenever coordinates are usable: it
      cannot be blocked by any browser or network, so the home screen
@@ -2080,10 +2116,10 @@ async function fetchTimings(){
      the official Hijri date and the Qibla coordinates). */
   const coordsUsable = settings.lat != null && settings.lon != null
     && (settings.useCoords || (!!settings.locId && settings.coordsLoc === settings.locId));
-  const local = coordsUsable ? computeTimingsLocal(new Date()) : null;
+  const local = coordsUsable ? computeTimingsLocal(locNow()) : null;
   if (local){
     timings = local; timingsDate = date;
-    if (!hijriInfo) hijriInfo = hijriFromGregorian(new Date());
+    if (!hijriInfo) hijriInfo = hijriFromGregorian(locNow());
     fetchTimingsFromApi(date).then(ok=>{ if (ok){ try { renderDates(); renderPrayers(); renderHomeLocation(); } catch(e){} } }).catch(()=>{});
     return true;
   }
@@ -2101,8 +2137,8 @@ async function fetchTimings(){
    the API-resolved coordinates and timezone for the location. */
 async function fetchTimingsFromApi(date){
   const url = settings.useCoords
-    ? `${ALADHAN}/timings/${date}?latitude=${settings.lat}&longitude=${settings.lon}&method=${effMethod()}&school=${settings.school}`
-    : `${ALADHAN}/timingsByCity/${date}?city=${encodeURIComponent(settings.city)}&country=${encodeURIComponent(settings.country)}&method=${effMethod()}&school=${settings.school}`;
+    ? `${ALADHAN}/timings/${date}?latitude=${settings.lat}&longitude=${settings.lon}&method=${effMethod()}&school=${effSchool()}`
+    : `${ALADHAN}/timingsByCity/${date}?city=${encodeURIComponent(settings.city)}&country=${encodeURIComponent(settings.country)}&method=${effMethod()}&school=${effSchool()}`;
   for (let attempt = 0; attempt < 2; attempt++){
     try {
       const j = await fetchJson(url, 12000);
@@ -2150,6 +2186,33 @@ function tzOffsetHours(tzName, date){
     return (asUTC - Math.floor(date.getTime()/1000)*1000) / 3600000;
   } catch(e){ return -date.getTimezoneOffset()/60; }
 }
+/* Fix #12 — timezone: the device clock and the prayer location can be
+   in different timezones (phone in Malaysia UTC+8, location Jashore
+   UTC+6; the same happens with GPS while travelling). Prayer times are
+   always in the LOCATION's local time, so "now" must be read in the
+   location's timezone before any comparison — otherwise the device
+   clock is read as if it were the location's clock and the next
+   prayer, countdown, sky, alarms and even the fetched day are all
+   wrong by the timezone difference. locNow() returns a Date whose
+   wall-clock fields are the location's local time (the device time
+   when no location timezone is known). locAbs() converts such a
+   location wall-clock Date back to the absolute instant it means,
+   for native alarms. (DST zones: the offset is read at the given
+   instant, so a wall-clock within an hour of a DST change can be off
+   by that hour — accepted; the user's zones have no DST.) */
+function locOffsetMinutes(date){
+  if (settings.tzName && settings.locId && settings.tzLoc === settings.locId)
+    return Math.round(tzOffsetHours(settings.tzName, date) * 60);
+  return -date.getTimezoneOffset();
+}
+function locNow(now=new Date()){
+  const off = locOffsetMinutes(now), dev = -now.getTimezoneOffset();
+  return off === dev ? new Date(now.getTime()) : new Date(now.getTime() + (off - dev)*60000);
+}
+function locAbs(d){
+  const off = locOffsetMinutes(d), dev = -d.getTimezoneOffset();
+  return off === dev ? d : new Date(d.getTime() - (off - dev)*60000);
+}
 function computeTimingsLocal(date){
   if (settings.lat == null || settings.lon == null) return null;
   const lat = +settings.lat, lon = +settings.lon;
@@ -2194,7 +2257,7 @@ function computeTimingsLocal(date){
   const fajr = sunAngleTime(fajrA, jd, "ccw");
   const sunrise = sunAngleTime(0.833, jd, "ccw");
   const dhuhr = midDay(jd);
-  const asr = asrTime(settings.school === 1 ? 2 : 1, jd);
+  const asr = asrTime(effSchool() === 1 ? 2 : 1, jd);
   const sunset = sunAngleTime(0.833, jd, "cw");
   const isha = ishaV < 0 ? sunset + (-ishaV)/60 : sunAngleTime(ishaV, jd, "cw");
   if ([fajr,sunrise,dhuhr,asr,sunset,isha].some(v=>!isFinite(v))) return null;
@@ -2218,7 +2281,7 @@ function hijriFromGregorian(d){
   const names = ["Muharram","Safar","Rabiʿ al-awwal","Rabiʿ al-thani","Jumādá al-ūlá","Jumādá al-ākhirah","Rajab","Shaʿbān","Ramadān","Shawwāl","Dhū al-Qaʿdah","Dhū al-Ḥijjah"];
   return { day: String(day), month: { number: month, en: names[month-1] || "" }, year: String(year) };
 }
-function nextPrayer(now=new Date()){
+function nextPrayer(now=locNow()){
   const mins = now.getHours()*60 + now.getMinutes();
   for (const p of PRAYER_IDS){
     const tm = toMin(timings[p]); if (tm!=null && tm > mins) return {id:p, mins:tm};
@@ -2243,7 +2306,7 @@ function adjTimeStr(pid, o){
 /* Prayer window: a prayer is valid from its start until the next
    prayer's start (Fajr → Sunrise, Dhuhr → Asr, Asr → Maghrib,
    Maghrib → Isha, Isha → next day's Fajr). */
-function prayerWindowEnd(pid, now=new Date()){
+function prayerWindowEnd(pid, now=locNow()){
   const order = ["Fajr","Sunrise","Dhuhr","Asr","Maghrib","Isha"];
   const i = order.indexOf(pid);
   if (i < 0) return null;
@@ -2255,8 +2318,9 @@ function prayerWindowEnd(pid, now=new Date()){
   const t = toMin(timings[nextId]);
   return t == null ? null : t;
 }
-/* Forbidden windows (Fix #4 §1): morning = sunrise → sunrise+15,
-   midday = dhuhr−10 → dhuhr, evening = maghrib−25 → maghrib. */
+/* Forbidden windows (Fix #4 §1; Fix #11): morning = sunrise → sunrise+15,
+   midday = dhuhr−10 → dhuhr, evening = maghrib−15 → maghrib (~15 min
+   before sunset, as the user stated). */
 function forbiddenWindows(){
   if (!timings) return [];
   const sunrise = toMin(timings.Sunrise), dhuhr = toMin(timings.Dhuhr), magh = toMin(timings.Maghrib);
@@ -2264,15 +2328,21 @@ function forbiddenWindows(){
   return [
     {id:"ForbMorning", bn:"নিষিদ্ধ সময় (সকাল)", en:"Forbidden time (morning)", start:sunrise, end:sunrise+15},
     {id:"ForbNoon", bn:"নিষিদ্ধ সময় (দুপুর)", en:"Forbidden time (midday)", start:dhuhr-10, end:dhuhr},
-    {id:"ForbEvening", bn:"নিষিদ্ধ সময় (সন্ধ্যা)", en:"Forbidden time (evening)", start:magh-25, end:magh}
+    {id:"ForbEvening", bn:"নিষিদ্ধ সময় (সন্ধ্যা)", en:"Forbidden time (evening)", start:magh-15, end:magh}
   ];
 }
-/* The countdown ring (Fix #4 §1) shows the NEXT event — the next prayer,
-   the start of Tahajjud (last third of the night), or the next forbidden
-   window — whichever comes first. If we are inside a forbidden window,
-   the ring counts down to its end instead. Returns {name, at: Date,
-   prev: Date, kind, id}. */
-function nextEvent(now=new Date()){
+/* The countdown ring (Fix #4 §1; Fix #11) shows the NEXT event — the next
+   prayer, the start of Tahajjud (last third of the night), or the next
+   forbidden window — whichever comes first. Two rules keep it honest:
+   (1) if we are inside a forbidden window, the ring counts down to its
+   end; (2) a forbidden window must NEVER displace a prayer that can
+   still be prayed — while a prayer is in its valid window the ring
+   shows THAT prayer, counting down to the end of its prayable time
+   (when the forbidden window starts). `state` tells the ring whether
+   the event is running ("current" → "শেষ হতে বাকি") or still to come
+   ("upcoming" → "শুরু হতে বাকি"). Returns {name, at: Date, prev: Date,
+   kind, id, state}. */
+function nextEvent(now=locNow()){
   const dayStart = new Date(now); dayStart.setHours(0,0,0,0);
   const atMin = m => { const d = new Date(dayStart); d.setMinutes(m); return d; };
   const cands = [];
@@ -2288,7 +2358,21 @@ function nextEvent(now=new Date()){
   // inside a forbidden window? count down to its end
   for (const w of forbiddenWindows()){
     const s = atMin(w.start), e = atMin(w.end);
-    if (now >= s && now < e) return {kind:"forbidden", id:w.id, name:Lb(w.bn, w.en), at:e, prev:s};
+    if (now >= s && now < e) return {kind:"forbidden", id:w.id, name:Lb(w.bn, w.en), at:e, prev:s, state:"current"};
+  }
+  // A forbidden window is the next event, but a prayer is still in its
+  // valid window (e.g. 18:27, Asr prayable until the evening window
+  // starts): show THAT prayer, counting to the forbidden window's start.
+  const nextCand = [...cands].sort((a,b)=>a.at - b.at).find(c=>c.at > now);
+  if (nextCand && nextCand.kind === "forbidden"){
+    for (const p of PRAYER_IDS){
+      const start = toMin(timings[p]); if (start==null) continue;
+      const end = prayerWindowEnd(p, now); if (end==null) continue;
+      const s = atMin(start), e = atMin(end);
+      if (now >= s && now < e && nextCand.at > s && nextCand.at < e){
+        return {kind:"prayer", id:p, name:pname(p), at:nextCand.at, prev:s, state:"current"};
+      }
+    }
   }
   cands.sort((a,b)=>a.at - b.at);
   let next = cands.find(c=>c.at > now);
@@ -2299,6 +2383,7 @@ function nextEvent(now=new Date()){
   }
   const prev = cands.filter(c=>c.at <= now).sort((a,b)=>b.at - a.at)[0];
   next.prev = prev ? prev.at : new Date(next.at.getTime() - 3600000);
+  next.state = "upcoming";
   return next;
 }
 const PRAYER_ICONS = {Fajr:"🌅", Dhuhr:"☀️", Asr:"🌤️", Maghrib:"🌇", Isha:"🌙"};
@@ -2313,8 +2398,8 @@ function renderPrayers(){
     }
     return;
   }
-  const now = new Date(); const nx = nextPrayer(now);
-  $("#prayer-city").textContent = hasLocation() ? `${settings.city}, ${settings.country}` : "—";
+  const now = locNow(); const nx = nextPrayer(now);
+  const pc = $("#prayer-city"); if (pc) pc.textContent = hasLocation() ? `${settings.city}, ${settings.country}` : "—";
   renderHomeLocation();
   list.innerHTML = PRAYER_IDS.map(pid=>{
     const p = PRAYERS.find(x=>x.id===pid);
@@ -2323,13 +2408,13 @@ function renderPrayers(){
     const off = settings.offsets[pid] || 0;
     const name = pname(pid);
     const end = prayerWindowEnd(pid, now);
-    const range = end==null ? fmtTime(timings[pid]) : `${fmtTime(timings[pid])} – ${fmtTime(`${pad2(Math.floor((end%1440)/60))}:${pad2(end%60)}`)}`;
-    const small = `<span class="azan-line">🔔 ${Lb("আজান", "Azan")}: ${offsetText(off)}${off!==0?` • ${adjTimeStr(pid, off)}`:""}</span>`;
+    const endStr = end==null ? null : `${pad2(Math.floor((end%1440)/60))}:${pad2(end%60)}`;
+    const range = endStr ? `${num(timings[pid])} - ${num(endStr)}` : num(timings[pid]);
     const dot = (isNext || off!==0) ? `<span class="orange-dot" aria-hidden="true"></span>` : "";
     return `<div class="prayer-row ${isNext?"next":""} tappable" data-detail="${pid}" role="button" tabindex="0" title="${Lb("অ্যালার্ম সেটিংস খুলুন", "Open alarm settings")}">
-      <div class="p-name"><span class="p-ic">${PRAYER_ICONS[pid]||"🕌"}</span>${name}${dot}<small>${range}<br>${small}</small></div>
-      <div class="row"><button class="dotbtn" data-pray="${pid}" title="নামাজ পড়েছি">${done?"✅":"⭕"}</button>
-      <span class="p-time">${fmtTime(timings[pid])}</span></div></div>`;
+      <span class="p-ic">${PRAYER_ICONS[pid]||"🕌"}</span><span class="p-name">${name}</span>
+      <span class="p-range">${dot}${range}</span>
+      <button class="done-circle ${done?"done":""}" data-pray="${pid}" title="নামাজ পড়েছি" aria-label="নামাজ পড়েছি"></button></div>`;
   }).join("");
   $$("#prayer-list [data-pray]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); togglePrayer(b.dataset.pray); });
   $$("#prayer-list [data-detail]").forEach(r=>{
@@ -2344,18 +2429,22 @@ function renderPrayers(){
         ringLabel = $("#ring-label"), ringSub = $("#ring-sub");
   if (ringName) ringName.textContent = ev.name;
   if (ringCount) ringCount.textContent = `${num(pad2(h))}:${num(pad2(m))}:${num(pad2(s))}`;
-  if (ringLabel) ringLabel.textContent = ev.kind==="prayer" ? Lb("পরের নামাজ", "Next prayer")
+  if (ringLabel) ringLabel.textContent = ev.kind==="prayer"
+    ? (ev.state==="current" ? Lb("বর্তমান নামাজ", "Current prayer") : Lb("পরের নামাজ", "Next prayer"))
     : ev.kind==="tahajjud" ? Lb("তাহাজ্জুদ", "Tahajjud") : Lb("নিষিদ্ধ সময়", "Forbidden time");
-  if (ringSub) ringSub.textContent = Lb("শেষ হতে বাকি", "Time remaining");
+  if (ringSub) ringSub.textContent = ev.state==="current" ? Lb("শেষ হতে বাকি", "Time remaining") : Lb("শুরু হতে বাকি", "Starts in");
   if (ringFg){
     const C = 2*Math.PI*96;
     const prog = Math.min(1, Math.max(0, (now - ev.prev) / (ev.at - ev.prev)));
     ringFg.style.strokeDasharray = String(C);
     ringFg.style.strokeDashoffset = String(C * (1 - prog));
   }
-  const hero = $("#ring-hero"); if (hero) hero.dataset.sky = skyPeriod();
+  const sky = skyPeriod();
+  const hero = $("#ring-hero"); if (hero) hero.dataset.sky = sky;
+  const skyIc = $("#ring-sky-ic");
+  if (skyIc) skyIc.textContent = sky === "day" || sky === "golden" ? "☀️" : sky === "night" ? "🌙" : sky === "dawn" ? "🌤️" : "🌇";
   const pl = $("#pill-loc");
-  if (pl) pl.textContent = hasLocation() ? `📍 ${settings.city}, ${settings.country}` : `📍 ${Lb("অবস্থান সেট করুন", "Set location")}`;
+  if (pl) pl.textContent = hasLocation() ? `📍 ${settings.city}, ${settings.country} ⌄` : `📍 ${Lb("অবস্থান সেট করুন", "Set location")}`;
   const ps = $("#pill-sun");
   if (ps) ps.textContent = `🌅 ${fmtTime(timings.Sunrise)} • 🌇 ${fmtTime(timings.Sunset)}`;
   renderNafl();
@@ -2366,7 +2455,7 @@ function renderPrayers(){
 /* ---------------- realistic sky (time-of-day) ---------------- */
 function skyPeriod(){
   if (!timings) return "day";
-  const now = new Date(); const mins = now.getHours()*60+now.getMinutes();
+  const now = locNow(); const mins = now.getHours()*60+now.getMinutes();
   const fajr = toMin(timings.Fajr), sunrise = toMin(timings.Sunrise), asr = toMin(timings.Asr), magh = toMin(timings.Maghrib);
   if (mins >= fajr-30 && mins < sunrise+30) return "dawn";
   if (mins >= sunrise+30 && mins < asr) return "day";
@@ -2383,7 +2472,7 @@ function renderForbidden(){
   const cells = [
     [Lb("সকাল", "Morning"), `${fmtTime(timings.Sunrise)} – ${hhmm(sunrise+15)}`],
     [Lb("দুপুর", "Midday"), `${hhmm(dhuhr-10)} – ${fmtTime(timings.Dhuhr)}`],
-    [Lb("সন্ধ্যা", "Evening"), `${hhmm(magh-25)} – ${fmtTime(timings.Maghrib)}`]
+    [Lb("সন্ধ্যা", "Evening"), `${hhmm(magh-15)} – ${fmtTime(timings.Maghrib)}`]
   ];
   $("#forbidden-list").innerHTML = `<div class="forbid-grid">` + cells.map(c=>`<div class="forbid-cell"><b>${c[0]}</b><span>${c[1]}</span></div>`).join("") + `</div>`;
 }
@@ -2455,7 +2544,7 @@ function updateNaflStrip(){
   if (fajr==null || maghrib==null) return;
   sehriEl.textContent = fmt24(fajr);
   $("#nafl-iftar").textContent = fmt24(maghrib);
-  const now = new Date();
+  const now = locNow();
   const nowMin = now.getHours()*60 + now.getMinutes();
   let targetMin, label;
   if (nowMin < fajr){ targetMin = fajr; label = nt("sehriLeft"); }
@@ -2468,11 +2557,17 @@ function updateNaflStrip(){
   $("#nafl-count-label").textContent = label;
 }
 function renderDates(){
-  const now = new Date();
+  const now = locNow();
   const g = Lb(`${bnNum(now.getDate())} ${["জানুয়ারি","ফেব্রুয়ারি","মার্চ","এপ্রিল","মে","জুন","জুলাই","আগস্ট","সেপ্টেম্বর","অক্টোবর","নভেম্বর","ডিসেম্বর"][now.getMonth()]} ${bnNum(now.getFullYear())}, ${["রবিবার","সোমবার","মঙ্গলবার","বুধবার","বৃহস্পতিবার","শুক্রবার","শনিবার"][now.getDay()]}`, now.toDateString());
   const h = hijriInfo ? (Lb(`${bnNum(hijriInfo.day)} ${escHtml(hijriInfo.month.en)} ${bnNum(hijriInfo.year)} হিজরি`, `${hijriInfo.day} ${escHtml(hijriInfo.month.en)} ${hijriInfo.year} AH`)) : "…";
   const b = banglaDate(now);
   $("#date-line").innerHTML = `📅 ${g}<br>🌙 <b>${h}</b> &nbsp;•&nbsp; 🇧🇩 ${Lb(b.text, b.textEn)}`;
+  /* Home date row (Fix #7, reference top): weekday + Hijri, then Gregorian. */
+  const wdShort = ["রবি","সোম","মঙ্গল","বুধ","বৃহঃ","শুক্র","শনি"][now.getDay()];
+  const hd = $("#home-date-hijri");
+  if (hd) hd.textContent = hijriInfo ? `${wdShort}, ${bnNum(hijriInfo.day)} ${hijriInfo.month.en}` : "…";
+  const gd = $("#home-date-greg");
+  if (gd) gd.textContent = `${bnNum(now.getDate())} ${["জানুয়ারি","ফেব্রুয়ারি","মার্চ","এপ্রিল","মে","জুন","জুলাই","আগস্ট","সেপ্টেম্বর","অক্টোবর","নভেম্বর","ডিসেম্বর"][now.getMonth()]}`;
 }
 
 /* ---------------- salah tracker ---------------- */
@@ -2481,12 +2576,16 @@ function isDone(pid, dateKey=todayKey()){ const l = salahLog(); return !!(l[date
 function togglePrayer(pid){
   const l = salahLog(); const k = todayKey(); l[k] = l[k] || {};
   l[k][pid] = !l[k][pid]; store.set("salah", l);
-  if (l[k][pid]) cancelPrayerReminders(PRAYER_IDS.indexOf(pid));
   renderPrayers(); renderTracker();
   toast(l[k][pid] ? (Lb("আলহামদুলিল্লাহ, নামাজের হিসাব রাখা হলো ✓", "Alhamdulillah, marked ✓")) : "");
 }
 function renderTracker(){
+  /* Top Features tracker ring (Fix #6/7): today's prayer completion %. */
+  const doneToday = PRAYER_IDS.filter(pid=>isDone(pid)).length;
+  const fr = $("#feat-tracker-ring");
+  if (fr) fr.textContent = num(Math.round(doneToday / PRAYER_IDS.length * 100)) + "%";
   const box = $("#tracker-today");
+  if (!box) return;
   box.innerHTML = PRAYER_IDS.map(pid=>{
     const p = PRAYERS.find(x=>x.id===pid);
     return `<div class="prayer-row"><div class="p-name">${pname(p.id)}</div>
@@ -2497,7 +2596,7 @@ function renderTracker(){
   const l = salahLog(); const dots = [];
   let done7 = 0, total7 = 0;
   for (let i=6; i>=0; i--){
-    const d = new Date(); d.setDate(d.getDate()-i);
+    const d = locNow(); d.setDate(d.getDate()-i);
     const k = todayKey(d); const day = l[k]||{};
     const c = PRAYER_IDS.filter(p=>day[p]).length;
     done7 += c; total7 += 5;
@@ -2507,7 +2606,7 @@ function renderTracker(){
   $("#week-dots").innerHTML = dots.join("");
   $("#week-summary").textContent = Lb(`${bnNum(done7)}/${bnNum(total7)} নামাজ`, `${done7}/${total7} prayers`);
   // this month
-  const now = new Date(); let dm=0, tm=0;
+  const now = locNow(); let dm=0, tm=0;
   Object.keys(l).forEach(k=>{ if(k.startsWith(`${now.getFullYear()}-${pad2(now.getMonth()+1)}`)){
     PRAYER_IDS.forEach(p=>{ tm++; if(l[k][p]) dm++; }); } });
   $("#month-summary").textContent = Lb(`এই মাসে এখন পর্যন্ত: ${bnNum(dm)} / ${bnNum(tm)} নামাজ`, `This month so far: ${dm} / ${tm} prayers`);
@@ -2599,8 +2698,9 @@ async function renderNotifFeed(){
 }
 function updateNotifBadge(){
   const seen = store.get("notif_seen", "");
-  const b = $("#notif-badge"); if (!b) return;
-  b.classList.toggle("hidden", seen === todayKey());
+  const hide = seen === todayKey();
+  const b = $("#notif-badge"); if (b) b.classList.toggle("hidden", hide);
+  const hb = $("#home-notif-badge"); if (hb) hb.classList.toggle("hidden", hide);
 }
 
 /* ---------------- local profile (name + Gmail, phone-only) ---------------- */
@@ -2611,12 +2711,18 @@ function renderGreet(){
     el.textContent = `আসসালামু আলাইকুম, ${settings.profileName} 🤍`;
   } else el.classList.add("hidden");
 }
-/* Login (Fix #3): the Gmail "login" is local-only — no account, no server.
-   Once logged in, the login button disappears and NOTHING else is shown —
-   no "লগইন করা আছে" line, no email address — only the user's name in the
-   salam greeting above (renderGreet). Clearing the profile brings the
-   login button back. There is NO profile-photo feature. */
+/* Login (Fix #3 + Fix #5): the Gmail "login" is local-only — no account,
+   no server. Once saved, the WHOLE profile form disappears — only the
+   user's name in the salam greeting (renderGreet) and a small saved line
+   with a delete button remain. Clearing the profile brings the form back.
+   There is NO profile-photo feature. */
 function renderLoginState(){
+  const saved = !!(settings.profileName || settings.gmail);
+  const form = $("#profile-form"), sv = $("#profile-saved");
+  if (form) form.classList.toggle("hidden", saved);
+  if (sv) sv.classList.toggle("hidden", !saved);
+  const nm = $("#profile-saved-name");
+  if (nm) nm.textContent = settings.profileName || settings.gmail || "";
   const btn = $("#btn-gmail-login");
   if (btn) btn.classList.toggle("hidden", !!settings.gmail);
 }
@@ -3616,7 +3722,8 @@ async function fetchQibla(){
   if (!hasLocation() || settings.lat == null || settings.lon == null){ qiblaDeg = NaN; renderQibla(); return; }
   try {
     const j = await fetchJson(`${ALADHAN}/qibla/${settings.lat}/${settings.lon}`, 8000);
-    if (j && j.code===200) qiblaDeg = j.data.direction;
+    if (j && j.code===200 && j.data && isFinite(+j.data.direction)) qiblaDeg = +j.data.direction;
+    else qiblaDeg = qiblaBearing(settings.lat, settings.lon);
   } catch(e){ qiblaDeg = qiblaBearing(settings.lat, settings.lon); }
   renderQibla();
 }
@@ -3690,7 +3797,7 @@ function renderFastSchedule(){
 function renderFasting(){
   const box = $("#fast-list");
   const items = [];
-  const now = new Date();
+  const now = locNow();
   // next Monday / Thursday
   for (const wd of [1,4]){
     const d = new Date(now); let add = (wd - d.getDay() + 7)%7; if (add===0) add = 7;
@@ -3728,7 +3835,7 @@ function renderFasting(){
   }
   // big countdown ring: at night → Sehri, in the day → Iftar
   if (timings){
-    const now2 = new Date(); const mins = now2.getHours()*60+now2.getMinutes();
+    const now2 = locNow(); const mins = now2.getHours()*60+now2.getMinutes();
     const imsak = toMin(timings.Imsak), magh = toMin(timings.Maghrib);
     let label, sub, target, prev;
     if (mins < imsak){ label = Lb("পরবর্তী সাহরি", "Next Sehri"); sub = Lb("সাহরির বাকি", "Time to Sehri"); target = imsak; prev = magh - 1440; }
@@ -3814,7 +3921,7 @@ const ALARM_SOUNDS = [
 ];
 function openPrayerDetail(id){
   detailId = id;
-  detailDraft = { on: !!settings.alarmOn[id], offset: settings.offsets[id]||0, sound: settings.alarmSound[id]||"name" };
+  detailDraft = { on: !!settings.alarmOn[id], offset: settings.offsets[id]||0, sounds: normalizeSounds(settings.alarmSound[id]) };
   renderDetailPage();
   showView("prayer-detail");
 }
@@ -3842,15 +3949,35 @@ function updateDetailTime(){
   const dt = $("#detail-time");
   if (dt) dt.textContent = `${Lb("সেট করা সময়", "Set time")}: ${set}`;
 }
+/* Multi-select (Fix #10): "name" is the permanent default and cannot be
+   turned off; one extra sound may be added (max 2 together). "silent"
+   stands alone. */
+function toggleDetailSound(sid){
+  if (!detailDraft) return;
+  if (sid==="name"){ toast(Lb("ওয়াক্তের নাম সবসময় চালু থাকে", "Prayer name is always on")); return; }
+  let cur = detailDraft.sounds || ["name"];
+  if (sid==="silent"){
+    detailDraft.sounds = cur.includes("silent") ? ["name"] : ["silent"];
+  } else if (cur.includes(sid)){
+    detailDraft.sounds = cur.filter(s=>s!==sid);
+    if (!detailDraft.sounds.length) detailDraft.sounds = ["name"];
+  } else {
+    if (cur.includes("silent")) cur = ["name"];
+    if (cur.length>=2){ toast(Lb("একসাথে সর্বোচ্চ ২টা সাউন্ড সিলেক্ট করা যায়", "You can select up to 2 sounds together")); return; }
+    detailDraft.sounds = [...cur, sid];
+  }
+  renderDetailSounds();
+}
 function renderDetailSounds(){
   const box = $("#detail-sounds"); if (!box) return;
-  box.innerHTML = ALARM_SOUNDS.map(s=>`<div class="sound-row ${detailDraft.sound===s.id?"on":""}" data-sound="${s.id}" role="button" tabindex="0">
+  const sel = detailDraft.sounds || ["name"];
+  box.innerHTML = ALARM_SOUNDS.map(s=>`<div class="sound-row ${sel.includes(s.id)?"on":""}" data-sound="${s.id}" role="button" tabindex="0">
     <span class="sound-name">${Lb(s.bn, s.en)}${s.id==="name"?" ("+Lb("ডিফল্ট","Default")+")":""}</span>
-    <span class="row"><span class="sound-check">${detailDraft.sound===s.id?"✅":""}</span>
+    <span class="row"><span class="sound-check">${sel.includes(s.id)?"✅":""}</span>
     <button class="mini-btn" data-preview="${s.id}" title="${Lb("শুনুন","Preview")}">▶</button></span></div>`).join("");
   $$("#detail-sounds [data-sound]").forEach(r=>r.onclick=e=>{
     if (e.target.closest("[data-preview]")) return;
-    detailDraft.sound = r.dataset.sound; renderDetailSounds();
+    toggleDetailSound(r.dataset.sound);
   });
   $$("#detail-sounds [data-preview]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); previewAlarmSound(b.dataset.preview); });
 }
@@ -3894,7 +4021,7 @@ function saveDetailPage(){
   if (!detailId || !detailDraft) return;
   settings.alarmOn[detailId] = !!detailDraft.on;
   settings.offsets[detailId] = detailDraft.offset;
-  settings.alarmSound[detailId] = detailDraft.sound;
+  settings.alarmSound[detailId] = normalizeSounds(detailDraft.sounds);
   saveSettings(); syncPrayerAlarms(); renderAlarmPage();
   toast(Lb("সংরক্ষণ হয়েছে ✓", "Saved ✓"));
   showView("alarm");
@@ -4049,7 +4176,9 @@ async function scheduleNativeDaily(){
 }
 
 /* ---------------- Durood & Astaghfirullah interval reminders ---------
-   Same idea as the prayer-time azan adjuster: an ON/OFF switch plus
+   Durood (Fix #5): an ON/OFF switch plus the SAME −30..+30 minute
+   slider (1-minute steps) as the prayer-time adjuster — middle (0) is
+   the exact standard 30-minute interval. Astaghfirullah keeps the
    10 / 20 / 30 minute chips. While the app is open the reminder fires
    in-app (durood audio + toast); in the Android app the next 24
    occurrences are also scheduled as local notifications so they arrive
@@ -4122,21 +4251,37 @@ async function scheduleNativeDhikr(){
     }
   } catch(e){ /* native-only; never break the web app */ }
 }
-function remPanel(kind, icon, titleBn, titleEn, on, min){
+/* Offset (−30..+30) → effective reminder interval in minutes (base 30),
+   clamped so it stays a real interval. */
+function dhikrMinFromOffset(off){ return Math.min(60, Math.max(1, 30 + off)); }
+function remSliderLabel(kind, eff, off){
+  const on = kind === "durood" ? !!settings.duroodRemOn : !!settings.astaghRemOn;
+  if (!on) return Lb("বন্ধ আছে — চালু করতে ওপরের সুইচ অন করুন।", "Off — turn the switch on to enable.");
+  return off === 0
+    ? Lb(`সঠিক সময় — প্রতি ${num(eff)} মিনিট পর পর রিমাইন্ডার আসবে।`, `Exact time — a reminder arrives every ${eff} minutes.`)
+    : Lb(`প্রতি ${num(eff)} মিনিট পর পর রিমাইন্ডার আসবে (${off > 0 ? "+" : ""}${num(off)} মিনিট)।`, `A reminder arrives every ${eff} minutes (${off > 0 ? "+" : ""}${off} min).`);
+}
+function remPanel(kind, icon, titleBn, titleEn, on, min, useSlider){
+  const off = Math.min(30, Math.max(-30, (min || 30) - 30));
+  const eff = dhikrMinFromOffset(off);
+  const ctl = useSlider
+    ? `<input type="range" class="adj-slider" data-rem-slider="${kind}" min="-30" max="30" step="1" value="${off}">
+    <p class="muted small" style="margin:8px 0 0" id="rem-${kind}-label">${remSliderLabel(kind, eff, off)}</p>`
+    : `<div class="row wrap">${REM_OPTS.map(m=>`<button class="chip ${m===min ? "on" : ""}" data-rem-min="${kind}:${m}">${Lb(`${num(m)} মিনিট পর পর`, `Every ${m} min`)}</button>`).join("")}</div>
+    <p class="muted small" style="margin:8px 0 0">${on
+      ? Lb(`চালু আছে — প্রতি ${num(min)} মিনিট পর পর রিমাইন্ডার আসবে।`, `On — a reminder arrives every ${min} minutes.`)
+      : Lb("বন্ধ আছে — চালু করতে ওপরের সুইচ অন করুন।", "Off — turn the switch on to enable.")}</p>`;
   return `<div class="adj-panel">
     <div class="adj-head"><span>${icon} ${Lb(titleBn, titleEn)}</span>
       <label class="switch"><input type="checkbox" id="rem-${kind}-on" ${on ? "checked" : ""}><span class="slider"></span></label></div>
-    <div class="row wrap">${REM_OPTS.map(m=>`<button class="chip ${m===min ? "on" : ""}" data-rem-min="${kind}:${m}">${Lb(`${num(m)} মিনিট পর পর`, `Every ${m} min`)}</button>`).join("")}</div>
-    <p class="muted small" style="margin:8px 0 0">${on
-      ? Lb(`চালু আছে — প্রতি ${num(min)} মিনিট পর পর রিমাইন্ডার আসবে।`, `On — a reminder arrives every ${min} minutes.`)
-      : Lb("বন্ধ আছে — চালু করতে ওপরের সুইচ অন করুন।", "Off — turn the switch on to enable.")}</p>
+    ${ctl}
   </div>`;
 }
 function renderReminderSettings(){
   const box = $("#reminder-settings"); if (!box) return;
   box.innerHTML =
-    remPanel("durood", "📿", "দরুদ শরিফ রিমাইন্ডার", "Durood Sharif reminder", !!settings.duroodRemOn, settings.duroodRemMin || 30) +
-    remPanel("astagh", "🤲", "আস্তাগফিরুল্লাহ রিমাইন্ডার", "Astaghfirullah reminder", !!settings.astaghRemOn, settings.astaghRemMin || 30);
+    remPanel("durood", "📿", "দরুদ শরিফ রিমাইন্ডার", "Durood Sharif reminder", !!settings.duroodRemOn, settings.duroodRemMin || 30, true) +
+    remPanel("astagh", "🤲", "আস্তাগফিরুল্লাহ রিমাইন্ডার", "Astaghfirullah reminder", !!settings.astaghRemOn, settings.astaghRemMin || 30, false);
   const dOn = $("#rem-durood-on"), aOn = $("#rem-astagh-on");
   if (dOn) dOn.onchange = e=>{ settings.duroodRemOn = e.target.checked; lastDuroodRemAt = Date.now();
     saveSettings(); scheduleNativeDhikr(); renderReminderSettings();
@@ -4149,6 +4294,23 @@ function renderReminderSettings(){
     if (kind === "durood"){ settings.duroodRemMin = m; settings.duroodRemOn = true; lastDuroodRemAt = Date.now(); }
     else { settings.astaghRemMin = m; settings.astaghRemOn = true; lastAstaghRemAt = Date.now(); }
     saveSettings(); scheduleNativeDhikr(); renderReminderSettings();
+    toast(Lb(`রিমাইন্ডার: প্রতি ${num(m)} মিনিট পর পর ✓`, `Reminder: every ${m} min ✓`));
+  });
+  /* Durood slider (Fix #5): drag updates the interval live; releasing
+     the slider saves it and re-syncs the native notifications. */
+  $$("#reminder-settings [data-rem-slider]").forEach(s=>s.oninput=()=>{
+    const kind = s.dataset.remSlider, off = +s.value;
+    const m = dhikrMinFromOffset(off);
+    if (kind === "durood"){ settings.duroodRemMin = m; settings.duroodRemOn = true; lastDuroodRemAt = Date.now(); }
+    else { settings.astaghRemMin = m; settings.astaghRemOn = true; lastAstaghRemAt = Date.now(); }
+    const lab = $("#rem-" + kind + "-label");
+    if (lab) lab.textContent = remSliderLabel(kind, m, off);
+    const sw = $("#rem-" + kind + "-on"); if (sw) sw.checked = true;
+  });
+  $$("#reminder-settings [data-rem-slider]").forEach(s=>s.onchange=()=>{
+    const kind = s.dataset.remSlider;
+    const m = kind === "durood" ? settings.duroodRemMin : settings.astaghRemMin;
+    saveSettings(); scheduleNativeDhikr();
     toast(Lb(`রিমাইন্ডার: প্রতি ${num(m)} মিনিট পর পর ✓`, `Reminder: every ${m} min ✓`));
   });
   const dl = $("#daily-label");
@@ -4181,7 +4343,7 @@ function playAzan(){
 }
 function checkAzan(){
   if (!timings || !settings.azan) return;
-  const now = new Date(); const key = `${todayKey()}_${now.getHours()}:${now.getMinutes()}`;
+  const now = locNow(); const key = `${todayKey()}_${now.getHours()}:${now.getMinutes()}`;
   const mins = now.getHours()*60 + now.getMinutes();
   for (const p of PRAYER_IDS){
     if (!settings.alarmOn[p]) continue;
@@ -4193,96 +4355,52 @@ function checkAzan(){
 /* ---------------- native (Capacitor) azan notifications ----------------
    Only runs inside the Android app (window.Capacitor present). The plain
    web/PWA version never touches this code, so it cannot break it.
-   For every prayer, three daily notifications are scheduled:
-     1. azan (ids 1-5) at prayer time + user offset, channel "azan" with the
-        bundled azan.mp3 as the notification sound. The sound is played by
-        the system as the notification sound, so dismissing/swiping the
-        notification away stops the azan audio.
-     2. prayer check (ids 11-15) 5 minutes later: "নামাজ পড়েছো কিনা?"
-        with হ্যাঁ / না action buttons.
-     3. hurry reminder (ids 21-25) 15 minutes later, ONLY if the user did
-        not answer the check: "তাড়াতাড়ি নামাজ পড়ে নে" with a male voice
-        audio (bundled reminder.mp3) as the channel sound.
-   হ্যাঁ -> marks the prayer done and cancels all pending reminders for it.
-   না -> cancels the hurry reminder and schedules a reminder every 5 minutes
-        (up to 1 hour, ids 100+) until the user answers হ্যাঁ.
+   For every fard prayer, two things are scheduled:
+     1. pre-azan reminder — the user's exact Bengali text (Fix #8), the
+        SAME text twice: 5 minutes before (ids 51-55) and 2 minutes
+        before (ids 31-35), no sound.
+     2. azan (ids 1-5) at prayer time + user offset, channel "azan" with
+        the bundled azan.mp3 as the notification sound. The sound is
+        played by the system as the notification sound, so dismissing /
+        swiping the notification away stops the azan audio.
+   Tahajjud (id 36): notification ONLY, never an azan — and only when
+   its alarm is set.
+   There is NO post-prayer check / hurry flow any more (Fix #8 removed
+   it). Prayers are marked done from the home rows (done-circle) or the
+   tracker.
    All times re-sync to the current day whenever the app is opened or
    settings are saved. ------------------------------------------------------ */
-const AZAN_IDS = [1,2,3,4,5], CHECK_IDS = [11,12,13,14,15], HURRY_IDS = [21,22,23,24,25];
-function followUpIds(i){ const a=[]; for (let k=0;k<12;k++) a.push(100 + i*12 + k); return a; }
-async function cancelNativeIds(ids){
+/* One-time cleanup (Fix #8): builds before Fix #8 scheduled the old
+   daily check/hurry notifications (ids 11-15, 21-25, 100-159) with
+   repeats:true — they keep firing until cancelled. Cancel them once. */
+async function cancelLegacyCheckReminders(){
   try {
     if (typeof window.Capacitor === "undefined" || !window.Capacitor.Plugins) return;
+    if (store.get("legacy_check_cancelled", false)) return;
     const LN = window.Capacitor.Plugins.LocalNotifications; if (!LN) return;
+    const ids = [];
+    for (let i=11;i<=15;i++) ids.push(i);
+    for (let i=21;i<=25;i++) ids.push(i);
+    for (let i=100;i<160;i++) ids.push(i);
     await LN.cancel({ notifications: ids.map(id=>({id})) });
+    store.set("legacy_check_cancelled", true);
   } catch(e){}
 }
-async function cancelPrayerReminders(i){
-  await cancelNativeIds([CHECK_IDS[i], HURRY_IDS[i], ...followUpIds(i)]);
-}
-function markPrayerDone(pid){
-  const l = salahLog(); const k = todayKey(); l[k] = l[k] || {};
-  if (l[k][pid]) return;
-  l[k][pid] = true; store.set("salah", l);
-  renderPrayers(); renderTracker();
-  toast(Lb("আলহামদুলিল্লাহ, নামাজের হিসাব রাখা হলো ✓", "Alhamdulillah, marked ✓"));
-}
-async function schedulePrayerFollowUps(i){
-  try {
-    if (typeof window.Capacitor === "undefined" || !window.Capacitor.Plugins) return;
-    const LN = window.Capacitor.Plugins.LocalNotifications; if (!LN) return;
-    const nm = PRAYERS.find(x=>x.id===PRAYER_IDS[i]);
-    const now = new Date();
-    const list = [];
-    for (let k=0; k<12; k++){
-      list.push({ id: 100 + i*12 + k, title: "My Deen",
-        body: (Lb(`নামাজ পড়েছো কিনা? (${nm.bn}) — তাড়াতাড়ি পড়ে নাও`, `Did you pray? (${nm.en}) — please pray soon`)),
-        schedule: { at: new Date(now.getTime() + (k+1)*5*60000), allowWhileIdle: true },
-        channelId: "check", actionTypeId: "prayer_check" });
-    }
-    await LN.schedule({ notifications: list });
-  } catch(e){}
-}
-async function handlePrayerCheckAction(nid, actionId){
-  let i = -1;
-  if (nid>=11 && nid<=15) i = nid-11;
-  else if (nid>=100 && nid < 100 + PRAYER_IDS.length*12) i = Math.floor((nid-100)/12);
-  if (i<0 || i>=PRAYER_IDS.length) return;
-  const pid = PRAYER_IDS[i];
-  if (actionId==="yes"){
-    markPrayerDone(pid);
-    cancelPrayerReminders(i);
-  } else if (actionId==="no"){
-    await cancelNativeIds([HURRY_IDS[i]]); // user responded; no voice hurry needed
-    schedulePrayerFollowUps(i);
-  }
-}
-async function setupNativeAzanActions(){
-  try {
-    if (typeof window.Capacitor === "undefined" || !window.Capacitor.Plugins) return;
-    const LN = window.Capacitor.Plugins.LocalNotifications; if (!LN) return;
-    await LN.registerActionTypes({ types: [{ id: "prayer_check", actions: [
-      { id: "yes", title: "হ্যাঁ" },
-      { id: "no", title: "না" }
-    ]}]});
-    LN.addListener("localNotificationActionPerformed", (ev)=>{
-      const nid = ev && ev.notification ? ev.notification.id : null;
-      handlePrayerCheckAction(nid, ev ? ev.actionId : null);
-    });
-  } catch(e){ /* native-only; never break the web app */ }
-}
-/* Pre-azan texts (Fix #4 §7) — the user's exact Bengali wording, not
-   one letter changed. A notification with this text arrives 2 minutes
-   before every fard prayer; the azan follows 1–2 minutes later. */
+/* Pre-azan texts (Fix #8) — the user's exact Bengali wording, not one
+   letter changed. The same text arrives twice before every fard prayer:
+   5 minutes before and 2 minutes before; the azan follows at prayer
+   time. */
+const AZAN_IDS = [1,2,3,4,5];
 const PREAZAN_TEXTS = {
-  Fajr: "ফজরের নামাজের সময় হয়েছে, ঘুম থেকে উঠে মিসওয়াক করে নামাজের প্রস্তুতি নিন",
-  Dhuhr: "যোহরের নামাজের সময় হয়েছে, মিসওয়াক করে নামাজের প্রস্তুতি নিন",
-  Asr: "আসরের নামাজের সময় হয়েছে, মিসওয়াক করে নামাজের প্রস্তুতি নিন",
-  Maghrib: "মাগরিবের নামাজের সময় হয়েছে, মিসওয়াক করে নামাজের প্রস্তুতি নিন",
-  Isha: "ইশার নামাজের সময় হয়েছে, মিসওয়াক করে নামাজের প্রস্তুতি নিন"
+  Fajr: "ফজরের নামাজের সময় হয়েছে, ঘুম থেকে উঠে মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন",
+  Dhuhr: "যোহরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন",
+  Asr: "আসরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন",
+  Maghrib: "মাগরিবের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন",
+  Isha: "ইশার নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন"
 };
 const TAHAJJUD_TEXT = "তাহাজ্জুদের সময় হয়েছে, উঠে নামাজের প্রস্তুতি নিন";
 const PREAZAN_IDS = [31,32,33,34,35];
+const PREAZAN5_IDS = [51,52,53,54,55];
 const TAHAJJUD_ID = 36, SEHRI_ID = 37, IFTAR_ID = 38;
 const FORB_IDS = [41,42,43], DUHA_ID = 44;
 /* One list of everything the exact-alarm scheduler must fire. Each entry:
@@ -4292,30 +4410,43 @@ const FORB_IDS = [41,42,43], DUHA_ID = 44;
    Every entry is the NEXT occurrence of that item. */
 function buildPrayerAlarmList(){
   if (!timings) return [];
+  /* Fix #12: alarm instants are ABSOLUTE times, but prayer times are
+     location wall-clock times. Compare in the location frame (ln),
+     then convert each scheduled time back to the absolute instant it
+     means in the location's timezone (locAbs) — otherwise an alarm
+     for 17:17 in Jashore would fire at 17:17 on a Malaysia clock,
+     two hours early. */
   const now = new Date();
-  const dayStart = new Date(now); dayStart.setHours(0,0,0,0);
+  const ln = locNow(now);
+  const dayStart = new Date(ln); dayStart.setHours(0,0,0,0);
   const atMin = m => { const d = new Date(dayStart); d.setMinutes(m); return d; };
-  const nextOcc = d => { if (d <= now) d.setDate(d.getDate()+1); return d; };
+  const nextOcc = d => { if (d <= ln) d.setDate(d.getDate()+1); return locAbs(d); };
   const list = [];
+  /* Multi-select (Fix #10): one native sound per alarm — azan wins when
+     selected, otherwise the notification sound; silent alone = none. */
   const soundFor = id => {
-    const s = settings.alarmSound[id] || "name";
-    if (s === "silent") return "none";
-    if (s === "azan") return "azan";
-    return "reminder"; // beep / ring / name / notification → default reminder sound
+    const ss = normalizeSounds(settings.alarmSound[id]);
+    if (ss.includes("silent")) return "none";
+    if (ss.includes("azan")) return "azan";
+    return "reminder"; // name / notification / beep / ring → reminder sound
   };
   PRAYER_IDS.forEach((id, i)=>{
-    if (!settings.alarmOn[id]) return;
     const base = toMin(timings[id]); if (base == null) return;
     const at = nextOcc(atMin(base + (settings.offsets[id] || 0)));
     const name = pname(id);
+    // pre-azan (Fix #8 + #9): the same text twice — 5 minutes before
+    // and 2 minutes before the azan. ALWAYS on: no toggle, no option,
+    // even when this prayer's azan alarm is off.
+    [5, 2].forEach((mins, j)=>{
+      const preAt = new Date(at.getTime() - mins*60000);
+      if (preAt <= now) preAt.setDate(preAt.getDate()+1);
+      list.push({ id: (j===0 ? PREAZAN5_IDS : PREAZAN_IDS)[i], at: preAt, type: "preazan",
+        title: "My Deen — " + name, body: PREAZAN_TEXTS[id], sound: "none", prayerId: id });
+    });
+    if (!settings.alarmOn[id]) return;
     list.push({ id: AZAN_IDS[i], at, type: "azan", title: "My Deen — " + name,
       body: Lb("মিসওয়াক ও অজু করে নামাজের জন্য প্রস্তুত হোন", "Use miswak and perform wudu to prepare for prayer"),
       sound: soundFor(id), prayerId: id });
-    // pre-azan: 2 minutes before the azan, exact Bengali text
-    const preAt = new Date(at.getTime() - 2*60000);
-    if (preAt <= now) preAt.setDate(preAt.getDate()+1);
-    list.push({ id: PREAZAN_IDS[i], at: preAt, type: "preazan",
-      title: "My Deen — " + name, body: PREAZAN_TEXTS[id], sound: "none", prayerId: id });
   });
   // Tahajjud: notification ONLY, never an azan — and only when its
   // alarm is set (Fix #4 §7).
@@ -4353,54 +4484,19 @@ function buildPrayerAlarmList(){
 /* The one entry point for (re)scheduling prayer-time alarms. Preferred:
    the native exact-alarm plugin (Fix #4 §5) — survives reboot via
    BootReceiver and fires even when the app is killed. Fallback:
-   Capacitor LocalNotifications (the old path). The prayer check / hurry
-   flow is LN-only in both cases. */
+   Capacitor LocalNotifications (the old path). */
 async function syncPrayerAlarms(){
+  await cancelLegacyCheckReminders(); // Fix #8: remove the old daily check/hurry repeats once
   const PA = (typeof window.Capacitor !== "undefined" && window.Capacitor.Plugins)
     ? window.Capacitor.Plugins.PrayerAlarm : null;
   if (PA && PA.scheduleAlarms){
     try {
       const list = buildPrayerAlarmList();
       await PA.scheduleAlarms({ alarms: list.map(a=>({ id:a.id, at:a.at.getTime(), type:a.type, title:a.title, body:a.body, sound:a.sound, prayerId:a.prayerId })) });
-      await scheduleNativeAzanChecks();
       return;
     } catch(e){ /* fall through to the LN path */ }
   }
   await scheduleNativeAzan();
-}
-/* Prayer check (5 min later) + hurry reminder (15 min later) — LN only,
-   shared by both scheduling paths. */
-async function scheduleNativeAzanChecks(){
-  try {
-    if (typeof window.Capacitor === "undefined" || !window.Capacitor.Plugins) return;
-    const LN = window.Capacitor.Plugins.LocalNotifications;
-    if (!LN || !timings || !settings.azan) return;
-    await LN.createChannel({ id: "hurry", name: "Prayer reminders", description: "Voice reminders to pray", sound: "reminder.mp3", importance: 4, vibration: true });
-    await LN.createChannel({ id: "check", name: "Prayer check", description: "Did you pray?", importance: 4, vibration: true });
-    const now = new Date();
-    const notifs = [];
-    PRAYER_IDS.forEach((id, i)=>{
-      if (!settings.alarmOn[id]) return;
-      const base = toMin(timings[id]); if (base == null) return;
-      const at = new Date(now); at.setHours(0, 0, 0, 0); at.setMinutes(base + (settings.offsets[id] || 0));
-      if (at <= now) at.setDate(at.getDate() + 1);
-      const name = pname(id);
-      notifs.push({
-        id: CHECK_IDS[i], title: "My Deen",
-        body: Lb(`নামাজ পড়েছো কিনা? (${name})`, `Did you pray? (${name})`),
-        schedule: { at: new Date(at.getTime() + 5*60000), repeats: true, allowWhileIdle: true },
-        channelId: "check", actionTypeId: "prayer_check"
-      });
-      notifs.push({
-        id: HURRY_IDS[i], title: "My Deen",
-        body: Lb(`তাড়াতাড়ি নামাজ পড়ে নে (${name})`, `Hurry up and pray (${name})`),
-        schedule: { at: new Date(at.getTime() + 15*60000), repeats: true, allowWhileIdle: true },
-        channelId: "hurry", sound: "reminder.mp3"
-      });
-    });
-    await LN.cancel({ notifications: [...CHECK_IDS, ...HURRY_IDS].map(id=>({id})) });
-    if (notifs.length) await LN.schedule({ notifications: notifs });
-  } catch (e) { /* native-only; never break the web app */ }
 }
 async function scheduleNativeAzan(){
   try {
@@ -4411,7 +4507,7 @@ async function scheduleNativeAzan(){
     if (perm && perm.display && perm.display !== "granted") return;
     // Channels: Android 8+ plays the CHANNEL sound, so each sound gets its own channel.
     await LN.createChannel({ id: "azan", name: "Azan", description: "Prayer time azan alerts", sound: "azan.mp3", importance: 5, vibration: true });
-    await LN.createChannel({ id: "preazan", name: "Pre-azan reminders", description: "2 minutes before prayer time", importance: 4, vibration: true });
+    await LN.createChannel({ id: "preazan", name: "Pre-azan reminders", description: "5 and 2 minutes before prayer time", importance: 4, vibration: true });
     await LN.createChannel({ id: "tahajjud", name: "Tahajjud", description: "Tahajjud notification (no azan)", importance: 4, vibration: true });
     await LN.createChannel({ id: "sehri", name: "Sehri", description: "Sehri alarm", importance: 4, vibration: true });
     await LN.createChannel({ id: "iftar", name: "Iftar", description: "Iftar alarm", importance: 4, vibration: true });
@@ -4425,9 +4521,8 @@ async function scheduleNativeAzan(){
       if (sf) n.sound = sf;
       return n;
     });
-    await LN.cancel({ notifications: [...AZAN_IDS, ...PREAZAN_IDS, TAHAJJUD_ID, SEHRI_ID, IFTAR_ID, ...FORB_IDS, DUHA_ID].map(id=>({id})) });
+    await LN.cancel({ notifications: [...AZAN_IDS, ...PREAZAN_IDS, ...PREAZAN5_IDS, TAHAJJUD_ID, SEHRI_ID, IFTAR_ID, ...FORB_IDS, DUHA_ID].map(id=>({id})) });
     if (notifs.length) await LN.schedule({ notifications: notifs });
-    await scheduleNativeAzanChecks();
   } catch (e) { /* native-only; never break the web app */ }
 }
 
@@ -4437,7 +4532,7 @@ function renderHomeLocation(){
   const st = $("#home-loc-status");
   if (!hasLocation()){
     txt.textContent = Lb("কোনো অবস্থান সেট করা নেই", "No location set");
-    if (st) st.textContent = Lb("নামাজের সঠিক সময় ও কিবলার জন্য অবস্থান সেট করুন — GPS দিয়ে অটো, অথবা শহরের নাম লিখে ম্যানুয়ালি।", "Set your location for accurate prayer times & Qibla — automatically with GPS, or manually by city name.");
+    if (st) st.textContent = Lb("নামাজের সঠিক সময় ও কিবলার জন্য অবস্থান সেট করুন — GPS দিয়ে অটো।", "Set your location for accurate prayer times & Qibla — automatically with GPS.");
     const co0 = $("#home-loc-coords"); if (co0) co0.textContent = "";
     return;
   }
@@ -4516,19 +4611,12 @@ async function detectLocation(auto){
        manual button) tries again. Only a manual tap explains what to do. */
     if (!auto){
       /* Permission denied or GPS failed: NEVER fall back to a default
-         city — offer the manual option instead (on the setup screen,
-         reveal the manual form right away). */
-      const setupEl = $("#loc-setup");
-      if (setupEl && setupEl.style.display !== "none"){
-        const f = $("#loc-manual-form"); if (f) f.classList.remove("hidden");
-        const mm = $("#loc-manual-msg");
-        if (mm) mm.textContent = Lb("GPS থেকে অবস্থান পাওয়া যায়নি — নিচে শহর ও দেশের নাম লিখে ম্যানুয়ালি সেট করুন।", "GPS location was not available — type your city and country below to set it manually.");
-      }
+         city — just tell the user to allow GPS and try again. */
       const denied = e && e.code === 1;
       const inFrame = window.self !== window.top;
       toast(denied
         ? (Lb("অবস্থান পাওয়া যায়নি — ফোন/ব্রাউজারের সেটিংসে এই অ্যাপের জন্য লোকেশন অনুমতি দিন, তারপর আবার চাপ দিন", "Location unavailable — allow location permission for this app in your phone/browser settings, then tap again"))
-        : (Lb("অবস্থান পাওয়া যায়নি — GPS চালু করে আবার চেষ্টা করুন, অথবা সেটিংসে শহরের নাম লিখুন", "Location unavailable — turn on GPS and try again, or type your city in Settings")));
+        : (Lb("অবস্থান পাওয়া যায়নি — GPS চালু করে আবার চেষ্টা করুন", "Location unavailable — turn on GPS and try again")));
       /* Persistent guidance in the Home location card (a toast alone
          disappears before the steps can be followed). When the app is
          open inside another app's built-in browser, that browser often
@@ -4537,29 +4625,26 @@ async function detectLocation(auto){
          the saved city keeps times and Qibla correct meanwhile. */
       const st = $("#home-loc-status");
       if (st) st.textContent = Lb((inFrame
-          ? "⚠️ এই ভেতরের ব্রাউজারে GPS অনুমতি পৌঁছাচ্ছে না — তাই অবস্থান নেওয়া যাচ্ছে না। সমাধান: লিংকটি Chrome ব্রাউজারে খুলুন (অথবা অ্যাপটি ফোনে ইনস্টল করে সেখান থেকে খুলুন), তারপর এই বোতামে আবার চাপ দিন ও 'Allow' দিন। অথবা নিচের ম্যানুয়াল অপশনে শহরের নাম লিখে সেট করুন।"
+          ? "⚠️ এই ভেতরের ব্রাউজারে GPS অনুমতি পৌঁছাচ্ছে না — তাই অবস্থান নেওয়া যাচ্ছে না। সমাধান: লিংকটি Chrome ব্রাউজারে খুলুন (অথবা অ্যাপটি ফোনে ইনস্টল করে সেখান থেকে খুলুন), তারপর এই বোতামে আবার চাপ দিন ও 'Allow' দিন।"
           : (denied
             ? "⚠️ লোকেশন অনুমতি বন্ধ আছে। ফোনের Settings → Apps → ব্রাউজার/এই অ্যাপ → Permissions → Location → Allow দিন, তারপর এই বোতামে আবার চাপ দিন।"
-            : "⚠️ GPS থেকে অবস্থান পাওয়া যায়নি। ফোনের লোকেশন (GPS) চালু করে খোলা জায়গায় আবার চাপ দিন, অথবা সেটিংসে শহরের নাম লিখে দিন — নামাজের সময় সেভাবেও ঠিক চলবে।")), (inFrame
-          ? "⚠️ This in-app browser is not passing GPS permission through, so location cannot be collected here. Fix: open the link in Chrome (or install the app and open it from your home screen), then tap this button again and choose Allow. Or set your city manually with the option below."
+            : "⚠️ GPS থেকে অবস্থান পাওয়া যায়নি। ফোনের লোকেশন (GPS) চালু করে খোলা জায়গায় আবার চাপ দিন।")), (inFrame
+          ? "⚠️ This in-app browser is not passing GPS permission through, so location cannot be collected here. Fix: open the link in Chrome (or install the app and open it from your home screen), then tap this button again and choose Allow."
           : (denied
             ? "⚠️ Location permission is off. Phone Settings → Apps → your browser/this app → Permissions → Location → Allow, then tap this button again."
-            : "⚠️ GPS could not fix your position. Turn on phone location and tap again, or type your city in Settings — prayer times work that way too.")));
+            : "⚠️ GPS could not fix your position. Turn on phone location and tap again.")));
     }
     return false;
   }
 }
 
 /* ---------------- location setup screen ----------------
-   Shown on first launch (and whenever no location is set): two clear
-   options — "Allow location" (GPS) or "Set manually" (type a city).
-   There is deliberately NO default or pre-set city anywhere. */
-function openLocSetup(showManual){
+   Shown on first launch (and whenever no location is set): GPS only —
+   "Allow location". There is deliberately NO default or pre-set city
+   anywhere, and no manual city entry (Fix #5). */
+function openLocSetup(){
   const o = $("#loc-setup"); if (!o) return;
   o.style.display = "flex";
-  const f = $("#loc-manual-form"); if (f) f.classList.toggle("hidden", !showManual);
-  const ci = $("#loc-city-in"); if (ci && !ci.value) ci.value = settings.city || "";
-  const co = $("#loc-country-in"); if (co && !co.value) co.value = settings.country || "";
 }
 function closeLocSetup(){ const o = $("#loc-setup"); if (o) o.style.display = "none"; }
 /* Village-first place naming (Fix #2): prefer the smallest place
@@ -4721,6 +4806,7 @@ const METHODS = [[17,"Malaysia (JAKIM)"],[2,"ISNA (North America)"],[3,"Muslim W
 const LEARN_ENABLED = false;
 function showView(v){
   if (v === "learn" && !LEARN_ENABLED) v = "home";
+  const hdr = $("header"); if (hdr) hdr.style.display = v === "home" ? "none" : "";
   $$(".view").forEach(s=>s.classList.remove("active"));
   const el = $("#view-"+v); if (el) el.classList.add("active");
   $$("#bottom-nav button").forEach(b=>b.classList.toggle("on", b.dataset.view===v));
@@ -4790,10 +4876,9 @@ function fillSettings(){
   renderGreet(); renderLoginState();
   const sl0 = $("#set-lang");
   if (sl0) sl0.innerHTML = LANGS.map(l=>`<option value="${l.id}" ${settings.lang===l.id?"selected":""}>${l.native} (${l.name})</option>`).join("");
-  $("#set-city").value = settings.city; $("#set-country").value = settings.country;
   $("#set-method").innerHTML = `<option value="0" ${settings.method===0?"selected":""}>${Lb("অটো — এলাকা অনুযায়ী (প্রস্তাবিত)", "Auto — by region (recommended)")}</option>`
     + METHODS.map(m=>`<option value="${m[0]}" ${settings.method===m[0]?"selected":""}>${m[1]}</option>`).join("");
-  $("#set-school").value = String(settings.school);
+  $("#set-school").value = String(effSchool());
   $("#set-azan").checked = settings.azan;
   $("#set-notif").checked = settings.notif;
   $("#set-adhan").innerHTML = ADHANS.map(a=>`<option value="${a.id}" ${settings.adhan===a.id?"selected":""}>${a.name}</option>`).join("");
@@ -4803,10 +4888,8 @@ function fillSettings(){
   applyTheme();
 }
 async function saveSettingsFromUI(){
-  const newCity = $("#set-city").value.trim();
-  const newCountry = $("#set-country").value.trim();
   settings.method = +$("#set-method").value;
-  settings.school = +$("#set-school").value;
+  settings.school = +$("#set-school").value; settings.schoolExplicit = true;
   settings.azan = $("#set-azan").checked;
   settings.notif = $("#set-notif").checked;
   settings.adhan = $("#set-adhan").value;
@@ -4816,24 +4899,6 @@ async function saveSettingsFromUI(){
   settings.autoLoc = $("#set-autoloc").checked;
   syncDuroodToggleNative();
   applyTheme();
-  const locChanged = newCity !== (settings.city || "") || newCountry !== (settings.country || "");
-  if (!newCity){
-    /* City left blank → location stays UNSET (never a default city);
-       the setup screen is offered so the user can choose GPS/manual. */
-    settings.city = ""; settings.country = newCountry;
-    settings.lat = null; settings.lon = null; settings.useCoords = false;
-    settings.locId = ""; settings.coordsLoc = ""; settings.locManual = false;
-    saveSettings(); toast(t("saved"));
-    initPrayers(); openLocSetup();
-    return;
-  }
-  if (locChanged){
-    /* A typed city is a manual location: resolve it to coordinates
-       (accurate times + timezone) and refresh everything. */
-    saveSettings(); toast(t("saved"));
-    await saveManualLocation(newCity, newCountry);
-    return;
-  }
   saveSettings(); toast(t("saved"));
   /* Saving unrelated settings must not let auto-GPS replace a location
      the user set manually — only refresh the times for it. */
@@ -4867,7 +4932,7 @@ GPS location is used only when you grant permission, to compute prayer times and
 function bindEvents(){
   $$("#bottom-nav button").forEach(b=>b.onclick=()=>showView(b.dataset.view));
   $("#btn-notif").onclick=()=>showView("notif");
-  $("#btn-go-quran").onclick=()=>showView("quran");
+  const bgq = $("#btn-go-quran"); if (bgq) bgq.onclick=()=>showView("quran");
   $("#btn-go-learn").onclick=()=>showView("learn");
   $("#btn-back-learn").onclick=()=>showView("home");
   $("#btn-mark-read").onclick=()=>toggleSurahRead(currentSurah);
@@ -4879,7 +4944,7 @@ function bindEvents(){
     showView("home"); };
   $("#btn-clear-profile").onclick=()=>{ settings.profileName = ""; settings.gmail = ""; $("#set-profile-name").value = ""; $("#set-profile-gmail").value = ""; saveSettings(); renderGreet(); renderLoginState(); toast(Lb("মুছে ফেলা হয়েছে", "Removed")); };
   $("#btn-detect-loc").onclick=()=>detectLocation(false);
-  $("#btn-home-detect-loc").onclick=()=>detectLocation(false);
+  const bhdl = $("#btn-home-detect-loc"); if (bhdl) bhdl.onclick=()=>detectLocation(false);
   $("#set-durood").onchange=e=>{ settings.duroodOnUnlock = e.target.checked; saveSettings(); syncDuroodToggleNative(); };
   const sdEl = $("#set-daily");
   if (sdEl) sdEl.onchange=e=>{ settings.dailyNotif = e.target.checked; saveSettings(); scheduleNativeDaily(); maybeFireDailyWebNotif(); };
@@ -4893,11 +4958,32 @@ function bindEvents(){
   const shareBtn = $("#btn-share");
   if (shareBtn) shareBtn.onclick=()=>{
     if (!timings){ toast(Lb("নামাজের সময় এখনো লোড হয়নি", "Prayer times are not loaded yet")); return; }
-    const today = Lb(`${bnNum(new Date().getDate())} ${GREG_BN_MONTHS[new Date().getMonth()]} — ${settings.city || ""}`, new Date().toDateString());
+    const today = Lb(`${bnNum(locNow().getDate())} ${GREG_BN_MONTHS[locNow().getMonth()]} — ${settings.city || ""}`, locNow().toDateString());
     shareText(`My Deen — ${today}\n` + PRAYER_IDS.map(pid=>`${pname(pid)}: ${fmtTime(timings[pid])}`).join(" • "));
   };
+  /* Home date row (Fix #7): same share + bell as the header. */
+  const shareBtnHome = $("#btn-home-share");
+  if (shareBtnHome) shareBtnHome.onclick=()=>{
+    if (!timings){ toast(Lb("নামাজের সময় এখনো লোড হয়নি", "Prayer times are not loaded yet")); return; }
+    const today = Lb(`${bnNum(locNow().getDate())} ${GREG_BN_MONTHS[locNow().getMonth()]} — ${settings.city || ""}`, locNow().toDateString());
+    shareText(`My Deen — ${today}\n` + PRAYER_IDS.map(pid=>`${pname(pid)}: ${fmtTime(timings[pid])}`).join(" • "));
+  };
+  const notifBtnHome = $("#btn-home-notif"); if (notifBtnHome) notifBtnHome.onclick=()=>showView("notif");
+  const pillLoc = $("#pill-loc"); if (pillLoc) pillLoc.onclick=()=>openLocSetup(false);
   const goAlarm = $("#btn-go-alarm"); if (goAlarm) goAlarm.onclick=()=>showView("alarm");
   const goCal = $("#btn-go-calendar"); if (goCal) goCal.onclick=()=>showView("calendar");
+  /* Home: Alarm | Calendar row + Top Features (Fix #6/7). */
+  const goHomeAlarm = $("#btn-home-alarm"); if (goHomeAlarm) goHomeAlarm.onclick=()=>showView("alarm");
+  const goHomeCal = $("#btn-home-calendar"); if (goHomeCal) goHomeCal.onclick=()=>showView("calendar");
+  const fTr = $("#feat-tracker"); if (fTr) fTr.onclick=()=>{ const t = $("#prayer-list"); if (t) t.scrollIntoView({behavior:"smooth", block:"start"}); };
+  const fQu = $("#feat-quran"); if (fQu) fQu.onclick=()=>showView("quran");
+  const fQi = $("#feat-qibla"); if (fQi) fQi.onclick=()=>showView("qibla");
+  const fRu = $("#feat-ruqyah"); if (fRu) fRu.onclick=()=>showView("ruqyah");
+  const fTi = $("#feat-tilawat"); if (fTi) fTi.onclick=()=>openSurah(currentSurah || 1);
+  const fTa = $("#feat-tafsir"); if (fTa) fTa.onclick=()=>showView("quran");
+  const fNa = $("#feat-names"); if (fNa) fNa.onclick=()=>showView("tasbih");
+  const fTs = $("#feat-tasbih"); if (fTs) fTs.onclick=()=>showView("tasbih");
+  const fMore = $("#btn-more-features"); if (fMore) fMore.onclick=()=>{ const t = $("#forbid-section"); if (t) t.scrollIntoView({behavior:"smooth", block:"start"}); };
   const backAlarm = $("#btn-back-alarm"); if (backAlarm) backAlarm.onclick=()=>showView("home");
   const backCal = $("#btn-back-calendar"); if (backCal) backCal.onclick=()=>showView("home");
   const backFast = $("#btn-back-fasting"); if (backFast) backFast.onclick=()=>showView("home");
@@ -4935,10 +5021,7 @@ function bindEvents(){
   $("#btn-back-settings").onclick=()=>showView("settings");
   $("#btn-ruqyah").onclick=()=>{ showView("ruqyah"); renderRuqyah(); };
   $("#btn-privacy").onclick=()=>{ $("#privacy-body").innerHTML = `<p style="white-space:pre-line;line-height:1.8">${Lb(PRIVACY_BN, PRIVACY_EN)}</p>`; showView("privacy"); };
-  const bhm = $("#btn-home-manual-loc"); if (bhm) bhm.onclick=()=>openLocSetup(true);
   const bla = $("#btn-loc-allow"); if (bla) bla.onclick=()=>detectLocation(false);
-  const blm = $("#btn-loc-manual-toggle"); if (blm) blm.onclick=()=>{ const f = $("#loc-manual-form"); if (f) f.classList.toggle("hidden"); };
-  const bls = $("#btn-loc-save"); if (bls) bls.onclick=()=>saveManualLocation($("#loc-city-in").value, $("#loc-country-in").value);
   const blc = $("#btn-loc-close"); if (blc) blc.onclick=closeLocSetup;
   const pl = $("#prayer-list");
   if (pl) pl.addEventListener("click", e=>{ if (e.target.closest("[data-open-locsetup]")) openLocSetup(); });
@@ -4996,7 +5079,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
     }
   }
   step(()=>renderTasbih()); step(()=>renderDuaCats()); step(()=>renderDuas()); step(()=>renderQibla());
-  step(()=>renderNotifFeed()); step(()=>updateNotifBadge()); step(()=>renderGreet()); step(()=>setupNativeAzanActions());
+  step(()=>renderNotifFeed()); step(()=>updateNotifBadge()); step(()=>renderGreet());
   /* No location set → the location setup screen comes first: the user
      picks "Allow location" (GPS) or "Set manually" (type a city).
      There is no pre-set city to fall back to, ever. */
