@@ -893,6 +893,77 @@ Object.assign(settings, _savedTz);
       src.includes("onboarded:false"), "default false");
     check("Fix #25: the modal honestly says two permissions need a Settings switch",
       _idx.includes("দুটো অনুমতি (সঠিক সময়ের অ্যালার্ম, অটোস্টার্ট) ফোনের নিয়মে শুধু সেটিংসের সুইচ দিয়ে চালু করা যায়"), "honest note");
+
+    // ---- Fix #26: all 5 prayer times 100% correct (JAKIM, Ipoh/Chemor) ----
+    // Official JAKIM times (Aladhan API, method 17, school 0) verified live:
+    // 19 Nov 2026 Ipoh: Fajr 05:42, Sunrise 07:04, Dhuhr 13:01, Asr 16:24,
+    // Maghrib 18:58, Isha 20:11. 20 Nov: Fajr 05:43, rest identical. Chemor
+    // (his home) is identical to Ipoh. His rule: 2–3 min is fine, 10–15
+    // min is not — the local calc must be within ±2 min of JAKIM.
+    const _saved26 = { ...settings };
+    Object.assign(settings, { country:"Malaysia", city:"Ipoh", lat:4.5975, lon:101.0901,
+      tzName:"Asia/Kuala_Lumpur", locId:"ipoh", tzLoc:"ipoh", method:0, school:1, schoolExplicit:false });
+    const t19n = computeTimingsLocal(new Date(2026, 10, 19));
+    const t20n = computeTimingsLocal(new Date(2026, 10, 20));
+    const _jakim = { Fajr:342, Sunrise:424, Dhuhr:781, Asr:984, Maghrib:1138, Isha:1211 };
+    const _jakim20 = { Fajr:343, Sunrise:424, Dhuhr:781, Asr:984, Maghrib:1138, Isha:1211 };
+    const _close = (t, ref) => t && ["Fajr","Sunrise","Dhuhr","Asr","Maghrib","Isha"].every(k=>Math.abs(toMin(t[k])-ref[k])<=2);
+    check("Fix #26: local calc matches JAKIM 19 Nov Ipoh for all 5 prayers + Sunrise (±2 min)",
+      _close(t19n, _jakim), t19n ? ["Fajr","Sunrise","Dhuhr","Asr","Maghrib","Isha"].map(k=>k+" "+t19[k]).join(" ") : "null");
+    check("Fix #26: local calc matches JAKIM 20 Nov Ipoh (Fajr 05:43, rest identical) (±2 min)",
+      _close(t20n, _jakim20), t20n ? t20n.Fajr + " " + t20.Maghrib : "null");
+    check("Fix #26: Malaysia auto-selects JAKIM method 17 and Shafi'i Asr (not Hanafi)",
+      effMethod()===17 && effSchool()===0, "method " + effMethod() + " school " + effSchool());
+    // Azan + T-5 + T-2 for all 5 prayers, at the exact JAKIM times.
+    __setTimings({ Fajr:"05:42", Sunrise:"07:04", Dhuhr:"13:01", Asr:"16:24", Maghrib:"18:58", Isha:"20:11", Imsak:"05:32", Firstthird:"22:59", Lastthird:"03:01" });
+    const RealDate26 = Date;
+    const fake26 = (h, m, s=0) => {
+      const t = new Date(2026, 10, 19); t.setHours(h, m, s, 0);
+      globalThis.Date = class extends RealDate26 {
+        constructor(...a){ super(...(a.length ? a : [t.getTime()])); }
+        static now(){ return t.getTime(); }
+      };
+    };
+    fake26(4, 0);
+    const list26 = buildPrayerAlarmList();
+    // NOTE: alarm `at` is an absolute instant — read it back through
+    // locNow() (the location wall clock), not getHours() (the VM's UTC).
+    const _wall26 = d => { const w = locNow(d); return w.getHours()*60+w.getMinutes(); };
+    const _at26 = (id, type) => { const a = list26.find(x=>x.prayerId===id && x.type===type); return a ? _wall26(a.at) : null; };
+    check("Fix #26: 5 azan alarms (azan-v2) ring exactly at the JAKIM prayer times",
+      ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(p=>_at26(p,"azan-v2")===_jakim[p]),
+      ["Fajr","Dhuhr","Asr","Maghrib","Isha"].map(p=>p+" "+_at26(p,"azan-v2")).join(" "));
+    check("Fix #26: T-5 notifications (ids 51–55) come 5 min before every prayer",
+      list26.filter(a=>a.type==="preazan" && [51,52,53,54,55].includes(a.id)).length===5 &&
+      ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(p=>{
+        const five = list26.find(a=>a.prayerId===p && a.type==="preazan" && a.id>=51);
+        return five && (_at26(p,"azan-v2") - _wall26(five.at))===5;
+      }), "T-5 ok");
+    check("Fix #26: T-2 notifications (ids 31–35) come 2 min before every prayer",
+      list26.filter(a=>a.type==="preazan" && [31,32,33,34,35].includes(a.id)).length===5 &&
+      ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(p=>{
+        const two = list26.find(a=>a.prayerId===p && a.type==="preazan" && a.id<40);
+        return two && (_at26(p,"azan-v2") - _wall26(two.at))===2;
+      }), "T-2 ok");
+    check("Fix #26: every pre-azan carries the exact Bengali text (not one word changed)",
+      ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(p=>
+        list26.filter(a=>a.prayerId===p && a.type==="preazan").every(a=>a.body===PREAZAN_TEXTS[p])), "texts exact");
+    // Ring sweep: inside each waqt the ring shows that prayer, counting to
+    // the end of its window (the next prayer start); before Fajr it shows
+    // Fajr upcoming; overnight Isha counts to tomorrow's Fajr.
+    const _ring26 = (h, m) => { const d = new Date(2026, 10, 19); d.setHours(h, m, 0, 0); return nextEvent(d); };
+    const _ringCases26 = [
+      [6, 0, "Fajr", "current", 7, 4], [14, 0, "Dhuhr", "current", 16, 24],
+      [17, 0, "Asr", "current", 18, 58], [19, 30, "Maghrib", "current", 20, 11],
+      [21, 0, "Isha", "current", 5, 43], [4, 0, "Fajr", "upcoming", 5, 42],
+    ];
+    check("Fix #26: ring shows the running waqt and counts to the next prayer, for all 5 prayers (+overnight Isha→Fajr, pre-Fajr upcoming)",
+      _ringCases26.every(([h, m, id, st, eh, em]) => { const e = _ring26(h, m);
+        return e.kind==="prayer" && e.id===id && e.state===st &&
+          Math.abs((e.at.getHours()*60+e.at.getMinutes()) - (eh*60+em)) <= 2; }),
+      _ringCases26.map(([h,m])=>{ const e=_ring26(h,m); return `${h}:${String(m).padStart(2,"0")}→${e.id}/${e.state}@${e.at.getHours()}:${String(e.at.getMinutes()).padStart(2,"0")}`; }).join(" "));
+    globalThis.Date = RealDate26;
+    Object.assign(settings, _saved26);
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);
