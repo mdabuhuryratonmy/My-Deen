@@ -61,6 +61,7 @@ globalThis.__setEditingProfile = v => { editingProfile = v; }; // Fix #27 test h
 globalThis.pname=pname; globalThis.Lb=Lb; globalThis.num=num; globalThis.t=t;
 globalThis.migrateAlarmSounds=migrateAlarmSounds;
 globalThis.normalizeSounds=normalizeSounds; globalThis.toggleDetailSound=toggleDetailSound;
+globalThis.detailSoundExplain=detailSoundExplain; globalThis.renderDetailSounds=renderDetailSounds;
 globalThis.qiblaBearing=qiblaBearing; globalThis.updateNeedle=updateNeedle;
 globalThis.__setQiblaDeg=v=>{ qiblaDeg=v; }; globalThis.__setHeading=v=>{ heading=v; };
 globalThis.fetchQibla=fetchQibla; globalThis.__getQiblaDeg=()=>qiblaDeg;
@@ -74,6 +75,8 @@ function check(name, ok, extra=""){ console.log((ok?"PASS":"FAIL")+" | "+name+(e
 const html = fs.readFileSync("/home/hatch/workspace/deen-day/www/index.html", "utf8");
 const sw = fs.readFileSync("/home/hatch/workspace/deen-day/www/sw.js", "utf8");
 const css = fs.readFileSync("/home/hatch/workspace/deen-day/www/styles.css", "utf8");
+const javaSched = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AlarmScheduler.java", "utf8");
+const javaPlugin = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/PrayerAlarmPlugin.java", "utf8");
 __setTimings({Fajr:"05:42", Sunrise:"07:03", Dhuhr:"13:00", Asr:"16:24", Maghrib:"18:58", Isha:"20:10", Imsak:"05:32", Firstthird:"22:59", Lastthird:"03:01"});
 settings.lang = "bn";
 
@@ -450,7 +453,7 @@ check("tahajjud is a single silent notification, no azan",
   alarmList.filter(a=>a.type==="tahajjud").length===1 &&
   alarmList.find(a=>a.type==="tahajjud").body===TAHAJJUD_TEXT &&
   alarmList.find(a=>a.type==="tahajjud").sound==="none");
-check("old daily check/hurry repeats are cancelled once on sync",
+check("old daily check/hurry repeats are cancelled on sync (Fix #39: native every time + LN once)",
   src.includes("cancelLegacyCheckReminders") && src.includes("legacy_check_cancelled"));
 
 // ---- Fix #10: multi-select alarm sound (name permanent + one extra, max 2) ----
@@ -487,22 +490,23 @@ check("picking another sound clears silent",
   JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["name","azan"]));
 settings.alarmSound.Fajr = ["name","azan"];
 const azanSoundList = buildPrayerAlarmList();
-check("name + azan plays the azan sound",
+check("name + azan plays the azan sound (on the azan channel)",
   azanSoundList.find(a=>a.type==="azan-v2" && a.prayerId==="Fajr").sound==="azan");
 settings.alarmSound.Fajr = ["name","notification"];
 const notifSoundList = buildPrayerAlarmList();
-check("name + notification plays the notification sound",
+check("name + notification plays the notification sound (still on the azan channel)",
   notifSoundList.find(a=>a.type==="azan-v2" && a.prayerId==="Fajr").sound==="reminder");
 settings.alarmSound.Fajr = ["silent"];
 const silentSoundList = buildPrayerAlarmList();
-check("silent alone plays no sound",
-  silentSoundList.find(a=>a.type==="azan-v2" && a.prayerId==="Fajr").sound==="none");
+check("silent alone plays no sound — and posts on the silent channel (Fix #38)",
+  silentSoundList.find(a=>a.type.startsWith("azan-v2") && a.prayerId==="Fajr").sound==="none" &&
+  silentSoundList.find(a=>a.type.startsWith("azan-v2") && a.prayerId==="Fajr").type==="azan-v2-silent");
 settings.alarmSound.Fajr = ["name"];
 settings.alarmOn = {...settings.alarmOn, Fajr:false, Dhuhr:false, Asr:false, Maghrib:false, Isha:false, Tahajjud:false, Sehri:false, Iftar:false, Duha:false};
 const alarmListOff = buildPrayerAlarmList();
 check("pre-azan stays on even when every prayer alarm is off",
   alarmListOff.filter(a=>a.type==="preazan").length===10 &&
-  alarmListOff.filter(a=>a.type==="azan-v2").length===0 &&
+  alarmListOff.filter(a=>a.type.startsWith("azan-v2")).length===0 &&
   ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>alarmListOff.filter(a=>a.type==="preazan" && a.prayerId===pid).length===2));
 settings.alarmOn = {...settings.alarmOn, Fajr:true, Dhuhr:true, Asr:true, Maghrib:true, Isha:true};
 
@@ -544,7 +548,7 @@ settings.tzName = "Asia/Dhaka";
 // Native alarms must fire at the absolute instant of the location
 // wall-clock time: Maghrib 17:17 Jashore = 19:17 on a Malaysia clock.
 const dhakaWall = ms => { const d = new Date(ms + 6*3600000); return [d.getUTCHours(), d.getUTCMinutes()]; };
-const maghAzan = buildPrayerAlarmList().find(a=>a.type==="azan-v2" && a.prayerId==="Maghrib");
+const maghAzan = buildPrayerAlarmList().find(a=>a.type.startsWith("azan-v2") && a.prayerId==="Maghrib");
 check("Fix #12: Maghrib alarm fires at 17:17 Jashore wall-clock (absolute instant)",
   maghAzan && dhakaWall(maghAzan.at.getTime()).join(":")==="17:17",
   maghAzan ? dhakaWall(maghAzan.at.getTime()).join(":") : "none");
@@ -882,8 +886,8 @@ Object.assign(settings, _savedTz);
       src.includes('createChannel({ id: "azan-v2"') && src.includes('sound: "azan.mp3"'), "v2 channel");
     check("Fix #24: no azan entry still uses the old channel",
       !src.includes('type: "azan"') && !src.includes('createChannel({ id: "azan",'), "old channel gone");
-    check("Fix #24: next-azan status reads the v2 entries",
-      src.includes('a.type==="azan-v2"'), "nextAzanInfo v2");
+    check("Fix #24: next-azan status reads the v2 entries (incl. the Fix #38 silent channel)",
+      src.includes('a.type.startsWith("azan-v2")'), "nextAzanInfo v2");
     check("Fix #24: native ensureChannels creates azan-v2 with R.raw.azan and deletes the old azan channel",
       _as.includes('createChannel(nm, ctx, "azan-v2"') && _as.includes("R.raw.azan") && _as.includes('deleteNotificationChannel("azan")'), "native v2");
     check("Fix #24: AlarmReceiver maps a stale stored 'azan' type to azan-v2",
@@ -1259,6 +1263,75 @@ Object.assign(settings, _savedTz);
         return (nav.match(/data-view="/g) || []).length === 2 &&
           nav.includes('data-view="home"') && nav.includes('data-view="settings"'); })(),
       "nav unchanged");
+
+    // ---- Fix #37: azan preview plays instantly (no delay on tap) ----
+    // Root cause: #audio-azan / #audio-reminder had preload="none", so
+    // the first ▶ tap had to fetch + decode the 3.4 MB azan file first.
+    check("Fix #37: azan + reminder audio are preloaded (auto), not none",
+      html.includes('id="audio-azan" preload="auto"') && html.includes('id="audio-reminder" preload="auto"'),
+      "preload auto");
+    check("Fix #37: startup kicks off loading both sounds so the first tap plays at once",
+      src.includes('["audio-azan","audio-reminder"]') && src.includes("el.load()"),
+      "load at startup");
+    check("Fix #37: the azan preview still plays the local azan file on tap",
+      src.includes('if (sound==="azan"){ const a = $("#audio-azan")') && src.includes("a.play().catch(()=>{})"),
+      "preview plays");
+
+    // ---- Fix #38: "ওয়াক্তের নাম (ডিফল্ট)" — say plainly what plays ----
+    // The truth: "name" adds no separate sound (spoken only in the ▶
+    // preview) — the alarm still plays the azan, and the prayer name
+    // shows in the notification. Only "silent" silences it (and before
+    // this fix even silent still rang, because every azan entry posted
+    // on the azan-v2 channel — now it posts on azan-v2-silent).
+    check("Fix #38: the detail page has a plain-words explainer under the sound list",
+      html.includes('id="detail-sound-explain"') && src.includes("detailSoundExplain(sel)"),
+      "explainer shown");
+    check("Fix #38: with the default (name only) the explainer says the azan plays + the name shows",
+      detailSoundExplain(["name"]).includes("আজান বাজবে") && detailSoundExplain(["name"]).includes("ওয়াক্তের নাম (ডিফল্ট)"),
+      "default = azan");
+    check("Fix #38: with azan selected the explainer says the azan plays",
+      detailSoundExplain(["name","azan"]).includes("আজান বাজবে"), "azan = azan");
+    check("Fix #38: with silent selected the explainer says no sound plays",
+      detailSoundExplain(["silent"]).includes("নিঃশব্দ") && detailSoundExplain(["silent"]).includes("কোনো সাউন্ড বাজবে না"),
+      "silent = silent");
+    check("Fix #38: name stays the permanent default (forced into every selection)",
+      JSON.stringify(normalizeSounds([]))===JSON.stringify(["name"]) &&
+      JSON.stringify(normalizeSounds(["silent"]))===JSON.stringify(["silent"]) &&
+      src.includes('if (sid==="name"){ toast(Lb("ওয়াক্তের নাম সবসময় চালু থাকে"'),
+      "name locked");
+    check("Fix #38: a silent azan posts on the silent channel (native + LN)",
+      javaSched.includes('"azan-v2-silent"') && src.includes('id: "azan-v2-silent"'),
+      "silent channel");
+    check("Fix #38: next-azan info still finds a silent azan entry",
+      src.includes('a.type.startsWith("azan-v2")'),
+      "next azan");
+
+    // ---- Fix #39: the wrong notification text — kill the zombie alarms ----
+    // The current code never schedules "তাড়াতাড়ি..." — the text came
+    // from old builds' check/hurry alarms, armed natively (AlarmManager)
+    // and re-armed every day by rescheduleNextDay, while the old cancel
+    // only touched LocalNotifications. Fix: cancel them natively on
+    // EVERY sync, cancel any stale stored alarm on schedule, and never
+    // re-arm a fired alarm that is no longer stored.
+    check("Fix #39: the exact pre-azan texts (his words) ride BOTH the T-5 and T-2 entries",
+      ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>{
+        const pres = buildPrayerAlarmList().filter(a=>a.type==="preazan" && a.prayerId===pid);
+        return pres.length===2 && pres.every(a=>a.body===PREAZAN_TEXTS[pid]);
+      }),
+      "both times, same text");
+    check("Fix #39: no hurry wording anywhere — JS or native",
+      !src.includes("তাড়াতাড়ি") && !javaSched.includes("তাড়াতাড়ি") && !javaPlugin.includes("তাড়াতাড়ি"),
+      "no hurry text");
+    check("Fix #39: the legacy cancel hits the NATIVE plugin on every sync (not behind the one-time flag)",
+      (() => { const fn = src.slice(src.indexOf("async function cancelLegacyCheckReminders"), src.indexOf("async function cancelLegacyCheckReminders") + 1400);
+        return fn.includes("PA.cancelAlarms({ ids })") && fn.indexOf("PA.cancelAlarms") < fn.indexOf("legacy_check_cancelled"); })(),
+      "native cancel first");
+    check("Fix #39: native schedule cancels stale stored alarms no longer in the new list",
+      javaPlugin.includes("stillListed") && javaPlugin.includes("AlarmScheduler.cancel(getContext(), oldId)"),
+      "stale cancelled");
+    check("Fix #39: a fired alarm that is no longer stored is cancelled, never re-armed",
+      javaSched.includes("if (!inStored)") && javaSched.includes("cancel(ctx, alarm.optInt(\"id\", -1))"),
+      "no resurrection");
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);

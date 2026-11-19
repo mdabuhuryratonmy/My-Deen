@@ -80,10 +80,22 @@ public final class AlarmScheduler {
         try {
             long at = alarm.optLong("at", 0);
             if (at <= 0) return;
+            // Fix #39: a fired alarm that is no longer in the stored list
+            // is a zombie from an old build — cancel it and do NOT re-arm
+            // it (before this it was written back into storage and
+            // re-armed every day, so the wrong text never stopped).
+            JSONArray stored = readStored(ctx);
+            boolean inStored = false;
+            for (int i = 0; i < stored.length(); i++) {
+                if (stored.getJSONObject(i).optInt("id", -1) == alarm.optInt("id", -1)) { inStored = true; break; }
+            }
+            if (!inStored) {
+                cancel(ctx, alarm.optInt("id", -1));
+                return;
+            }
             long now = System.currentTimeMillis();
             while (at <= now) at += 86400000L;
             alarm.put("at", at);
-            JSONArray stored = readStored(ctx);
             JSONArray next = new JSONArray();
             boolean replaced = false;
             for (int i = 0; i < stored.length(); i++) {
@@ -127,6 +139,10 @@ public final class AlarmScheduler {
             if (nm == null) return;
             createChannel(nm, ctx, "azan-v2", "Azan", "Prayer time azan alerts",
                     NotificationManager.IMPORTANCE_HIGH, R.raw.azan);
+            // Fix #38: silent azan channel — a "নিঃশব্দ" alarm posts here,
+            // so no sound plays (before this it still rang on azan-v2).
+            createChannel(nm, ctx, "azan-v2-silent", "Azan (silent)", "Prayer time alerts without sound",
+                    NotificationManager.IMPORTANCE_HIGH, -1);
             // Fix #24: the old "azan" channel on the user's phone plays NO
             // sound (notifications arrive silently, exactly like the dhikr
             // channels in Fix #18) and Android never updates an existing

@@ -352,6 +352,9 @@
       <div class="card">
         <h3>Alarm Sound</h3>
         <div id="detail-sounds"></div>
+        <!-- Fix #38: say plainly what plays at prayer time for the
+             selection above (filled by renderDetailSounds). -->
+        <p class="muted small" id="detail-sound-explain"></p>
       </div>
       <div class="row mt"><button class="btn gold block" id="btn-detail-save">সংরক্ষণ করুন</button></div>
     </section>
@@ -459,10 +462,13 @@
 </div>
 
 <audio id="audio-ayah" preload="none"></audio>
-<audio id="audio-azan" preload="none" src="audio/azan.mp3"></audio>
+<!-- Fix #37: azan + reminder are preloaded (auto) so the ▶ preview in
+     Settings plays the instant it is tapped — with preload="none" the
+     first tap had to fetch + decode the 3.4 MB azan file first. -->
+<audio id="audio-azan" preload="auto" src="audio/azan.mp3"></audio>
 <audio id="audio-durood" preload="none" src="audio/durood.mp3"></audio>
 <audio id="audio-istighfar" preload="none" src="audio/istighfar.mp3"></audio>
-<audio id="audio-reminder" preload="none" src="audio/reminder.mp3"></audio>
+<audio id="audio-reminder" preload="auto" src="audio/reminder.mp3"></audio>
 <div id="lang-first" style="position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:99;padding:20px">
   <div class="card" style="max-width:420px;width:100%;max-height:86vh;overflow:auto">
     <h2 data-i18n="langFirstTitle">Choose your language</h2>

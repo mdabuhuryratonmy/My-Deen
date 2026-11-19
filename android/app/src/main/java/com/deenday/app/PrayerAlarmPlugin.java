@@ -60,6 +60,23 @@ public class PrayerAlarmPlugin extends Plugin {
         int scheduled = 0, skipped = 0;
         JSONArray next = new JSONArray();
         try {
+            // Fix #39: cancel stale stored alarms that are no longer in
+            // the new list — dropping them from storage alone does NOT
+            // cancel their AlarmManager PendingIntents, so they kept
+            // firing with old bodies (the wrong hurry text the user
+            // reported came from exactly such a zombie).
+            JSONArray stored = AlarmScheduler.readStored(getContext());
+            for (int i = 0; i < stored.length(); i++) {
+                try {
+                    int oldId = stored.getJSONObject(i).optInt("id", -1);
+                    if (oldId < 0) continue;
+                    boolean stillListed = false;
+                    for (int j = 0; j < alarms.length(); j++) {
+                        if (alarms.getJSONObject(j).optInt("id", -1) == oldId) { stillListed = true; break; }
+                    }
+                    if (!stillListed) AlarmScheduler.cancel(getContext(), oldId);
+                } catch (Exception ignored) {}
+            }
             for (int i = 0; i < alarms.length(); i++) {
                 JSONObject a = alarms.getJSONObject(i);
                 // Fix #19: only store alarms that were actually armed —

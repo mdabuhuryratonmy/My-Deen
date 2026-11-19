@@ -4018,6 +4018,18 @@ function renderDetailSounds(){
     toggleDetailSound(r.dataset.sound);
   });
   $$("#detail-sounds [data-preview]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); previewAlarmSound(b.dataset.preview); });
+  /* Fix #38: say plainly what the current selection plays at prayer
+     time. The truth: "name" (ওয়াক্তের নাম, the permanent default) adds
+     no separate sound — it is spoken only in the ▶ preview — but the
+     alarm itself still plays the azan on the azan channel, and the
+     prayer name shows in the notification. Only "silent" silences it. */
+  const ex = $("#detail-sound-explain"); if (ex) ex.textContent = detailSoundExplain(sel);
+}
+function detailSoundExplain(sounds){
+  const ss = normalizeSounds(sounds);
+  if (ss.includes("silent")) return Lb("নিঃশব্দ — ওয়াক্তের সময় কোনো সাউন্ড বাজবে না; শুধু নোটিফিকেশন আসবে।", "Silent — no sound plays at prayer time; only the notification arrives.");
+  if (ss.includes("azan")) return Lb("ওয়াক্তের সময় আজান বাজবে।", "The azan will play at prayer time.");
+  return Lb("ওয়াক্তের নাম (ডিফল্ট) সবসময় চালু থাকে — ওয়াক্তের সময় আজান বাজবে, আর নোটিফিকেশনে ওয়াক্তের নাম দেখাবে।", "Prayer name (default) is always on — the azan will play at prayer time, and the notification shows the prayer name.");
 }
 function previewAlarmSound(sound){
   stopAyahAudio();
@@ -4448,15 +4460,25 @@ function checkAzan(){
 /* One-time cleanup (Fix #8): builds before Fix #8 scheduled the old
    daily check/hurry notifications (ids 11-15, 21-25, 100-159) with
    repeats:true — they keep firing until cancelled. Cancel them once. */
+/* Fix #39: the old check/hurry alarms were armed by the NATIVE plugin
+   (AlarmManager), not by LocalNotifications — so the LN cancel below
+   never touched them, and AlarmReceiver re-armed them every day
+   (rescheduleNextDay), which is why the wrong hurry text kept arriving
+   even though the current code never schedules it. Cancel them through the native plugin on EVERY sync
+   (cheap, idempotent) — never behind a one-time flag. The native
+   scheduleAlarms also cancels any other stale stored alarm, and a
+   fired alarm that is no longer stored is never re-armed. */
 async function cancelLegacyCheckReminders(){
   try {
     if (typeof window.Capacitor === "undefined" || !window.Capacitor.Plugins) return;
-    if (store.get("legacy_check_cancelled", false)) return;
-    const LN = window.Capacitor.Plugins.LocalNotifications; if (!LN) return;
     const ids = [];
     for (let i=11;i<=15;i++) ids.push(i);
     for (let i=21;i<=25;i++) ids.push(i);
     for (let i=100;i<160;i++) ids.push(i);
+    const PA = window.Capacitor.Plugins.PrayerAlarm;
+    if (PA && PA.cancelAlarms){ try { await PA.cancelAlarms({ ids }); } catch(e){} }
+    if (store.get("legacy_check_cancelled", false)) return;
+    const LN = window.Capacitor.Plugins.LocalNotifications; if (!LN) return;
     await LN.cancel({ notifications: ids.map(id=>({id})) });
     store.set("legacy_check_cancelled", true);
   } catch(e){}
@@ -4519,9 +4541,15 @@ function buildPrayerAlarmList(){
         title: "My Deen — " + name, body: PREAZAN_TEXTS[id], sound: "none", prayerId: id });
     });
     if (!settings.alarmOn[id]) return;
-    list.push({ id: AZAN_IDS[i], at, type: "azan-v2", title: "My Deen — " + name,
+    /* Fix #38: "silent" must actually silence — before this every azan
+       entry posted on the azan-v2 channel (azan sound) no matter what
+       was selected, so "নিঃশব্দ" still rang the azan. A silent
+       selection now posts on the silent channel instead; every other
+       selection (including the "name" default) still plays the azan. */
+    const snd = soundFor(id);
+    list.push({ id: AZAN_IDS[i], at, type: snd==="none" ? "azan-v2-silent" : "azan-v2", title: "My Deen — " + name,
       body: Lb("মিসওয়াক ও অজু করে নামাজের জন্য প্রস্তুত হোন", "Use miswak and perform wudu to prepare for prayer"),
-      sound: soundFor(id), prayerId: id });
+      sound: snd, prayerId: id });
   });
   // Tahajjud: notification ONLY, never an azan — and only when its
   // alarm is set (Fix #4 §7).
@@ -4605,7 +4633,7 @@ function nextAzanInfo(){
   try {
     if (!timings) return "";
     const now = Date.now();
-    const next = buildPrayerAlarmList().filter(a=>a.type==="azan-v2" && a.at.getTime() > now).sort((x,y)=>x.at-y.at)[0];
+    const next = buildPrayerAlarmList().filter(a=>a.type.startsWith("azan-v2") && a.at.getTime() > now).sort((x,y)=>x.at-y.at)[0];
     if (!next) return "";
     return `${Lb("পরের আজান", "Next azan")}: ${pname(next.prayerId)} ${fmtTime(timings[next.prayerId] || "")}`;
   } catch(e){ return ""; }
@@ -4642,6 +4670,8 @@ async function scheduleNativeAzan(){
     if (perm && perm.display && perm.display !== "granted") return;
     // Channels: Android 8+ plays the CHANNEL sound, so each sound gets its own channel.
     await LN.createChannel({ id: "azan-v2", name: "Azan", description: "Prayer time azan alerts", sound: "azan.mp3", importance: 5, vibration: true });
+    // Fix #38: silent azan channel — "নিঃশব্দ" posts here, so no sound plays.
+    await LN.createChannel({ id: "azan-v2-silent", name: "Azan (silent)", description: "Prayer time alerts without sound", importance: 5, vibration: true });
     await LN.createChannel({ id: "preazan", name: "Pre-azan reminders", description: "5 and 2 minutes before prayer time", importance: 4, vibration: true });
     await LN.createChannel({ id: "tahajjud", name: "Tahajjud", description: "Tahajjud notification (no azan)", importance: 4, vibration: true });
     await LN.createChannel({ id: "sehri", name: "Sehri", description: "Sehri alarm", importance: 4, vibration: true });
@@ -5296,6 +5326,10 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   if (!hasLocation()) step(()=>openLocSetup());
   step(()=>maybeFireDailyWebNotif());
   step(()=>syncDuroodToggleNative()); // Fix #35: no durood on open — the unlock durood is native-only (USER_PRESENT)
+  /* Fix #37: start loading the two preview sounds at startup (the HTML
+     preload="auto" above asks for it; .load() makes sure the fetch
+     actually starts now) so the first ▶ tap in Settings plays at once. */
+  step(()=>{ ["audio-azan","audio-reminder"].forEach(id=>{ const el = document.getElementById(id); if (el) el.load(); }); });
   step(()=>maybeAskPermissions()); // Fix #4 §5: first-launch permission flow
   // Prayer times load FIRST: a slow or failed Quran-list download must
   // never block them (previously one stalled fetch froze both).
