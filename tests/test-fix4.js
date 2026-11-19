@@ -38,6 +38,8 @@ globalThis.__setTimings = v => { timings = v; };
 globalThis.pname=pname; globalThis.Lb=Lb; globalThis.num=num; globalThis.t=t;
 globalThis.migrateAlarmSounds=migrateAlarmSounds;
 globalThis.normalizeSounds=normalizeSounds; globalThis.toggleDetailSound=toggleDetailSound;
+globalThis.qiblaBearing=qiblaBearing; globalThis.updateNeedle=updateNeedle;
+globalThis.__setQiblaDeg=v=>{ qiblaDeg=v; }; globalThis.__setHeading=v=>{ heading=v; };
 `);
 
 let pass = 0, fail = 0;
@@ -424,6 +426,37 @@ Object.assign(settings, {country:_saved12.country, city:_saved12.city, lat:_save
   tzName:_saved12.tzName, locId:_saved12.locId, tzLoc:_saved12.tzLoc, method:_saved12.method,
   school:_saved12.school, schoolExplicit:_saved12.schoolExplicit});
 __setTimings(_saved12.timings);
+
+// ---- Fix #13: Qibla needle pointed 180° off ----
+// The bearing math was already right (Ipoh 291.9° = the Aladhan API's
+// 291.90°). The bug was the needle's drawing: it started at the centre
+// and stretched DOWNWARD (top:50%, pivot at its top), so its zero
+// direction was south — rotate(291.9°) put its long end at
+// (180+291.9)%360 = 111.9°, exactly the ~112° the user saw. The fix
+// flips the needle to stretch UPWARD from the centre (top:10% +
+// height:40% = the centre, pivot at its bottom), so rotate(0) points
+// north and rotate(291.9°) points at the Qibla.
+check("Fix #13: local bearing Ipoh is 291.9° (matches Aladhan API 291.90°)",
+  Math.abs(qiblaBearing(4.5975, 101.0901) - 291.9) < 0.5, qiblaBearing(4.5975, 101.0901).toFixed(1));
+check("Fix #13: local bearing Chemor is 291.9°",
+  Math.abs(qiblaBearing(4.62, 101.08) - 291.9) < 0.5, qiblaBearing(4.62, 101.08).toFixed(1));
+check("Fix #13: local bearing Jashore is 277.8° (API 277.84°)",
+  Math.abs(qiblaBearing(23.17, 89.2) - 277.8) < 0.5, qiblaBearing(23.17, 89.2).toFixed(1));
+check("Fix #13: cross-check London 119.0°, New York 58.5°",
+  Math.abs(qiblaBearing(51.5074, -0.1278) - 119) < 0.5 && Math.abs(qiblaBearing(40.7128, -74.006) - 58.5) < 0.5,
+  `${qiblaBearing(51.5074, -0.1278).toFixed(1)} / ${qiblaBearing(40.7128, -74.006).toFixed(1)}`);
+const _css13 = fs.readFileSync("/home/hatch/workspace/deen-day/www/styles.css", "utf8");
+const _needleRule = (_css13.match(/\.compass \.needle\{[^}]*\}/) || [""])[0];
+check("Fix #13: needle extends upward from the centre (top 10%, height 40%, pivot 50% 100%)",
+  _needleRule.includes("top:10%") && _needleRule.includes("height:40%") && _needleRule.includes("transform-origin:50% 100%"), _needleRule);
+const _rotOf = () => { const m = /rotate\(([-\d.]+)deg\)/.exec(els["#needle"].style.transform || ""); return m ? +m[1] : NaN; };
+__setQiblaDeg(291.9); __setHeading(null); updateNeedle();
+check("Fix #13: needle rotate is the Qibla bearing from north (291.9°)",
+  Math.abs(_rotOf() - 291.9) < 0.001, els["#needle"].style.transform);
+__setHeading(90); updateNeedle();
+check("Fix #13: with phone facing east (heading 90) the needle rotates to 201.9°",
+  Math.abs(_rotOf() - 201.9) < 0.001, els["#needle"].style.transform);
+__setHeading(null);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
