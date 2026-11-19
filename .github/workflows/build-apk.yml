@@ -42,14 +42,11 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      # Run #12 showed sdkmanager is NOT on the runner's PATH by default
-      # (exit 127, "command not found") once the setup-android step was
-      # removed. The SDK itself is preinstalled at $ANDROID_HOME, so put
-      # its cmdline-tools on PATH here (any installed version) instead.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Install Android SDK platform 36
         run: |
-          export ANDROID_HOME=${ANDROID_HOME:-/usr/lib/android-sdk}
-          for d in "$ANDROID_HOME"/cmdline-tools/*/bin; do export PATH="$d:$PATH"; done
           yes | sdkmanager --licenses
           sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
