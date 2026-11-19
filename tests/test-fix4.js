@@ -91,20 +91,20 @@ check("tahajjud text exact", TAHAJJUD_TEXT === "তাহাজ্জুদে�
 const fw = forbiddenWindows();
 check("forbidden windows = 3", fw.length===3);
 check("morning forbidden sunrise→+15", fw[0].start===423 && fw[0].end===438, `${fw[0].start}–${fw[0].end}`);
-check("midday forbidden dhuhr−10→dhuhr", fw[1].start===770 && fw[1].end===780, `${fw[1].start}–${fw[1].end}`);
+check("midday forbidden dhuhr−4→dhuhr+2 (Fix #15: user's 12:57–13:03)", fw[1].start===776 && fw[1].end===782, `${fw[1].start}–${fw[1].end}`);
 check("evening forbidden maghrib−15→maghrib", fw[2].start===1123 && fw[2].end===1138, `${fw[2].start}–${fw[2].end}`);
 
 // ---- nextEvent / countdown ring ----
 const atNoon = new Date(); atNoon.setHours(12,0,0,0);
 const ne1 = nextEvent(atNoon);
-// ForbNoon (12:50) starts before Dhuhr (13:00), so it IS the next event.
-check("nextEvent at 12:00 is the midday forbidden window (upcoming)", ne1.kind==="forbidden" && ne1.id==="ForbNoon" && ne1.at.getHours()===12 && ne1.at.getMinutes()===50 && ne1.state==="upcoming", ne1.id);
+// ForbNoon (12:56) starts before Dhuhr (13:00), so it IS the next event.
+check("nextEvent at 12:00 is the midday forbidden window (upcoming)", ne1.kind==="forbidden" && ne1.id==="ForbNoon" && ne1.at.getHours()===12 && ne1.at.getMinutes()===56 && ne1.state==="upcoming", ne1.id);
 const at1305 = new Date(); at1305.setHours(13,5,0,0);
 const ne1b = nextEvent(at1305);
-check("nextEvent at 13:05 is Asr (upcoming)", ne1b.kind==="prayer" && ne1b.id==="Asr" && ne1b.state==="upcoming", ne1b.id);
-const at1255 = new Date(); at1255.setHours(12,55,0,0);
-const ne1c = nextEvent(at1255);
-check("inside midday forbidden window counts to its end (13:00)", ne1c.kind==="forbidden" && ne1c.at.getHours()===13 && ne1c.at.getMinutes()===0 && ne1c.state==="current", ne1c.kind+" "+ne1c.at.getHours()+":"+ne1c.at.getMinutes());
+check("Fix #15: nextEvent at 13:05 is Dhuhr (current), counting to Asr 16:24", ne1b.kind==="prayer" && ne1b.id==="Dhuhr" && ne1b.state==="current" && ne1b.at.getHours()===16 && ne1b.at.getMinutes()===24, ne1b.id);
+const at1258 = new Date(); at1258.setHours(12,58,0,0);
+const ne1c = nextEvent(at1258);
+check("inside midday forbidden window counts to its end (13:02)", ne1c.kind==="forbidden" && ne1c.at.getHours()===13 && ne1c.at.getMinutes()===2 && ne1c.state==="current", ne1c.kind+" "+ne1c.at.getHours()+":"+ne1c.at.getMinutes());
 const at705 = new Date(); at705.setHours(7,5,0,0);
 const ne2 = nextEvent(at705);
 check("inside morning forbidden window counts to its end", ne2.kind==="forbidden" && ne2.at.getHours()===7 && ne2.at.getMinutes()===18 && ne2.state==="current", ne2.kind+" "+ne2.at.getHours()+":"+ne2.at.getMinutes());
@@ -114,16 +114,30 @@ check("inside morning forbidden window counts to its end", ne2.kind==="forbidden
 // forbidden window as if it were already running.
 const at1827 = new Date(); at1827.setHours(18,27,0,0);
 const ne1827 = nextEvent(at1827);
-check("Fix #11: at 18:27 the ring shows Asr (current), counting to 18:43", ne1827.kind==="prayer" && ne1827.id==="Asr" && ne1827.state==="current" && ne1827.at.getHours()===18 && ne1827.at.getMinutes()===43, ne1827.kind+" "+ne1827.id+" "+ne1827.at.getHours()+":"+ne1827.at.getMinutes());
+check("Fix #11: at 18:27 the ring shows Asr (current), counting to 18:58 (Fix #15: next prayer start, not the forbidden start)", ne1827.kind==="prayer" && ne1827.id==="Asr" && ne1827.state==="current" && ne1827.at.getHours()===18 && ne1827.at.getMinutes()===58, ne1827.kind+" "+ne1827.id+" "+ne1827.at.getHours()+":"+ne1827.at.getMinutes());
 const at1700 = new Date(); at1700.setHours(17,0,0,0);
 const ne1700 = nextEvent(at1700);
-check("Fix #11: at 17:00 the ring shows Asr (current), counting to 18:43", ne1700.kind==="prayer" && ne1700.id==="Asr" && ne1700.state==="current" && ne1700.at.getHours()===18 && ne1700.at.getMinutes()===43, ne1700.kind+" "+ne1700.id);
+check("Fix #11: at 17:00 the ring shows Asr (current), counting to 18:58 (Fix #15)", ne1700.kind==="prayer" && ne1700.id==="Asr" && ne1700.state==="current" && ne1700.at.getHours()===18 && ne1700.at.getMinutes()===58, ne1700.kind+" "+ne1700.id);
 const at1850 = new Date(); at1850.setHours(18,50,0,0);
 const ne1850 = nextEvent(at1850);
 check("Fix #11: at 18:50 (inside evening window) the ring shows forbidden, counting to 18:58", ne1850.kind==="forbidden" && ne1850.id==="ForbEvening" && ne1850.state==="current" && ne1850.at.getHours()===18 && ne1850.at.getMinutes()===58, ne1850.kind+" "+ne1850.id);
 const at0725 = new Date(); at0725.setHours(7,25,0,0);
 const ne0725 = nextEvent(at0725);
 check("Fix #11: at 07:25 (no prayer current) the next forbidden window is upcoming, not current", ne0725.kind==="forbidden" && ne0725.id==="ForbNoon" && ne0725.state==="upcoming", ne0725.kind+" "+ne0725.id+" "+ne0725.state);
+
+// ---- Fix #15: current prayer counts to the next prayer start ----
+// The user's side-by-side screenshots, 19 Nov 18:36: reference ring =
+// "আসর, শেষ হতে বাকি ০০:২১:৫৫" (to 18:58); his app showed the evening
+// forbidden window. Fix #11 had the right label but the wrong target
+// (it counted Asr to the forbidden start, 18:43). The waqt lasts
+// until the next prayer, so the ring counts to the next prayer start;
+// the forbidden window takes over only while actually inside it.
+const at1836 = new Date(); at1836.setHours(18,36,4,0);
+const ne1836 = nextEvent(at1836);
+check("Fix #15: at 18:36 (reported case) the ring shows Asr (current), counting to 18:58 — 00:21:55 left, like the reference", ne1836.kind==="prayer" && ne1836.id==="Asr" && ne1836.state==="current" && ne1836.at.getHours()===18 && ne1836.at.getMinutes()===58, ne1836.kind+" "+ne1836.id+" "+ne1836.at.getHours()+":"+ne1836.at.getMinutes());
+const at0650 = new Date(); at0650.setHours(6,50,0,0);
+const ne0650 = nextEvent(at0650);
+check("Fix #15: at 06:50 the ring shows Fajr (current), counting to sunrise 07:03", ne0650.kind==="prayer" && ne0650.id==="Fajr" && ne0650.state==="current" && ne0650.at.getHours()===7 && ne0650.at.getMinutes()===3, ne0650.kind+" "+ne0650.id);
 
 // ---- Fix #11: Asr school follows the region (Malaysia = Shafi'i) ----
 const _savedS = {country:settings.country, school:settings.school, schoolExplicit:settings.schoolExplicit, lat:settings.lat, lon:settings.lon, city:settings.city, tzName:settings.tzName, locId:settings.locId, tzLoc:settings.tzLoc, method:settings.method};
@@ -141,6 +155,17 @@ settings.method = 0; settings.school = 1; settings.schoolExplicit = false;
 const t1911 = computeTimingsLocal(new Date(2026, 10, 19));
 check("Fix #11: local Ipoh Asr matches real JAKIM Asr 16:24 (±2 min)", t1911 && Math.abs(toMin(t1911.Asr) - 984) <= 2, t1911 ? t1911.Asr : "null");
 check("Fix #11: local Ipoh Fajr/Maghrib match real times (±2 min)", t1911 && Math.abs(toMin(t1911.Fajr) - 342) <= 2 && Math.abs(toMin(t1911.Maghrib) - 1138) <= 2, t1911 ? t1911.Fajr + " " + t1911.Maghrib : "null");
+// Fix #15: the 3 forbidden windows on the real 19 Nov Ipoh day must
+// match the user's stated windows (morning 07:04–07:19, midday
+// 12:57–13:03, evening 18:43–18:58) within 2 minutes.
+__setTimings(t1911);
+const fw19 = forbiddenWindows();
+check("Fix #15: real 19 Nov Ipoh windows match the user's 3 windows (±2 min)", fw19.length===3
+  && Math.abs(fw19[0].start - 424) <= 2 && Math.abs(fw19[0].end - 439) <= 2
+  && Math.abs(fw19[1].start - 777) <= 2 && Math.abs(fw19[1].end - 783) <= 2
+  && Math.abs(fw19[2].start - 1123) <= 2 && Math.abs(fw19[2].end - 1138) <= 2,
+  fw19.map(w=>`${w.start}–${w.end}`).join(", "));
+__setTimings({Fajr:"05:42", Sunrise:"07:03", Dhuhr:"13:00", Asr:"16:24", Maghrib:"18:58", Isha:"20:10", Imsak:"05:32", Firstthird:"22:59", Lastthird:"03:01"});
 Object.assign(settings, _savedS);
 
 // ---- Alarm list ----
@@ -381,9 +406,9 @@ check("Fix #12: locNow converts device 18:29 MY to 16:29 Jashore",
 check("Fix #12: next prayer at 16:29 Jashore is Maghrib, not Isha",
   nextPrayer(lnJashore).id === "Maghrib", nextPrayer(lnJashore).id);
 const neJashore = nextEvent(lnJashore);
-check("Fix #12: at 16:29 Jashore the ring shows Asr (current), counting to 17:02",
+check("Fix #12: at 16:29 Jashore the ring shows Asr (current), counting to 17:17 (Fix #15: Maghrib, the next prayer start)",
   neJashore.kind==="prayer" && neJashore.id==="Asr" && neJashore.state==="current" &&
-  neJashore.at.getHours()===17 && neJashore.at.getMinutes()===2, `${neJashore.kind} ${neJashore.id} ${neJashore.at.getHours()}:${neJashore.at.getMinutes()}`);
+  neJashore.at.getHours()===17 && neJashore.at.getMinutes()===17, `${neJashore.kind} ${neJashore.id} ${neJashore.at.getHours()}:${neJashore.at.getMinutes()}`);
 check("Fix #12: locAbs turns Dhaka wall-clock 17:17 into the absolute instant 11:17 UTC",
   locAbs(new Date(2026, 10, 19, 17, 17)).getTime() === Date.UTC(2026, 10, 19, 11, 17),
   new Date(locAbs(new Date(2026, 10, 19, 17, 17)).getTime()).toISOString());
@@ -416,10 +441,10 @@ const _lang12 = settings.lang; settings.lang = "bn";
 renderPrayers();
 check("Fix #12 ring: at 18:29 MY (= 16:29 Jashore) the ring names Asr",
   els["#ring-name"].textContent === "আসর", els["#ring-name"].textContent);
-check("Fix #12 ring: label is 'বর্তমান নামাজ', sub is 'শেষ হতে বাকি', count ০০:৩৩:০০",
+check("Fix #12 ring: label is 'বর্তমান নামাজ', sub is 'শেষ হতে বাকি', count ০০:৪৮:০০ (Fix #15: Asr to Maghrib 17:17)",
   els["#ring-label"].textContent === "বর্তমান নামাজ" &&
   els["#ring-sub"].textContent === "শেষ হতে বাকি" &&
-  els["#ring-count"].textContent === "০০:৩৩:০০",
+  els["#ring-count"].textContent === "০০:৪৮:০০",
   `${els["#ring-label"].textContent} / ${els["#ring-sub"].textContent} / ${els["#ring-count"].textContent}`);
 check("Fix #12 ring: the next prayer row is Maghrib (orange dot)",
   els["#prayer-list"].innerHTML.includes('class="prayer-row next tappable" data-detail="Maghrib"'));
