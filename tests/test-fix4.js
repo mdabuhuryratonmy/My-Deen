@@ -810,6 +810,23 @@ Object.assign(settings, _savedTz);
       fw22[2].start === mg22 - 15 && fw22[2].end === mg22, `${fw22[2].start}–${fw22[2].end} vs maghrib ${mg22}`);
     check("Fix #22: no old padding left in the code (evening was magh-25, midday dhuhr-10)",
       !src.includes("start:magh-25") && !src.includes("start:dhuhr-10"), "old padding gone");
+
+    // ---- Fix #23: manifest receivers must be exported (system broadcasts) ----
+    // Root cause found by the Maghrib+Isha investigation: USER_PRESENT and
+    // BOOT_COMPLETED come from the system (another uid). With exported=false
+    // Android never delivers them — so the unlock durood NEVER played (the
+    // real cause of Fix #5 issue 4, wrongly blamed on phone settings) and
+    // alarms were NEVER re-armed after a reboot. AlarmReceiver stays
+    // unexported: it only fires from the app's own explicit PendingIntent.
+    const _mf = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/AndroidManifest.xml", "utf8");
+    check("Fix #23: DuroodUnlockReceiver is exported (USER_PRESENT is a system broadcast)",
+      /<receiver android:name="\.DuroodUnlockReceiver" android:exported="true">/.test(_mf), "exported=true");
+    check("Fix #23: BootReceiver is exported (BOOT_COMPLETED is a system broadcast)",
+      /<receiver android:name="\.BootReceiver" android:exported="true">/.test(_mf), "exported=true");
+    check("Fix #23: AlarmReceiver stays NOT exported (only the app's own PendingIntent fires it)",
+      /<receiver android:name="\.AlarmReceiver" android:exported="false" \/>/.test(_mf), "exported=false");
+    check("Fix #23: both system-broadcast intent filters are still present",
+      _mf.includes("android.intent.action.USER_PRESENT") && _mf.includes("android.intent.action.BOOT_COMPLETED"), "filters ok");
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);

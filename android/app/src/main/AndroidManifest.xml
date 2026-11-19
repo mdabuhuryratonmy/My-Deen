@@ -32,7 +32,13 @@
 
         </activity>
 
-        <receiver android:name=".DuroodUnlockReceiver" android:exported="false">
+        <!-- Fix #23: exported MUST be true — USER_PRESENT and BOOT_COMPLETED
+             are system broadcasts from outside the app; with exported=false
+             Android never delivers them, so the unlock durood never played
+             and alarms were never re-armed after a reboot. (AlarmReceiver
+             stays false: it is only ever fired by the app's own explicit
+             PendingIntent from AlarmManager, which does not need exporting.) -->
+        <receiver android:name=".DuroodUnlockReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.USER_PRESENT" />
             </intent-filter>
@@ -40,7 +46,7 @@
 
         <!-- Fix #4 §5: exact prayer-time alarms + re-arm after reboot -->
         <receiver android:name=".AlarmReceiver" android:exported="false" />
-        <receiver android:name=".BootReceiver" android:exported="false">
+        <receiver android:name=".BootReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
