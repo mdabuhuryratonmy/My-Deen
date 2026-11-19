@@ -22,8 +22,9 @@ const src = fs.readFileSync("/home/hatch/workspace/deen-day/www/app.js", "utf8")
 const cut = src.indexOf('document.addEventListener("DOMContentLoaded"');
 eval(src.slice(0, cut) + `
 ;globalThis.settings=settings; globalThis.store=store;
-globalThis.forbiddenWindows=forbiddenWindows; globalThis.nextEvent=nextEvent;
+globalThis.forbiddenWindows=forbiddenWindows; globalThis.nextEvent=nextEvent; globalThis.nextPrayer=nextPrayer;
 globalThis.computeTimingsLocal=computeTimingsLocal; globalThis.effSchool=effSchool; globalThis.schoolForRegion=schoolForRegion; globalThis.toMin=toMin;
+globalThis.locNow=locNow; globalThis.locAbs=locAbs; globalThis.todayKey=todayKey; globalThis.ddmmyyyy=ddmmyyyy; globalThis.__getTimings=()=>timings;
 globalThis.buildPrayerAlarmList=buildPrayerAlarmList; globalThis.renderPrayers=renderPrayers;
 globalThis.renderCalendarPage=renderCalendarPage; globalThis.openPrayerDetail=openPrayerDetail;
 globalThis.updateDetailTime=updateDetailTime; globalThis.renderAlarmPage=renderAlarmPage;
@@ -352,6 +353,57 @@ check("pre-azan stays on even when every prayer alarm is off",
   alarmListOff.filter(a=>a.type==="azan").length===0 &&
   ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>alarmListOff.filter(a=>a.type==="preazan" && a.prayerId===pid).length===2));
 settings.alarmOn = {...settings.alarmOn, Fajr:true, Dhuhr:true, Asr:true, Maghrib:true, Isha:true};
+
+// ---- Fix #12: timezone — device clock vs location timezone ----
+// The user's report: location Jashore, Bangladesh; phone clock 18:29
+// Malaysia (UTC+8) = 16:29 in Jashore (UTC+6), Asr running, next
+// prayer Maghrib — but the app showed "next prayer Isha in 00:06:30"
+// because it read the device clock as if it were Jashore's clock.
+const _saved12 = {country:settings.country, city:settings.city, lat:settings.lat, lon:settings.lon,
+  tzName:settings.tzName, locId:settings.locId, tzLoc:settings.tzLoc, method:settings.method,
+  school:settings.school, schoolExplicit:settings.schoolExplicit, timings:__getTimings()};
+settings.country = "Bangladesh"; settings.city = "Jashore"; settings.lat = 23.17; settings.lon = 89.2;
+settings.tzName = "Asia/Dhaka"; settings.locId = "jashore"; settings.tzLoc = "jashore";
+settings.method = 0; settings.school = 1; settings.schoolExplicit = false;
+const tJashore = computeTimingsLocal(new Date(2026, 10, 19));
+check("Fix #12: local Jashore times match real times (Maghrib 17:17, Isha 18:35)",
+  tJashore && tJashore.Maghrib === "17:17" && tJashore.Isha === "18:35", tJashore ? `${tJashore.Maghrib} ${tJashore.Isha}` : "null");
+__setTimings(tJashore);
+// Device instant: 18:29 in Malaysia = 10:29 UTC = 16:29 in Jashore.
+const devInstant = new Date(Date.UTC(2026, 10, 19, 10, 29));
+const lnJashore = locNow(devInstant);
+check("Fix #12: locNow converts device 18:29 MY to 16:29 Jashore",
+  lnJashore.getHours()===16 && lnJashore.getMinutes()===29, `${lnJashore.getHours()}:${lnJashore.getMinutes()}`);
+check("Fix #12: next prayer at 16:29 Jashore is Maghrib, not Isha",
+  nextPrayer(lnJashore).id === "Maghrib", nextPrayer(lnJashore).id);
+const neJashore = nextEvent(lnJashore);
+check("Fix #12: at 16:29 Jashore the ring shows Asr (current), counting to 17:02",
+  neJashore.kind==="prayer" && neJashore.id==="Asr" && neJashore.state==="current" &&
+  neJashore.at.getHours()===17 && neJashore.at.getMinutes()===2, `${neJashore.kind} ${neJashore.id} ${neJashore.at.getHours()}:${neJashore.at.getMinutes()}`);
+check("Fix #12: locAbs turns Dhaka wall-clock 17:17 into the absolute instant 11:17 UTC",
+  locAbs(new Date(2026, 10, 19, 17, 17)).getTime() === Date.UTC(2026, 10, 19, 11, 17),
+  new Date(locAbs(new Date(2026, 10, 19, 17, 17)).getTime()).toISOString());
+check("Fix #12: location date follows Jashore (2026-11-19 / 19-11-2026)",
+  todayKey(lnJashore) === "2026-11-19" && ddmmyyyy(lnJashore) === "19-11-2026", todayKey(lnJashore));
+settings.tzName = "";
+check("Fix #12: without a location timezone locNow is the device time",
+  locNow(devInstant).getTime() === devInstant.getTime());
+settings.tzName = "Asia/Dhaka";
+// Native alarms must fire at the absolute instant of the location
+// wall-clock time: Maghrib 17:17 Jashore = 19:17 on a Malaysia clock.
+const dhakaWall = ms => { const d = new Date(ms + 6*3600000); return [d.getUTCHours(), d.getUTCMinutes()]; };
+const maghAzan = buildPrayerAlarmList().find(a=>a.type==="azan" && a.prayerId==="Maghrib");
+check("Fix #12: Maghrib alarm fires at 17:17 Jashore wall-clock (absolute instant)",
+  maghAzan && dhakaWall(maghAzan.at.getTime()).join(":")==="17:17",
+  maghAzan ? dhakaWall(maghAzan.at.getTime()).join(":") : "none");
+const maghPres = buildPrayerAlarmList().filter(a=>a.type==="preazan" && a.prayerId==="Maghrib")
+  .map(a=>dhakaWall(a.at.getTime()).join(":")).sort();
+check("Fix #12: Maghrib pre-azan alarms fire at 17:12 and 17:15 Jashore wall-clock",
+  maghPres.join(",")==="17:12,17:15", maghPres.join(","));
+Object.assign(settings, {country:_saved12.country, city:_saved12.city, lat:_saved12.lat, lon:_saved12.lon,
+  tzName:_saved12.tzName, locId:_saved12.locId, tzLoc:_saved12.tzLoc, method:_saved12.method,
+  school:_saved12.school, schoolExplicit:_saved12.schoolExplicit});
+__setTimings(_saved12.timings);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
