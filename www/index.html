@@ -59,14 +59,29 @@
         <p style="margin:6px 0 2px; font-size:16px; font-weight:600" id="home-loc-text">—</p>
         <p class="muted small" id="home-loc-status">কোনো অবস্থান সেট করা নেই — নামাজের সঠিক সময়ের জন্য অবস্থান সেট করুন।</p>
         <div class="row mt"><button class="btn block" id="btn-home-detect-loc" data-i18n="locAutoBtn">📍 ম্যাপ থেকে লোকেশন অটো সেট করুন</button></div>
-        <div class="row mt"><button class="btn ghost block" id="btn-home-manual-loc">✏️ ম্যানুয়ালি শহর সেট করুন / Set manually</button></div>
-        <p class="muted small mt">“অটো সেট”-এ চাপ দিলে ফোনের GPS থেকে আপনার বর্তমান অবস্থান নেওয়া হবে (অনুমতি দিতে হবে)। চাইলে গ্রাম/শহরের নাম লিখেও ম্যানুয়ালি সেট করতে পারবেন।</p>
+        <p class="muted small mt">“অটো সেট”-এ চাপ দিলে ফোনের GPS থেকে আপনার বর্তমান অবস্থান নেওয়া হবে (অনুমতি দিতে হবে)।</p>
       </div>
 
       <div class="card">
         <div class="row between"><h2 id="h-prayers" data-i18n="prayersToday">আজকের নামাজের সময়</h2><span class="muted small" id="prayer-city">—</span></div>
         <p class="muted small" style="margin:2px 0 4px">কোনো ওয়াক্তে চাপ দিলে সেই ওয়াক্তের অ্যালার্ম সেটিংস খুলবে।</p>
         <div id="prayer-list"><p class="muted">সময় লোড হচ্ছে…</p></div>
+      </div>
+
+      <div class="card home-nav-row">
+        <button class="home-nav-btn" id="btn-home-alarm">🔔 অ্যালার্ম</button>
+        <span class="home-nav-div"></span>
+        <button class="home-nav-btn" id="btn-home-calendar">📅 ক্যালেন্ডার</button>
+      </div>
+
+      <div class="card">
+        <div class="row between"><h2>🎯 টপ ফিচার</h2><button class="btn ghost" id="btn-more-features">আরও দেখুন</button></div>
+        <div class="feat-grid">
+          <button class="feat-item" id="feat-tracker"><span class="feat-ring" id="feat-tracker-ring">০%</span><span>ট্র্যাকার</span></button>
+          <button class="feat-item" id="feat-quran"><span class="feat-ic">📖</span><span>কুরআন</span></button>
+          <button class="feat-item" id="feat-qibla"><span class="feat-ic">🕋</span><span>কিবলা</span></button>
+          <button class="feat-item" id="feat-ruqyah"><span class="feat-ic">🛡️</span><span>রুকইয়াহ</span></button>
+        </div>
       </div>
 
       <!-- নামাজ শিক্ষা (Namaz Shikkha) is hidden for now at the owner's
@@ -79,7 +94,7 @@
         <div class="row mt"><button class="btn gold block" id="btn-go-learn" data-i18n="learnOpen">শেখা শুরু করুন →</button></div>
       </div>
 
-      <div class="card">
+      <div class="card" id="quran-tracker-card">
         <div class="row between"><h2 data-i18n="quranTracker">কুরআন ট্র্যাকার</h2><span class="muted small" id="quran-progress-text">০%</span></div>
         <div class="progress"><div id="quran-progress-bar" style="width:0%"></div></div>
         <p class="muted small mt" id="quran-progress-detail">—</p>
