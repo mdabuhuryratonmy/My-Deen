@@ -40,6 +40,7 @@ globalThis.migrateAlarmSounds=migrateAlarmSounds;
 globalThis.normalizeSounds=normalizeSounds; globalThis.toggleDetailSound=toggleDetailSound;
 globalThis.qiblaBearing=qiblaBearing; globalThis.updateNeedle=updateNeedle;
 globalThis.__setQiblaDeg=v=>{ qiblaDeg=v; }; globalThis.__setHeading=v=>{ heading=v; };
+globalThis.resolveCityCoordsOffline=resolveCityCoordsOffline;
 `);
 
 let pass = 0, fail = 0;
@@ -457,6 +458,21 @@ __setHeading(90); updateNeedle();
 check("Fix #13: with phone facing east (heading 90) the needle rotates to 201.9°",
   Math.abs(_rotOf() - 201.9) < 0.001, els["#needle"].style.transform);
 __setHeading(null);
+
+// ---- Fix #12 follow-up: offline timezone from the city table ----
+// Coordinates already exist (GPS / older save) but no timezone yet:
+// the offline table must still fill it, or locNow() falls back to the
+// device clock until the API answers.
+const _savedTz = {city:settings.city, country:settings.country, lat:settings.lat, lon:settings.lon,
+  tzName:settings.tzName, tzLoc:settings.tzLoc, locId:settings.locId};
+settings.city = "Jashore"; settings.country = "Bangladesh"; settings.lat = 23.1664; settings.lon = 89.2081;
+settings.tzName = ""; settings.tzLoc = ""; settings.locId = "jashore";
+resolveCityCoordsOffline();
+check("Fix #12: offline city table fills Asia/Dhaka even with coords already set",
+  settings.tzName === "Asia/Dhaka" && settings.tzLoc === "jashore", settings.tzName);
+check("Fix #12: existing coordinates are not overwritten by the table",
+  settings.lat === 23.1664 && settings.lon === 89.2081, `${settings.lat},${settings.lon}`);
+Object.assign(settings, _savedTz);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
