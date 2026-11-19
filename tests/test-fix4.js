@@ -64,6 +64,7 @@ globalThis.qiblaBearing=qiblaBearing; globalThis.updateNeedle=updateNeedle;
 globalThis.__setQiblaDeg=v=>{ qiblaDeg=v; }; globalThis.__setHeading=v=>{ heading=v; };
 globalThis.fetchQibla=fetchQibla; globalThis.__getQiblaDeg=()=>qiblaDeg;
 globalThis.resolveCityCoordsOffline=resolveCityCoordsOffline;
+globalThis.__$= $;
 `);
 
 let pass = 0, fail = 0;
@@ -722,7 +723,8 @@ Object.assign(settings, _savedTz);
     check("Fix #20: home dates render (Gregorian shown, Hijri '…' until it loads)",
       els["#date-line"].innerHTML.includes("নভেম্বর") && els["#date-line"].innerHTML.includes("…"), "dates ok");
     // In-app azan: silent at 18:57, fires exactly once at the 18:58 Maghrib minute.
-    els["#audio-azan"].play = ()=>Promise.resolve();
+    // ($() creates the stub element on demand — els["#audio-azan"] alone is undefined.)
+    __$("#audio-azan").play = ()=>Promise.resolve();
     const RealDate20 = Date;
     const _tz20 = settings.tzName; settings.tzName = "";
     let t20 = new Date(); t20.setHours(18, 57, 0, 0);
@@ -758,10 +760,12 @@ Object.assign(settings, _savedTz);
     settings.method = 1;
     check("Fix #20: an explicit calculation method wins over auto", effMethod() === 1, String(effMethod()));
     Object.assign(settings, _savedM);
-    // Settings round-trip: save → localStorage holds it; fillSettings shows it.
+    // Settings round-trip: save → storage holds it; fillSettings shows it.
+    // (The harness localStorage lacks removeItem, so the app uses its
+    // in-memory LS fallback — read back through store, which prefixes "dd_".)
     settings.tasbihTarget = 99; saveSettings();
-    check("Fix #20: settings save to localStorage",
-      JSON.parse(localStorage.getItem("dd_settings")).tasbihTarget === 99, "saved 99");
+    check("Fix #20: settings save to storage",
+      (store.get("settings", {}) || {}).tasbihTarget === 99, "saved 99");
     settings.tasbihTarget = 33; saveSettings();
     fillSettings();
     check("Fix #20: settings page shows the saved values",
@@ -785,6 +789,27 @@ Object.assign(settings, _savedTz);
     check("Fix #20: no ad SDK anywhere in the code (no ads, ever)",
       !/admob|adsense|googlesyndication|audience-network/i.test(src), "clean");
     check("Fix #20: Quran has 6236 ayahs total", TOTAL_AYAH === 6236, String(TOTAL_AYAH));
+
+    // ---- Fix #22: forbidden windows — zero padding, exact real times ----
+    // His phone (build-11) shows the OLD padded windows: evening magh-25
+    // (10 min early), midday dhuhr-10 (6 min early). The staged code must
+    // have NO padding at all — the window starts at its real time, not one
+    // minute before. Real Ipoh times today (Aladhan API, JAKIM 17):
+    // Sunrise 07:04, Dhuhr 13:01, Maghrib 18:58 → correct windows
+    // 07:04–07:19, 12:57–13:03 (6 min), 18:43–18:58.
+    const fw22 = forbiddenWindows();
+    const toMin22 = t => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+    const _tm22 = __getTimings();
+    const sr22 = toMin22(_tm22.Sunrise), dh22 = toMin22(_tm22.Dhuhr), mg22 = toMin22(_tm22.Maghrib);
+    check("Fix #22: morning window starts EXACTLY at sunrise, not one minute early",
+      fw22[0].start === sr22 && fw22[0].end === sr22 + 15, `${fw22[0].start}–${fw22[0].end} vs sunrise ${sr22}`);
+    check("Fix #22: midday window is exactly 6 minutes (dhuhr-4 to dhuhr+2)",
+      fw22[1].start === dh22 - 4 && fw22[1].end === dh22 + 2 && fw22[1].end - fw22[1].start === 6,
+      `${fw22[1].start}–${fw22[1].end}`);
+    check("Fix #22: evening window starts EXACTLY 15 min before Maghrib, not 25",
+      fw22[2].start === mg22 - 15 && fw22[2].end === mg22, `${fw22[2].start}–${fw22[2].end} vs maghrib ${mg22}`);
+    check("Fix #22: no old padding left in the code (evening was magh-25, midday dhuhr-10)",
+      !src.includes("start:magh-25") && !src.includes("start:dhuhr-10"), "old padding gone");
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);
