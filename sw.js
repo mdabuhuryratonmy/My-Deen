@@ -1,8 +1,8 @@
 /* My Deen service worker — caches the app shell + API responses for offline use. */
-const CACHE = "my-deen-v18";
+const CACHE = "my-deen-v20";
 const SHELL = ["index.html", "styles.css", "app.js", "praycalc.js", "data/duas.js", "data/hadiths.js",
   "assets/quran-meta.js", "assets/quran-full.js", "manifest.json",
-  "icons/icon-192.png", "icons/icon-512.png", "audio/azan.mp3", "audio/reminder.mp3", "audio/durood.mp3"];
+  "icons/icon-192.png", "icons/icon-512.png", "audio/azan.mp3", "audio/reminder.mp3", "audio/durood.mp3", "audio/istighfar.mp3"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
