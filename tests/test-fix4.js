@@ -207,5 +207,26 @@ renderTracker();
 check("feat tracker ring shows today's prayer %",
   els["#feat-tracker-ring"].textContent === "০%");
 
+// ---- Fix #7: home rebuilt exactly like the reference (no ads) ----
+const homeOrder = ["home-top","ring-hero","prayer-list","btn-home-alarm","feat-tilawat","forbid-section","nafl-rows","nafl-strip","btn-go-fasting"];
+check("home sections are in the reference order",
+  homeOrder.every((id,i)=> i===0 || html.indexOf(id) > html.indexOf(homeOrder[i-1])));
+check("home date row has Hijri + Gregorian + share + bell",
+  html.includes('id="home-date-hijri"') && html.includes('id="home-date-greg"') && html.includes('id="btn-home-share"') && html.includes('id="btn-home-notif"') && html.includes('id="home-notif-badge"'));
+check("home has all 8 feature tiles",
+  ["feat-tracker","feat-quran","feat-qibla","feat-ruqyah","feat-tilawat","feat-tafsir","feat-names","feat-tasbih"].every(id=>html.includes(`id="${id}"`)));
+check("old home pieces are gone (location card, tracker cards, bottom alarm row)",
+  !html.includes('id="home-loc-text"') && !html.includes('id="btn-home-detect-loc"') && !html.includes('id="quran-tracker-card"') && !html.includes('id="h-tracker"') && !html.includes('id="btn-go-alarm"') && !html.includes("আজকের নামাজের সময়"));
+check("forbidden + nafl sections are unwrapped with red title",
+  html.includes('id="forbid-section"') && html.includes('forbid-title') && html.includes('id="nafl-section"'));
+check("ring is full-bleed with dark arc + dark text on light skies",
+  css.includes("#view-home .ring-hero") && css.includes('.ring-hero[data-sky="day"] .ring-fg'));
+check("prayer rows use 24h ranges + done circles, no old azan lines",
+  src.includes("done-circle") && src.includes('class="p-range"') && !src.includes('class="dotbtn" data-pray') && src.includes("num(timings[pid])"));
+check("header hides on home",
+  src.includes("hdr.style.display") && src.includes('v === "home" ? "none"'));
+check("renderTracker guards the removed tracker card",
+  src.includes("if (!box) return;"));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
