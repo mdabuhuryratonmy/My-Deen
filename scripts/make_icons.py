@@ -92,7 +92,44 @@ def main():
         save(round_icon, f"{base}/ic_launcher_round.png")
     save(square.resize((432, 432), Image.LANCZOS),
          "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png")
+    notification_icons(logo)
     print("done — icons generated from the old logo")
+
+
+def notification_icons(logo):
+    """Fix #14: notification icons from the gold logo.
+
+    Small icon (status bar + shade) MUST be a white-on-transparent
+    silhouette — Android tints it and drops all colour. The logo is
+    fully opaque (gold calligraphy + crescent on emerald, white
+    rounded corners), so the silhouette is extracted by colour:
+    gold pixels have high R and R-B > 40; the white corners
+    (R==G==B) and the emerald background (R ~ 0) are excluded.
+    Large icon: the full logo on a solid emerald full-bleed
+    background (same as the maskable icon), so no white corners show.
+    """
+    from PIL import ImageChops
+    r, g, b, a = logo.split()
+    # Soft gold ramp: 0 below R=80, 255 above R=180 (anti-aliased edges).
+    gold = r.point(lambda v: max(0, min(255, (v - 80) * 255 // 100)))
+    # R-B > 40 keeps gold, drops the white corners (R-B == 0).
+    diff = ImageChops.subtract(r, b).point(lambda v: 255 if v > 40 else 0)
+    alpha = ImageChops.multiply(gold, diff)
+    for density, size in {"mdpi": 24, "hdpi": 36, "xhdpi": 48,
+                          "xxhdpi": 72, "xxxhdpi": 96}.items():
+        # Downscaling thins the calligraphy, so boost the resized alpha
+        # (x1.5) — otherwise the 24dp status-bar glyph is nearly invisible.
+        a = alpha.resize((size, size), Image.LANCZOS)
+        a = a.point(lambda v: min(255, int(v * 1.5)))
+        icon = Image.new("RGBA", (size, size), (255, 255, 255, 0))
+        icon.putalpha(a)
+        save(icon, f"android/app/src/main/res/drawable-{density}/ic_notification.png")
+    # Large icon: logo at 80% on solid emerald, 192x192.
+    large = Image.new("RGBA", (512, 512), EMERALD)
+    inner = logo.resize((410, 410), Image.LANCZOS)
+    large.alpha_composite(inner, (51, 51))
+    save(large.resize((192, 192), Image.LANCZOS),
+         "android/app/src/main/res/drawable/ic_notification_large.png")
 
 
 if __name__ == "__main__":
