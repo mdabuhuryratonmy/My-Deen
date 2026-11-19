@@ -2318,30 +2318,33 @@ function prayerWindowEnd(pid, now=locNow()){
   const t = toMin(timings[nextId]);
   return t == null ? null : t;
 }
-/* Forbidden windows (Fix #4 §1; Fix #11): morning = sunrise → sunrise+15,
-   midday = dhuhr−10 → dhuhr, evening = maghrib−15 → maghrib (~15 min
-   before sunset, as the user stated). */
+/* Forbidden windows (Fix #4 §1; Fix #11; Fix #15): morning = sunrise →
+   sunrise+15, midday = dhuhr−4 → dhuhr+2 (the user's stated window:
+   12:57–13:03 on 19 Nov Ipoh, Dhuhr 13:01), evening = maghrib−15 →
+   maghrib (~15 min before sunset, as the user stated). */
 function forbiddenWindows(){
   if (!timings) return [];
   const sunrise = toMin(timings.Sunrise), dhuhr = toMin(timings.Dhuhr), magh = toMin(timings.Maghrib);
   if (sunrise==null || dhuhr==null || magh==null) return [];
   return [
     {id:"ForbMorning", bn:"নিষিদ্ধ সময় (সকাল)", en:"Forbidden time (morning)", start:sunrise, end:sunrise+15},
-    {id:"ForbNoon", bn:"নিষিদ্ধ সময় (দুপুর)", en:"Forbidden time (midday)", start:dhuhr-10, end:dhuhr},
+    {id:"ForbNoon", bn:"নিষিদ্ধ সময় (দুপুর)", en:"Forbidden time (midday)", start:dhuhr-4, end:dhuhr+2},
     {id:"ForbEvening", bn:"নিষিদ্ধ সময় (সন্ধ্যা)", en:"Forbidden time (evening)", start:magh-15, end:magh}
   ];
 }
-/* The countdown ring (Fix #4 §1; Fix #11) shows the NEXT event — the next
-   prayer, the start of Tahajjud (last third of the night), or the next
-   forbidden window — whichever comes first. Two rules keep it honest:
+/* The countdown ring (Fix #4 §1; Fix #11; Fix #15) shows the CURRENT
+   event — the prayer whose window we are in, counting down to the end
+   of its window (the next prayer's start) — or the next event if no
+   prayer is current. Two rules keep it honest, matching the reference
+   the user sent (19 Nov 18:36: Asr, "শেষ হতে বাকি ০০:২১:৫৫" to 18:58):
    (1) if we are inside a forbidden window, the ring counts down to its
    end; (2) a forbidden window must NEVER displace a prayer that can
    still be prayed — while a prayer is in its valid window the ring
-   shows THAT prayer, counting down to the end of its prayable time
-   (when the forbidden window starts). `state` tells the ring whether
-   the event is running ("current" → "শেষ হতে বাকি") or still to come
-   ("upcoming" → "শুরু হতে বাকি"). Returns {name, at: Date, prev: Date,
-   kind, id, state}. */
+   shows THAT prayer, counting to the end of its window (the next
+   prayer's start), NOT to the forbidden window's start. `state` tells
+   the ring whether the event is running ("current" → "শেষ হতে বাকি")
+   or still to come ("upcoming" → "শুরু হতে বাকি"). Returns {name,
+   at: Date, prev: Date, kind, id, state}. */
 function nextEvent(now=locNow()){
   const dayStart = new Date(now); dayStart.setHours(0,0,0,0);
   const atMin = m => { const d = new Date(dayStart); d.setMinutes(m); return d; };
@@ -2360,18 +2363,17 @@ function nextEvent(now=locNow()){
     const s = atMin(w.start), e = atMin(w.end);
     if (now >= s && now < e) return {kind:"forbidden", id:w.id, name:Lb(w.bn, w.en), at:e, prev:s, state:"current"};
   }
-  // A forbidden window is the next event, but a prayer is still in its
-  // valid window (e.g. 18:27, Asr prayable until the evening window
-  // starts): show THAT prayer, counting to the forbidden window's start.
-  const nextCand = [...cands].sort((a,b)=>a.at - b.at).find(c=>c.at > now);
-  if (nextCand && nextCand.kind === "forbidden"){
-    for (const p of PRAYER_IDS){
-      const start = toMin(timings[p]); if (start==null) continue;
-      const end = prayerWindowEnd(p, now); if (end==null) continue;
-      const s = atMin(start), e = atMin(end);
-      if (now >= s && now < e && nextCand.at > s && nextCand.at < e){
-        return {kind:"prayer", id:p, name:pname(p), at:nextCand.at, prev:s, state:"current"};
-      }
+  // A prayer is in its valid window (e.g. 18:36, Asr 16:24–18:58):
+  // show THAT prayer, counting down to the end of its window — the
+  // next prayer's start — even if a forbidden window starts inside
+  // it. The forbidden window takes over only when the clock is
+  // actually inside it (rule above).
+  for (const p of PRAYER_IDS){
+    const start = toMin(timings[p]); if (start==null) continue;
+    const end = prayerWindowEnd(p, now); if (end==null) continue;
+    const s = atMin(start), e = atMin(end);
+    if (now >= s && now < e){
+      return {kind:"prayer", id:p, name:pname(p), at:e, prev:s, state:"current"};
     }
   }
   cands.sort((a,b)=>a.at - b.at);
@@ -2427,12 +2429,25 @@ function renderPrayers(){
   const h = Math.floor(diff/3600000), m = Math.floor(diff%3600000/60000), s = Math.floor(diff%60000/1000);
   const ringName = $("#ring-name"), ringCount = $("#ring-count"), ringFg = $("#ring-fg"),
         ringLabel = $("#ring-label"), ringSub = $("#ring-sub");
-  if (ringName) ringName.textContent = ev.name;
-  if (ringCount) ringCount.textContent = `${num(pad2(h))}:${num(pad2(m))}:${num(pad2(s))}`;
+  if (ringName){
+    // Fix #16: during a forbidden window the ring shows the message
+    // "এখন সালাতের নিষিদ্ধ সময়, এই সময়ে নামাজ পড়া নিষিদ্ধ" — NO
+    // "শেষ হতে বাকি" countdown. Otherwise the ring shows the prayer
+    // name + "শেষ হতে বাকি"/"শুরু হতে বাকি" + HH:MM:SS as before.
+    const isForbidNow = ev.kind==="forbidden" && ev.state==="current";
+    ringName.textContent = isForbidNow
+      ? Lb("এখন সালাতের নিষিদ্ধ সময়, এই সময়ে নামাজ পড়া নিষিদ্ধ", "It is now a forbidden time for prayer; praying is forbidden at this time")
+      : ev.name;
+    ringName.classList.toggle("forbid-msg", isForbidNow);
+  }
+  if (ringCount){
+    ringCount.textContent = (ev.kind==="forbidden" && ev.state==="current") ? "" : `${num(pad2(h))}:${num(pad2(m))}:${num(pad2(s))}`;
+    ringCount.style.display = (ev.kind==="forbidden" && ev.state==="current") ? "none" : "";
+  }
   if (ringLabel) ringLabel.textContent = ev.kind==="prayer"
     ? (ev.state==="current" ? Lb("বর্তমান নামাজ", "Current prayer") : Lb("পরের নামাজ", "Next prayer"))
     : ev.kind==="tahajjud" ? Lb("তাহাজ্জুদ", "Tahajjud") : Lb("নিষিদ্ধ সময়", "Forbidden time");
-  if (ringSub) ringSub.textContent = ev.state==="current" ? Lb("শেষ হতে বাকি", "Time remaining") : Lb("শুরু হতে বাকি", "Starts in");
+  if (ringSub) ringSub.textContent = (ev.kind==="forbidden" && ev.state==="current") ? "" : (ev.state==="current" ? Lb("শেষ হতে বাকি", "Time remaining") : Lb("শুরু হতে বাকি", "Starts in"));
   if (ringFg){
     const C = 2*Math.PI*96;
     const prog = Math.min(1, Math.max(0, (now - ev.prev) / (ev.at - ev.prev)));
@@ -2467,12 +2482,16 @@ function skyPeriod(){
 /* ---------------- forbidden prayer times ---------------- */
 function renderForbidden(){
   if (!timings) return;
-  const sunrise = toMin(timings.Sunrise), dhuhr = toMin(timings.Dhuhr), magh = toMin(timings.Maghrib);
+  // Fix #16: ranges come from forbiddenWindows() itself — the old code
+  // hardcoded dhuhr−10 here, so the midday cell still showed 12:50–
+  // 13:00 after Fix #15 moved the window to 12:56–13:02.
+  const fw = forbiddenWindows();
+  if (fw.length < 3) return;
   const hhmm = mins => { const h=Math.floor(mins/60)%24, m=mins%60; return fmtTime(`${pad2(h)}:${pad2(m)}`); };
   const cells = [
-    [Lb("সকাল", "Morning"), `${fmtTime(timings.Sunrise)} – ${hhmm(sunrise+15)}`],
-    [Lb("দুপুর", "Midday"), `${hhmm(dhuhr-10)} – ${fmtTime(timings.Dhuhr)}`],
-    [Lb("সন্ধ্যা", "Evening"), `${hhmm(magh-15)} – ${fmtTime(timings.Maghrib)}`]
+    [Lb("সকাল", "Morning"), `${hhmm(fw[0].start)} – ${hhmm(fw[0].end)}`],
+    [Lb("দুপুর", "Midday"), `${hhmm(fw[1].start)} – ${hhmm(fw[1].end)}`],
+    [Lb("সন্ধ্যা", "Evening"), `${hhmm(fw[2].start)} – ${hhmm(fw[2].end)}`]
   ];
   $("#forbidden-list").innerHTML = `<div class="forbid-grid">` + cells.map(c=>`<div class="forbid-cell"><b>${c[0]}</b><span>${c[1]}</span></div>`).join("") + `</div>`;
 }
