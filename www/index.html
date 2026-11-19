@@ -406,7 +406,7 @@
         <div class="switch-row"><span data-i18n="notifLabel">নোটিফিকেশন</span>
           <label class="switch"><input type="checkbox" id="set-notif"><span class="slider"></span></label></div>
         <div class="row mt"><button class="btn block" id="btn-permissions">🔔 সব অনুমতি দিন — নোটিফিকেশন ও সঠিক সময়ে অ্যালার্ম</button></div>
-        <p class="muted small">সঠিক সময়ে আজান ও অ্যালার্ম বাজাতে এই অনুমতিগুলো লাগে। ফোনের সেটিংস খুললে "Alarms &amp; reminders" (অ্যালার্ম ও রিমাইন্ডার) চালু করে দিন।</p>
+        <p class="muted small">অ্যাপ নিজেই একটা একটা করে অনুমতি চাইবে — Settings-এ ঘুরতে হবে না। সঠিক সময়ে আজান বাজাতে এগুলো লাগে।</p>
         <div class="switch-row"><span id="daily-label">🌅 প্রতিদিন সকালে হাদিস ও আয়াত</span>
           <label class="switch"><input type="checkbox" id="set-daily" checked><span class="slider"></span></label></div>
         <p class="muted small" id="daily-desc"></p>
@@ -467,6 +467,25 @@
   </div>
 </div>
 <div id="toast"></div>
+<!-- Fix #25: first-launch permission onboarding — the app asks for every
+     permission itself, in Bengali, one step at a time, so Play Store users
+     never have to dig through Settings. -->
+<div id="perm-onboard" style="position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;z-index:99;padding:20px">
+  <div class="card" style="max-width:420px;width:100%;max-height:88vh;overflow:auto">
+    <h2>🔔 অ্যাপ চালুর আগে অনুমতি</h2>
+    <p class="muted small" id="perm-count"></p>
+    <div id="perm-dots" class="perm-dots"></div>
+    <h3 id="perm-title" style="margin:12px 0 6px"></h3>
+    <p class="muted" style="line-height:1.7" id="perm-why"></p>
+    <button class="btn gold block mt" id="perm-action"></button>
+    <button class="btn block mt" id="perm-mark-done" style="display:none">✓ চালু করেছি</button>
+    <div class="row between mt">
+      <button class="btn ghost" id="perm-skip-step">এড়িয়ে যান</button>
+      <button class="btn ghost" id="perm-skip-all">পরে করব</button>
+    </div>
+    <p class="muted small mt">Settings-এ ঘুরতে হবে না — অ্যাপ নিজেই সঠিক পাতাটা খুলে দেবে। দুটো অনুমতি (সঠিক সময়ের অ্যালার্ম, অটোস্টার্ট) ফোনের নিয়মে শুধু সেটিংসের সুইচ দিয়ে চালু করা যায়, অ্যাপ ভেতর থেকে দিতে পারে না।</p>
+  </div>
+</div>
 
 
 

@@ -851,6 +851,48 @@ Object.assign(settings, _savedTz);
       _as.includes('createChannel(nm, ctx, "azan-v2"') && _as.includes("R.raw.azan") && _as.includes('deleteNotificationChannel("azan")'), "native v2");
     check("Fix #24: AlarmReceiver maps a stale stored 'azan' type to azan-v2",
       _ar.includes('if (type.equals("azan")) type = "azan-v2"'), "stale mapping");
+
+    // ---- Fix #25: first-launch permission onboarding (Play Store) ----
+    // Play Store users must never dig through Settings: the app asks for
+    // each permission itself, in Bengali, one step at a time. Two of them
+    // (exact alarms, autostart) cannot be granted from inside the app at
+    // all — the app opens the exact system page so the user only flips
+    // one switch; the modal says this honestly.
+    const _idx = fs.readFileSync("/home/hatch/workspace/deen-day/www/index.html", "utf8");
+    const _pa = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/PrayerAlarmPlugin.java", "utf8");
+    check("Fix #25: onboarding modal exists with all 4 step titles",
+      _idx.includes('id="perm-onboard"') && _idx.includes("অ্যাপ চালুর আগে অনুমতি") &&
+      src.includes("নোটিফিকেশন") && src.includes("সঠিক সময়ের অ্যালার্ম") &&
+      src.includes("ব্যাটারি — No restrictions") && src.includes("অটোস্টার্ট"), "4 steps");
+    // ONBOARD_STEPS is a top-level const in app.js, so the harness cannot
+    // read it as a bare identifier — verify it from the source instead.
+    const _ob = src.slice(src.indexOf("const ONBOARD_STEPS"), src.indexOf("let onboardIdx"));
+    check("Fix #25: ONBOARD_STEPS has 4 steps, each with a Bengali reason",
+      ["notifications","exact","battery","autostart"].every(id=>_ob.includes('id:"'+id+'"')) &&
+      _ob.includes("আজান ও নামাজের আগের নোটিফিকেশন") &&
+      _ob.includes("নামাজের সময় হুবহু আজান বাজাতে") &&
+      _ob.includes("ফোন ঘুমিয়ে গেলেও") &&
+      _ob.includes("ফোন চালু হলে বা অ্যাপ বন্ধ হয়ে গেলে"), "4 steps");
+    check("Fix #25: plugin has requestStep with all 4 step branches",
+      _pa.includes("public void requestStep") && _pa.includes('"notifications"') &&
+      _pa.includes('"exact"') && _pa.includes('"battery"') && _pa.includes('"autostart"'), "4 branches");
+    check("Fix #25: battery exemption uses the system dialog intent; autostart opens MIUI's page with a fallback",
+      _pa.includes("ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS") &&
+      _pa.includes("AutoStartManagementActivity") &&
+      _pa.includes("ACTION_APPLICATION_DETAILS_SETTINGS"), "intents");
+    check("Fix #25: getStatus reports batteryExempt so the onboarding can show it done",
+      _pa.includes('ret.put("batteryExempt"'), "batteryExempt");
+    check("Fix #25: manifest declares the battery-optimisation request permission",
+      _mf.includes("REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"), "manifest");
+    check("Fix #25: first launch opens the onboarding modal, not a blind system prompt",
+      src.includes("function maybeAskPermissions(){\n  if (settings.onboarded) return;") &&
+      src.includes("setTimeout(()=>openPermOnboard(), 2500)"), "modal on first launch");
+    check("Fix #25: Settings 'সব অনুমতি দিন' button re-opens the onboarding",
+      src.includes('permBtn.onclick=()=>openPermOnboard()'), "re-open");
+    check("Fix #25: onboarded flag defaults to false (new installs see the flow)",
+      src.includes("onboarded:false"), "default false");
+    check("Fix #25: the modal honestly says two permissions need a Settings switch",
+      _idx.includes("দুটো অনুমতি (সঠিক সময়ের অ্যালার্ম, অটোস্টার্ট) ফোনের নিয়মে শুধু সেটিংসের সুইচ দিয়ে চালু করা যায়"), "honest note");
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);

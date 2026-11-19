@@ -1828,7 +1828,7 @@ const DEFAULTS = {city:"", country:"", lat:null, lon:null, method:0, school:0, s
      permanent default and is always selected; the user may add one more
      (azan / notification / beep / ring). "silent" stands alone. */
   alarmSound:{Fajr:["name"], Dhuhr:["name"], Asr:["name"], Maghrib:["name"], Isha:["name"], Duha:["name"], Tahajjud:["name"], ForbMorning:["name"], ForbNoon:["name"], ForbEvening:["name"], Sehri:["name"], Iftar:["name"]},
-  permAsked:false};
+  permAsked:false, onboarded:false};
 let settings = {...DEFAULTS};
 /* True when this device already has saved settings (a returning user).
    A saved language choice is always respected; only a first-run user —
@@ -4936,11 +4936,88 @@ async function requestAllPermissions(){
   } catch(e){}
 }
 function maybeAskPermissions(){
-  if (settings.permAsked) return;
-  // Ask shortly after startup so the language chooser / location
-  // setup (also first-run) is not covered by the system prompt.
-  setTimeout(()=>requestAllPermissions(), 2500);
+  if (settings.onboarded) return;
+  // First launch (Fix #25): open the in-app permission onboarding shortly
+  // after startup so the language chooser / location setup (also
+  // first-run) is not covered by it.
+  setTimeout(()=>openPermOnboard(), 2500);
 }
+
+// ---- Fix #25: first-launch permission onboarding (in-app, Bengali) ----
+// Play Store users must never have to dig through Settings: the app asks
+// for each permission itself, one step at a time, with a Bengali reason,
+// and opens the exact page (or the in-app dialog) for that step. Two
+// permissions cannot be granted from inside the app at all (exact alarms
+// and autostart need a toggle on a system page) — the app opens that exact
+// page directly so the user only flips one switch.
+const ONBOARD_STEPS = [
+  { id:"notifications", icon:"🔔", title: Lb("নোটিফিকেশন", "Notifications"),
+    why: Lb("আজান ও নামাজের আগের নোটিফিকেশন দেখাতে এই অনুমতি লাগে।", "Needed to show the azan and pre-prayer notifications."),
+    btn: Lb("অনুমতি দিন", "Grant permission") },
+  { id:"exact", icon:"⏰", title: Lb("সঠিক সময়ের অ্যালার্ম", "Exact-time alarms"),
+    why: Lb("নামাজের সময় হুবহু আজান বাজাতে ফোনের “Alarms & reminders” চালু করতে হয় — অ্যাপ নিজেই সঠিক পাতাটা খুলে দেবে, শুধু সুইচটা চালু করবেন।", "To ring the azan exactly on time, the phone's “Alarms & reminders” must be on — the app opens that exact page; just flip the switch."),
+    btn: Lb("সেটিংস খুলুন", "Open settings") },
+  { id:"battery", icon:"🔋", title: Lb("ব্যাটারি — No restrictions", "Battery — No restrictions"),
+    why: Lb("ফোন ঘুমিয়ে গেলেও (ব্যাটারি সেভার) আজান যাতে ঠিক সময়ে বাজে।", "So the azan still rings on time even when the phone is asleep (battery saver)."),
+    btn: Lb("অনুমতি দিন", "Grant permission") },
+  { id:"autostart", icon:"🚀", title: Lb("অটোস্টার্ট", "Autostart"),
+    why: Lb("ফোন চালু হলে বা অ্যাপ বন্ধ হয়ে গেলে নিজে থেকে আবার চালু থাকতে — Xiaomi ফোনে এটা না থাকলে আজান বন্ধ হয়ে যায়।", "So the app restarts by itself when the phone boots or the app is closed — on Xiaomi phones the azan stops without it."),
+    btn: Lb("সেটিংস খুলুন", "Open settings") },
+];
+let onboardIdx = 0; let onboardDone = {};
+function onboardPA(){ return (typeof window.Capacitor !== "undefined" && window.Capacitor.Plugins) ? window.Capacitor.Plugins.PrayerAlarm : null; }
+async function refreshOnboardStatus(){
+  const PA = onboardPA();
+  if (PA && PA.getStatus){ try { const s = await PA.getStatus();
+    onboardDone.notifications = !!s.notificationsGranted;
+    onboardDone.exact = !!s.exactAlarmGranted;
+    onboardDone.battery = !!s.batteryExempt;
+  } catch(e){} }
+  renderOnboard();
+}
+function openPermOnboard(){
+  onboardIdx = 0; onboardDone = {};
+  const o = $("#perm-onboard"); if (!o) return;
+  o.style.display = "flex";
+  refreshOnboardStatus();
+}
+function closePermOnboard(){ const o = $("#perm-onboard"); if (o) o.style.display = "none"; }
+function renderOnboard(){
+  const o = $("#perm-onboard"); if (!o || o.style.display === "none") return;
+  // skip steps already granted
+  while (onboardIdx < ONBOARD_STEPS.length && onboardDone[ONBOARD_STEPS[onboardIdx].id]) onboardIdx++;
+  if (onboardIdx >= ONBOARD_STEPS.length){ finishOnboard(); return; }
+  const st = ONBOARD_STEPS[onboardIdx];
+  $("#perm-dots").innerHTML = ONBOARD_STEPS.map((s,i)=>`<span class="perm-dot${onboardDone[s.id]?" done":(i===onboardIdx?" cur":"")}">${onboardDone[s.id]?"✓":(i+1)}</span>`).join("");
+  $("#perm-title").textContent = st.icon + " " + st.title;
+  $("#perm-why").textContent = st.why;
+  $("#perm-count").textContent = Lb("ধাপ", "Step") + " " + (onboardIdx+1) + " / " + ONBOARD_STEPS.length;
+  const b = $("#perm-action"); b.textContent = st.btn;
+  b.onclick = ()=>runOnboardStep(st.id);
+  const doneBtn = $("#perm-mark-done");
+  doneBtn.style.display = st.id === "autostart" ? "" : "none";
+  doneBtn.onclick = ()=>{ onboardDone.autostart = true; advanceOnboard(); };
+}
+function advanceOnboard(){ onboardIdx++; renderOnboard(); }
+async function runOnboardStep(id){
+  const PA = onboardPA();
+  try {
+    if (PA && PA.requestStep){ await PA.requestStep({ step: id }); }
+    else if (id === "notifications" && "Notification" in window){ await Notification.requestPermission(); }
+    else { toast(Lb("ফোনের Settings থেকে চালু করুন", "Please turn it on from the phone Settings")); }
+  } catch(e){}
+  // The system page/dialog returns to the app — re-check the real status
+  // (renderOnboard skips steps that are now granted). Autostart cannot be
+  // detected, so it waits for the user's own "চালু করেছি" tap.
+  setTimeout(()=>refreshOnboardStatus(), 800);
+  setTimeout(()=>refreshOnboardStatus(), 2500);
+}
+function skipOnboardStep(){ advanceOnboard(); }
+function finishOnboard(){
+  settings.onboarded = true; settings.permAsked = true; saveSettings();
+  closePermOnboard(); syncPrayerAlarms(); refreshAlarmStatus();
+}
+function skipOnboardAll(){ finishOnboard(); }
 let currentQTab = "all";
 function applyTheme(){ document.documentElement.setAttribute("data-theme", settings.theme);
   const dark = $("#set-dark"); if (dark) dark.checked = settings.theme==="dark"; }
@@ -5089,7 +5166,11 @@ function bindEvents(){
   const naflRef = $("#btn-nafl-ref");
   if (naflRef) naflRef.onclick=()=>{ const r = $("#nafl-ref"); if (r) r.classList.toggle("hidden"); };
   const permBtn = $("#btn-permissions");
-  if (permBtn) permBtn.onclick=()=>requestAllPermissions();
+  if (permBtn) permBtn.onclick=()=>openPermOnboard();
+  const permSkipStep = $("#perm-skip-step");
+  if (permSkipStep) permSkipStep.onclick=()=>skipOnboardStep();
+  const permSkipAll = $("#perm-skip-all");
+  if (permSkipAll) permSkipAll.onclick=()=>skipOnboardAll();
   // Fasting hadith swipe (left/right) on the hadith card.
   const fh = $("#fast-hadith");
   if (fh){
@@ -5196,7 +5277,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
      hidden — re-render the moment it comes back, and pick up a
      location saved in another tab. */
   const resyncCountdown = ()=>{ renderPrayers(); if (timingsDate !== ddmmyyyy()) initPrayers(); };
-  document.addEventListener("visibilitychange", ()=>{ if (!document.hidden){ resyncCountdown(); syncPrayerAlarms(); refreshAlarmStatus(); } }); // Fix #19: re-sync alarms on foreground — granting the exact-alarm permission in Settings and returning now arms the alarms (before this, a grant after the first sync left every alarm unarmed until a full restart, with no warning)
+  document.addEventListener("visibilitychange", ()=>{ if (!document.hidden){ resyncCountdown(); syncPrayerAlarms(); refreshAlarmStatus(); refreshOnboardStatus(); } }); // Fix #19: re-sync alarms on foreground — granting the exact-alarm permission in Settings and returning now arms the alarms (before this, a grant after the first sync left every alarm unarmed until a full restart, with no warning). Fix #25: also refresh the onboarding steps when returning from a Settings page.
   window.addEventListener("focus", resyncCountdown);
   window.addEventListener("storage", resyncCountdown);
   setInterval(checkDhikrReminders, 20000);

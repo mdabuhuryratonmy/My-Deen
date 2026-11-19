@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
 import android.provider.Settings;
 import androidx.core.content.ContextCompat;
 import com.getcapacitor.JSArray;
@@ -117,7 +118,102 @@ public class PrayerAlarmPlugin extends Plugin {
         ret.put("notificationsGranted", notificationsGranted());
         ret.put("exactAlarmGranted", exactAlarmGranted());
         ret.put("alarmsScheduled", AlarmScheduler.readStored(getContext()).length());
+        // Fix #25: battery exemption (Doze) decides whether alarms ring
+        // while the phone sleeps.
+        ret.put("batteryExempt", batteryExempt());
         call.resolve(ret);
+    }
+
+    /**
+     * Fix #25 — first-launch onboarding: one step at a time, each with a
+     * Bengali explanation in the app. "notifications" asks the runtime
+     * permission only (in-app dialog); "exact" opens the exact-alarm
+     * Settings page directly; "battery" asks the system battery-exemption
+     * dialog; "autostart" opens MIUI's autostart page (or the app's
+     * Settings page on other phones). Android does not let any app grant
+     * exact alarms or autostart itself — the app opens the exact page so
+     * the user only flips one switch, never digs through Settings.
+     */
+    @PluginMethod
+    public void requestStep(PluginCall call) {
+        String step = call.getString("step", "");
+        if ("notifications".equals(step)) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                    && getPermissionState("notifications") != PermissionState.GRANTED) {
+                requestPermissionForAlias("notifications", call, "notificationsOnlyCallback");
+                return;
+            }
+            JSObject ret = new JSObject();
+            ret.put("granted", notificationsGranted());
+            call.resolve(ret);
+            return;
+        }
+        if ("exact".equals(step)) {
+            openExactAlarmSettingsIfNeeded();
+            JSObject ret = new JSObject();
+            ret.put("opened", !exactAlarmGranted());
+            call.resolve(ret);
+            return;
+        }
+        if ("battery".equals(step)) {
+            if (!batteryExempt()) {
+                try {
+                    Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                    intent.setData(Uri.parse("package:" + getContext().getPackageName()));
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    getContext().startActivity(intent);
+                } catch (Exception ignored) {}
+            }
+            JSObject ret = new JSObject();
+            ret.put("opened", !batteryExempt());
+            call.resolve(ret);
+            return;
+        }
+        if ("autostart".equals(step)) {
+            openAutostartSettings();
+            JSObject ret = new JSObject();
+            ret.put("opened", true);
+            call.resolve(ret);
+            return;
+        }
+        call.reject("unknown step");
+    }
+
+    @PermissionCallback
+    private void notificationsOnlyCallback(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("granted", notificationsGranted());
+        call.resolve(ret);
+    }
+
+    private boolean batteryExempt() {
+        try {
+            PowerManager pm = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
+            return pm == null || pm.isIgnoringBatteryOptimizations(getContext().getPackageName());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** MIUI autostart page (Xiaomi/HyperOS); falls back to the app's
+        Settings page on other phones. Autostart cannot be detected
+        programmatically, so the app asks the user to confirm. */
+    private void openAutostartSettings() {
+        try {
+            Intent intent = new Intent();
+            intent.setComponent(new android.content.ComponentName(
+                    "com.miui.securitycenter",
+                    "com.miui.permcenter.autostart.AutoStartManagementActivity"));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            return;
+        } catch (Exception ignored) {}
+        try {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            intent.setData(Uri.parse("package:" + getContext().getPackageName()));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+        } catch (Exception ignored) {}
     }
 
     @PluginMethod
