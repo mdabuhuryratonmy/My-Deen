@@ -26,7 +26,7 @@ globalThis.forbiddenWindows=forbiddenWindows; globalThis.nextEvent=nextEvent;
 globalThis.buildPrayerAlarmList=buildPrayerAlarmList; globalThis.renderPrayers=renderPrayers;
 globalThis.renderCalendarPage=renderCalendarPage; globalThis.openPrayerDetail=openPrayerDetail;
 globalThis.updateDetailTime=updateDetailTime; globalThis.renderAlarmPage=renderAlarmPage;
-globalThis.renderLoginState=renderLoginState; globalThis.renderFastHadith=renderFastHadith;
+globalThis.renderLoginState=renderLoginState; globalThis.renderReminderSettings=renderReminderSettings; globalThis.dhikrMinFromOffset=dhikrMinFromOffset; globalThis.renderFastHadith=renderFastHadith;
 globalThis.renderFastSchedule=renderFastSchedule; globalThis.renderFasting=renderFasting;
 globalThis.FASTING_HADITHS=FASTING_HADITHS; globalThis.PREAZAN_TEXTS=PREAZAN_TEXTS;
 globalThis.TAHAJJUD_TEXT=TAHAJJUD_TEXT; globalThis.ALARM_SOUNDS=ALARM_SOUNDS;
@@ -172,6 +172,22 @@ check("no manual-location wording left in app.js",
   !src.includes("শহরের নাম লিখে ম্যানুয়ালি") && !src.includes("or type your city in Settings") && !src.includes("নিচের শহর ব্যবহার হবে") && !src.includes("the city below is used"));
 check("loc-setup modal keeps GPS + Later only",
   html.includes('id="btn-loc-allow"') && html.includes('id="btn-loc-close"'));
+
+// ---- Fix #5 (part 2): Durood reminder uses the prayer-style slider ----
+check("dhikrMinFromOffset: 0→30, +5→35, −10→20, clamps at 1 and 60",
+  typeof dhikrMinFromOffset === "function" && dhikrMinFromOffset(0)===30 && dhikrMinFromOffset(5)===35 && dhikrMinFromOffset(-10)===20 && dhikrMinFromOffset(-30)===1 && dhikrMinFromOffset(30)===60);
+settings.duroodRemOn = true; settings.duroodRemMin = 30; settings.astaghRemOn = true; settings.astaghRemMin = 30;
+renderReminderSettings();
+const remHtml = els["#reminder-settings"].innerHTML;
+check("durood reminder has −30..+30 slider, 1-min steps, middle = exact time",
+  remHtml.includes('data-rem-slider="durood"') && remHtml.includes('min="-30"') && remHtml.includes('max="30"') && remHtml.includes('step="1"') && remHtml.includes('value="0"') && remHtml.includes("সঠিক সময়"));
+check("durood reminder has no fixed chips any more", !remHtml.includes('data-rem-min="durood:'));
+check("astaghfirullah reminder still has 10/20/30 chips",
+  remHtml.includes('data-rem-min="astagh:10"') && remHtml.includes('data-rem-min="astagh:30"'));
+settings.duroodRemMin = 35; renderReminderSettings();
+check("durood slider value follows the saved interval (35 min → +5)",
+  els["#reminder-settings"].innerHTML.includes('data-rem-slider="durood"') && els["#reminder-settings"].innerHTML.includes('value="5"'));
+settings.duroodRemMin = 30;
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
