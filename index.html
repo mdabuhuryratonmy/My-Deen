@@ -34,6 +34,14 @@
   <main>
     <!-- ============ HOME ============ -->
     <section class="view active" id="view-home">
+      <div class="home-top">
+        <div class="home-date"><span class="home-cal">📅</span><div><div class="home-date-hijri" id="home-date-hijri">…</div><div class="home-date-greg" id="home-date-greg">…</div></div></div>
+        <div class="home-actions">
+          <button class="icon-btn" id="btn-home-share" title="শেয়ার করুন">↗️</button>
+          <button class="icon-btn" id="btn-home-notif" title="নোটিফিকেশন">🔔<span class="badge hidden" id="home-notif-badge">১</span></button>
+        </div>
+      </div>
+
       <div class="card ring-hero" id="ring-hero" data-sky="day">
         <div class="ring-wrap">
           <svg class="ring-svg" viewBox="0 0 220 220" aria-hidden="true">
@@ -41,30 +49,20 @@
             <circle class="ring-fg" id="ring-fg" cx="110" cy="110" r="96"></circle>
           </svg>
           <div class="ring-center">
-            <div class="ring-moon">🌙</div>
             <div class="small" id="ring-label">পরের নামাজ</div>
             <div class="ring-name" id="ring-name">—</div>
             <div class="ring-count" id="ring-count">--:--:--</div>
             <div class="ring-sub" id="ring-sub">শেষ হতে বাকি</div>
           </div>
         </div>
+        <div class="ring-moon" id="ring-sky-ic">☀️</div>
         <div class="pills">
           <span class="pill" id="pill-loc">📍 —</span>
           <span class="pill" id="pill-sun">🌅 — • 🌇 —</span>
         </div>
       </div>
 
-      <div class="card">
-        <div class="row between"><h2 data-i18n="myLocation">📍 আমার অবস্থান</h2><span class="muted small" id="home-loc-coords"></span></div>
-        <p style="margin:6px 0 2px; font-size:16px; font-weight:600" id="home-loc-text">—</p>
-        <p class="muted small" id="home-loc-status">কোনো অবস্থান সেট করা নেই — নামাজের সঠিক সময়ের জন্য অবস্থান সেট করুন।</p>
-        <div class="row mt"><button class="btn block" id="btn-home-detect-loc" data-i18n="locAutoBtn">📍 ম্যাপ থেকে লোকেশন অটো সেট করুন</button></div>
-        <p class="muted small mt">“অটো সেট”-এ চাপ দিলে ফোনের GPS থেকে আপনার বর্তমান অবস্থান নেওয়া হবে (অনুমতি দিতে হবে)।</p>
-      </div>
-
-      <div class="card">
-        <div class="row between"><h2 id="h-prayers" data-i18n="prayersToday">আজকের নামাজের সময়</h2><span class="muted small" id="prayer-city">—</span></div>
-        <p class="muted small" style="margin:2px 0 4px">কোনো ওয়াক্তে চাপ দিলে সেই ওয়াক্তের অ্যালার্ম সেটিংস খুলবে।</p>
+      <div class="card prayer-card">
         <div id="prayer-list"><p class="muted">সময় লোড হচ্ছে…</p></div>
       </div>
 
@@ -74,13 +72,17 @@
         <button class="home-nav-btn" id="btn-home-calendar">📅 ক্যালেন্ডার</button>
       </div>
 
-      <div class="card">
-        <div class="row between"><h2>🎯 টপ ফিচার</h2><button class="btn ghost" id="btn-more-features">আরও দেখুন</button></div>
+      <div class="home-section">
+        <div class="row between"><h2 class="sec-title">🎯 টপ ফিচার</h2><button class="btn ghost" id="btn-more-features">আরও দেখুন</button></div>
         <div class="feat-grid">
           <button class="feat-item" id="feat-tracker"><span class="feat-ring" id="feat-tracker-ring">০%</span><span>ট্র্যাকার</span></button>
           <button class="feat-item" id="feat-quran"><span class="feat-ic">📖</span><span>কুরআন</span></button>
           <button class="feat-item" id="feat-qibla"><span class="feat-ic">🕋</span><span>কিবলা</span></button>
           <button class="feat-item" id="feat-ruqyah"><span class="feat-ic">🛡️</span><span>রুকইয়াহ</span></button>
+          <button class="feat-item" id="feat-tilawat"><span class="feat-ic">🎧</span><span>তিলাওয়াত</span></button>
+          <button class="feat-item" id="feat-tafsir"><span class="feat-ic">📚</span><span>তাফসীর</span></button>
+          <button class="feat-item" id="feat-names"><span class="feat-ic">الله</span><span>৯৯ নাম</span></button>
+          <button class="feat-item" id="feat-tasbih"><span class="feat-ic">📿</span><span>তাসবিহ</span></button>
         </div>
       </div>
 
@@ -94,30 +96,15 @@
         <div class="row mt"><button class="btn gold block" id="btn-go-learn" data-i18n="learnOpen">শেখা শুরু করুন →</button></div>
       </div>
 
-      <div class="card" id="quran-tracker-card">
-        <div class="row between"><h2 data-i18n="quranTracker">কুরআন ট্র্যাকার</h2><span class="muted small" id="quran-progress-text">০%</span></div>
-        <div class="progress"><div id="quran-progress-bar" style="width:0%"></div></div>
-        <p class="muted small mt" id="quran-progress-detail">—</p>
-        <div class="row mt"><button class="btn ghost block" id="btn-go-quran" data-i18n="readQuran">কুরআন পড়ুন →</button></div>
-      </div>
-
-      <div class="card">
-        <h2 id="h-tracker" data-i18n="tracker">নামাজের হিসাব (আজ)</h2>
-        <div id="tracker-today"></div>
-        <div class="mt"><div class="row between small"><span data-i18n="last7">গত ৭ দিন</span><b id="week-summary">—</b></div>
-        <div class="week-dots" id="week-dots"></div></div>
-        <div class="mt small muted" id="month-summary">—</div>
-      </div>
-
-      <div class="card">
-        <div class="row between"><h2 data-i18n="forbiddenTitle">সালাতের নিষিদ্ধ সময়</h2><button class="link-btn" id="btn-forbidden-ref">রেফারেন্স দেখুন</button></div>
+      <div class="home-section" id="forbid-section">
+        <div class="row between"><h2 class="sec-title forbid-title" data-i18n="forbiddenTitle">সালাতের নিষিদ্ধ সময়</h2><button class="link-btn" id="btn-forbidden-ref">রেফারেন্স দেখুন</button></div>
         <p class="muted small">এই সময়গুলোতে সালাত আদায় নিষিদ্ধ (ব্যতিক্রম: সূর্যাস্তকালীন একই দিনের আসর সালাত)</p>
         <p class="muted small hidden" id="forbidden-ref">সহিহ মুসলিম ৮৩১ — সূর্যোদয়, ঠিক দুপুর ও সূর্যাস্তের সময় সালাত নিষিদ্ধ। আসরের ব্যতিক্রম: সহিহ বুখারি ৫৫৬ — সূর্য ডোবার আগে আসরের এক রাকাত পেলে পুরো আসর পাওয়া গেল।</p>
         <div id="forbidden-list"></div>
       </div>
 
-      <div class="card nafl-card" id="nafl-card">
-        <div class="row between"><h2 data-i18n="naflTitle">নফল সালাতের সময়</h2><button class="link-btn" id="btn-nafl-ref">রেফারেন্স দেখুন</button></div>
+      <div class="home-section" id="nafl-section">
+        <div class="row between"><h2 class="sec-title" data-i18n="naflTitle">নফল সালাতের সময়</h2><button class="link-btn" id="btn-nafl-ref">রেফারেন্স দেখুন</button></div>
         <p class="muted small hidden" id="nafl-ref"></p>
         <div id="nafl-rows"></div>
         <div class="nafl-strip">
@@ -125,12 +112,7 @@
           <div class="nafl-cell"><b id="nafl-iftar">—</b><span id="nafl-iftar-label">পরবর্তী ইফতার</span></div>
           <div class="nafl-cell"><b id="nafl-count">--:--:--</b><span id="nafl-count-label">ইফতারের বাকি</span></div>
         </div>
-        <button class="btn ghost block mt" id="btn-go-fasting">বড় করে দেখুন ›</button>
-      </div>
-
-      <div class="row mt">
-        <button class="btn block" id="btn-go-alarm">⏰ অ্যালার্ম</button>
-        <button class="btn ghost block" id="btn-go-calendar">📅 ক্যালেন্ডার</button>
+        <div class="center mt"><button class="link-btn" id="btn-go-fasting">বড় করে দেখুন ›</button></div>
       </div>
     </section>
 
