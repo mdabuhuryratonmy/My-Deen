@@ -26,7 +26,7 @@ globalThis.forbiddenWindows=forbiddenWindows; globalThis.nextEvent=nextEvent;
 globalThis.buildPrayerAlarmList=buildPrayerAlarmList; globalThis.renderPrayers=renderPrayers;
 globalThis.renderCalendarPage=renderCalendarPage; globalThis.openPrayerDetail=openPrayerDetail;
 globalThis.updateDetailTime=updateDetailTime; globalThis.renderAlarmPage=renderAlarmPage;
-globalThis.renderLoginState=renderLoginState; globalThis.renderReminderSettings=renderReminderSettings; globalThis.dhikrMinFromOffset=dhikrMinFromOffset; globalThis.renderFastHadith=renderFastHadith;
+globalThis.renderLoginState=renderLoginState; globalThis.renderReminderSettings=renderReminderSettings; globalThis.dhikrMinFromOffset=dhikrMinFromOffset; globalThis.renderTracker=renderTracker; globalThis.renderFastHadith=renderFastHadith;
 globalThis.renderFastSchedule=renderFastSchedule; globalThis.renderFasting=renderFasting;
 globalThis.FASTING_HADITHS=FASTING_HADITHS; globalThis.PREAZAN_TEXTS=PREAZAN_TEXTS;
 globalThis.TAHAJJUD_TEXT=TAHAJJUD_TEXT; globalThis.ALARM_SOUNDS=ALARM_SOUNDS;
@@ -41,6 +41,7 @@ function check(name, ok, extra=""){ console.log((ok?"PASS":"FAIL")+" | "+name+(e
 
 const html = fs.readFileSync("/home/hatch/workspace/deen-day/www/index.html", "utf8");
 const sw = fs.readFileSync("/home/hatch/workspace/deen-day/www/sw.js", "utf8");
+const css = fs.readFileSync("/home/hatch/workspace/deen-day/www/styles.css", "utf8");
 __setTimings({Fajr:"05:42", Sunrise:"07:03", Dhuhr:"13:00", Asr:"16:24", Maghrib:"18:58", Isha:"20:10", Imsak:"05:32", Firstthird:"22:59", Lastthird:"03:01"});
 settings.lang = "bn";
 
@@ -188,6 +189,23 @@ settings.duroodRemMin = 35; renderReminderSettings();
 check("durood slider value follows the saved interval (35 min → +5)",
   els["#reminder-settings"].innerHTML.includes('data-rem-slider="durood"') && els["#reminder-settings"].innerHTML.includes('value="5"'));
 settings.duroodRemMin = 30;
+
+// ---- Fix #6: home matches the reference design (no ads) ----
+check("countdown ring hero is in the home HTML",
+  html.includes('id="ring-hero"') && html.includes('id="ring-name"') && html.includes('id="ring-count"') && html.includes('id="ring-sub"') && html.includes('id="pill-loc"') && html.includes('id="pill-sun"'));
+check("home has Alarm | Calendar buttons",
+  html.includes('id="btn-home-alarm"') && html.includes('id="btn-home-calendar"') && html.includes("অ্যালার্ম") && html.includes("ক্যালেন্ডার"));
+check("home has Top Features section (tracker, quran, qibla, ruqyah)",
+  html.includes("টপ ফিচার") && html.includes('id="feat-tracker"') && html.includes('id="feat-tracker-ring"') && html.includes('id="feat-quran"') && html.includes('id="feat-qibla"') && html.includes('id="feat-ruqyah"') && html.includes('id="btn-more-features"'));
+check("no home manual-location button left",
+  !html.includes("btn-home-manual-loc") && !html.includes("ম্যানুয়ালি শহর সেট করুন"));
+check("home nav + feature styles exist",
+  css.includes(".home-nav-row") && css.includes(".home-nav-btn") && css.includes(".feat-grid") && css.includes(".feat-ring"));
+check("no ad code anywhere in the app",
+  !src.includes("adsbygoogle") && !src.includes("AdMob") && !html.includes("adsbygoogle") && !html.includes("AdMob"));
+renderTracker();
+check("feat tracker ring shows today's prayer %",
+  els["#feat-tracker-ring"].textContent === "০%");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
