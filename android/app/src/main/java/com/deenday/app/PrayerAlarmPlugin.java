@@ -61,8 +61,11 @@ public class PrayerAlarmPlugin extends Plugin {
         try {
             for (int i = 0; i < alarms.length(); i++) {
                 JSONObject a = alarms.getJSONObject(i);
-                next.put(a);
-                if (AlarmScheduler.schedule(getContext(), a)) scheduled++;
+                // Fix #19: only store alarms that were actually armed —
+                // before this the full list was stored even when every
+                // alarm was skipped (exact alarms not permitted), so
+                // getStatus().alarmsScheduled lied about the real state.
+                if (AlarmScheduler.schedule(getContext(), a)) { scheduled++; next.put(a); }
                 else skipped++;
             }
         } catch (Exception e) {
