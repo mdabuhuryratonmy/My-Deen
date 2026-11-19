@@ -3,6 +3,8 @@ package com.deenday.app;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import org.json.JSONObject;
@@ -25,11 +27,18 @@ public class AlarmReceiver extends BroadcastReceiver {
             String title = intent.getStringExtra("title");
             String body = intent.getStringExtra("body");
             NotificationCompat.Builder builder = new NotificationCompat.Builder(context, type)
-                    .setSmallIcon(android.R.drawable.ic_dialog_info)
+                    // Fix #14: was android.R.drawable.ic_dialog_info (the
+                    // generic "i" in the screenshot). Small icon is the
+                    // white "ماي دين" silhouette (status bar + shade);
+                    // large icon is the full gold logo on emerald.
+                    .setSmallIcon(R.drawable.ic_notification)
                     .setContentTitle(title != null ? title : "My Deen")
                     .setContentText(body != null ? body : "")
                     .setAutoCancel(true)
                     .setPriority(NotificationCompat.PRIORITY_HIGH);
+            Bitmap largeIcon = BitmapFactory.decodeResource(
+                    context.getResources(), R.drawable.ic_notification_large);
+            if (largeIcon != null) builder.setLargeIcon(largeIcon);
             NotificationManagerCompat.from(context).notify(id, builder.build());
             // Daily alarm → same time tomorrow (based on the original
             // fire time, so a late delivery cannot drift the schedule).
