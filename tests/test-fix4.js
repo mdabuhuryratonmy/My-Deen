@@ -1,13 +1,14 @@
-// My Deen Fix #4 test (Node). Loads www/data/hadiths.js + www/app.js
+// My Deen Fix #4 + Fix #5 test (Node). Loads www/data/hadiths.js + www/app.js
 // (minus the DOMContentLoaded init) with a stubbed DOM/localStorage and
 // exercises the Fix #4 features: profile-photo + durood-test removal,
 // login behaviour, countdown ring, pre-azan texts, forbidden windows,
 // alarm list, detail slider, calendar cards, fasting hadiths.
+// Fix #5: profile form hides after save, manual location removed.
 const fs = require("fs");
 
 globalThis.localStorage = { _s:{}, getItem(k){return this._s[k]??null}, setItem(k,v){this._s[k]=v} };
 const els = {};
-function mkEl(){ return {textContent:"", innerHTML:"", value:"", checked:false, style:{}, options:[], classList:{add(){},remove(){},toggle(){},contains(){return false}}, dataset:{}, onclick:null, onchange:null, oninput:null, onkeydown:null, querySelector(){ return mkEl(); }, querySelectorAll(){ return [] }, setAttribute(){}, getAttribute(){ return null; }, addEventListener(){}, removeEventListener(){}, appendChild(){}, scrollIntoView(){}}; }
+function mkEl(){ const _cls = new Set(); return {textContent:"", innerHTML:"", value:"", checked:false, style:{}, options:[], classList:{add(c){_cls.add(c)},remove(c){_cls.delete(c)},toggle(c,f){ if(f===undefined) f=!_cls.has(c); if(f)_cls.add(c); else _cls.delete(c); },contains(c){return _cls.has(c)}}, dataset:{}, onclick:null, onchange:null, oninput:null, onkeydown:null, querySelector(){ return mkEl(); }, querySelectorAll(){ return [] }, setAttribute(){}, getAttribute(){ return null; }, addEventListener(){}, removeEventListener(){}, appendChild(){}, scrollIntoView(){}}; }
 globalThis.document = { addEventListener(){}, querySelector(s){ return els[s] || (els[s]=mkEl()); },
   querySelectorAll(){ return [] }, getElementById(id){ return els["#"+id] || (els["#"+id]=mkEl()); }, documentElement:{ setAttribute(){}, lang:"bn" } };
 globalThis.window = globalThis;
@@ -52,9 +53,12 @@ check("durood test button removed (source + HTML)",
 check("no profile photo markup in HTML",
   !html.includes("hdr-avatar") && !html.includes("profile-photo-input") && !html.includes("btn-change-photo") && !html.includes("gmail-status"));
 check("renderLoginState is a function", typeof renderLoginState === "function");
-settings.gmail = "test@gmail.com"; renderLoginState();
-check("login button hidden when Gmail is set", els["#btn-gmail-login"].classList.toggle !== undefined);
-settings.gmail = ""; renderLoginState();
+settings.profileName = "Abu huryra"; settings.gmail = "tonmyboss@gmail.com"; renderLoginState();
+check("profile form hidden after save, saved row shown with name",
+  els["#profile-form"].classList.contains("hidden") && !els["#profile-saved"].classList.contains("hidden") && els["#profile-saved-name"].textContent === "Abu huryra");
+settings.profileName = ""; settings.gmail = ""; renderLoginState();
+check("profile form returns after profile is cleared",
+  !els["#profile-form"].classList.contains("hidden") && els["#profile-saved"].classList.contains("hidden"));
 
 // ---- Fix #4 defaults ----
 check("offsets include Duha/Tahajjud/forbidden/Sehri/Iftar",
@@ -155,6 +159,19 @@ check("HTML has istighfar audio element", html.includes('id="audio-istighfar"') 
 check("HTML has share button", html.includes('id="btn-share"'));
 check("sw.js cache v20 + istighfar cached", sw.includes("my-deen-v20") && sw.includes("audio/istighfar.mp3"));
 check("no ads anywhere in source", !src.includes("admob") && !src.includes("AdMob") && !src.includes("adsbygoogle"));
+
+// ---- Fix #5: manual location removed, profile form hides after save ----
+check("no manual location UI in HTML",
+  !html.includes("loc-manual-form") && !html.includes("btn-loc-manual-toggle") && !html.includes("btn-loc-save") &&
+  !html.includes('id="set-city"') && !html.includes('id="set-country"') && !html.includes("loc-city-in") && !html.includes("loc-country-in"));
+check("profile form + saved row exist in HTML", html.includes('id="profile-form"') && html.includes('id="profile-saved"') && html.includes('id="profile-saved-name"'));
+check("no manual-location references left in app.js",
+  !src.includes('"#set-city"') && !src.includes('"#set-country"') && !src.includes('"#loc-manual-form"') &&
+  !src.includes('"#loc-city-in"') && !src.includes('"#btn-loc-save"') && !src.includes('"#btn-loc-manual-toggle"'));
+check("no manual-location wording left in app.js",
+  !src.includes("শহরের নাম লিখে ম্যানুয়ালি") && !src.includes("or type your city in Settings") && !src.includes("নিচের শহর ব্যবহার হবে") && !src.includes("the city below is used"));
+check("loc-setup modal keeps GPS + Later only",
+  html.includes('id="btn-loc-allow"') && html.includes('id="btn-loc-close"'));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
