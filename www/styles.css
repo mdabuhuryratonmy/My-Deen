@@ -395,6 +395,7 @@ hr.sep{border:none; border-top:1px solid var(--line); margin:14px 0}
 .ring-moon{font-size:26px; line-height:1}
 .ring-hero .small{font-size:13px; opacity:.92; margin-top:4px}
 .ring-name{font-size:22px; font-weight:700; color:#fff}
+.ring-name.forbid-msg{font-size:17px; line-height:1.55; font-weight:600}
 .ring-count{font-size:34px; font-weight:700; letter-spacing:1px; margin:2px 0}
 .ring-sub{font-size:13px; opacity:.92}
 .pills{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:16px}
