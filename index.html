@@ -357,29 +357,32 @@
     <section class="view" id="view-settings">
       <div class="card">
         <h2 data-i18n="profileTitle">প্রোফাইল</h2>
-        <p class="muted small">আপনার নাম ও Gmail ঠিকানা শুধু আপনার ফোনেই থাকে — কোনো সার্ভারে যায় না, কোনো পাসওয়ার্ড লাগে না।</p>
-        <label data-i18n="yourName">আপনার নাম</label>
-        <input type="text" id="set-profile-name" placeholder="নাম">
-        <label>Gmail ঠিকানা</label>
-        <input type="email" id="set-profile-gmail" placeholder="যেমন: example@gmail.com" autocomplete="email">
-        <div class="row mt">
-          <button class="btn gold block" id="btn-gmail-login">Gmail দিয়ে লগইন করুন</button>
+        <div id="profile-form">
+          <p class="muted small">আপনার নাম ও Gmail ঠিকানা শুধু আপনার ফোনেই থাকে — কোনো সার্ভারে যায় না, কোনো পাসওয়ার্ড লাগে না।</p>
+          <label data-i18n="yourName">আপনার নাম</label>
+          <input type="text" id="set-profile-name" placeholder="নাম">
+          <label>Gmail ঠিকানা</label>
+          <input type="email" id="set-profile-gmail" placeholder="যেমন: example@gmail.com" autocomplete="email">
+          <div class="row mt">
+            <button class="btn gold block" id="btn-gmail-login">Gmail দিয়ে লগইন করুন</button>
+          </div>
+          <div class="row mt">
+            <button class="btn block" id="btn-save-profile" data-i18n="saveBtn">সংরক্ষণ করুন</button>
+          </div>
         </div>
-        <div class="row mt">
-          <button class="btn block" id="btn-save-profile" data-i18n="saveBtn">সংরক্ষণ করুন</button>
-          <button class="btn ghost" id="btn-clear-profile" data-i18n="clearBtn">মুছুন</button>
+        <div id="profile-saved" class="hidden">
+          <p>✓ <span id="profile-saved-name"></span></p>
+          <div class="row mt">
+            <button class="btn ghost" id="btn-clear-profile" data-i18n="clearBtn">মুছুন</button>
+          </div>
         </div>
       </div>
       <div class="card">
         <h2 data-i18n="settingsTitle">সেটিংস</h2>
         <div class="switch-row"><span data-i18n="autoLocLabel">📍 অবস্থান স্বয়ংক্রিয়ভাবে নির্ণয় করুন</span>
           <label class="switch"><input type="checkbox" id="set-autoloc" checked><span class="slider"></span></label></div>
-        <p class="muted small" data-i18n="autoLocDesc">চালু থাকলে GPS থেকে আপনার শহর নিজে থেকেই সেট হবে (অনুমতি দিতে হবে)। বন্ধ থাকলে নিচের শহর ব্যবহার হবে।</p>
+        <p class="muted small" data-i18n="autoLocDesc">চালু থাকলে GPS থেকে আপনার শহর নিজে থেকেই সেট হবে (অনুমতি দিতে হবে)।</p>
         <div class="row mt"><button class="btn ghost block" id="btn-detect-loc" data-i18n="detectNow">📍 এখনই অবস্থান নির্ণয় করুন</button></div>
-        <label data-i18n="cityLabel">শহর</label>
-        <input type="text" id="set-city" placeholder="গ্রাম/শহরের নাম লিখুন / Type your village or city">
-        <label data-i18n="countryLabel">দেশ</label>
-        <input type="text" id="set-country" placeholder="দেশের নাম লিখুন / Type your country">
         <label data-i18n="methodLabel">নামাজের হিসাবের পদ্ধতি</label>
         <select id="set-method"></select>
         <label data-i18n="schoolLabel">আসরের মাজহাব</label>
@@ -458,18 +461,9 @@
 <div id="loc-setup" style="position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;z-index:98;padding:20px">
   <div class="card" style="max-width:420px;width:100%;max-height:88vh;overflow:auto">
     <h2>📍 অবস্থান সেট করুন</h2>
-    <p class="muted" style="line-height:1.7">নামাজের সঠিক সময় ও কিবলার জন্য আপনার অবস্থান দরকার। আগে থেকে কোনো শহর সেট করা নেই — নিচের দুটি উপায়ের যেকোনো একটিতে সেট করুন। পৃথিবীর যেকোনো জায়গায় সঠিক আজানের সময় পাওয়া যাবে।</p>
+    <p class="muted" style="line-height:1.7">নামাজের সঠিক সময় ও কিবলার জন্য আপনার অবস্থান দরকার। GPS দিয়ে অটো সেট করুন — পৃথিবীর যেকোনো জায়গায় সঠিক আজানের সময় পাওয়া যাবে।</p>
     <button class="btn block mt" id="btn-loc-allow">📍 Allow location — GPS দিয়ে অটো সেট করুন</button>
-    <p class="muted small mt">ফোনের লোকেশন অনুমতি চাইবে; Allow দিলে আপনার বর্তমান অবস্থান অনুযায়ী সময় সেট হয়ে যাবে। অনুমতি না দিলে নিচে ম্যানুয়ালি সেট করুন।</p>
-    <button class="btn ghost block mt" id="btn-loc-manual-toggle">✏️ Set manually — শহরের নাম লিখে সেট করুন</button>
-    <div id="loc-manual-form" class="hidden">
-      <label>শহর / City</label>
-      <input type="text" id="loc-city-in" placeholder="যেমন: Bagharpara, Jessore">
-      <label>দেশ / Country</label>
-      <input type="text" id="loc-country-in" placeholder="যেমন: Bangladesh">
-      <div class="row mt"><button class="btn gold block" id="btn-loc-save">সংরক্ষণ করুন / Save</button></div>
-      <p class="muted small mt" id="loc-manual-msg"></p>
-    </div>
+    <p class="muted small mt">ফোনের লোকেশন অনুমতি চাইবে; Allow দিলে আপনার বর্তমান অবস্থান অনুযায়ী সময় সেট হয়ে যাবে।</p>
     <button class="btn ghost block mt" id="btn-loc-close">পরে করব / Later</button>
   </div>
 </div>
