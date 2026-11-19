@@ -400,6 +400,26 @@ const maghPres = buildPrayerAlarmList().filter(a=>a.type==="preazan" && a.prayer
   .map(a=>dhakaWall(a.at.getTime()).join(":")).sort();
 check("Fix #12: Maghrib pre-azan alarms fire at 17:12 and 17:15 Jashore wall-clock",
   maghPres.join(",")==="17:12,17:15", maghPres.join(","));
+// Direct proof for the user's clarification: the RING itself (not just
+// the helper functions) must show the current waqt in the location's
+// timezone. Fake the device clock to 18:29 Malaysia and render home.
+const RealDate = Date;
+globalThis.Date = class extends RealDate {
+  constructor(...a){ super(...(a.length ? a : [devInstant.getTime()])); }
+  static now(){ return devInstant.getTime(); }
+};
+const _lang12 = settings.lang; settings.lang = "bn";
+renderPrayers();
+check("Fix #12 ring: at 18:29 MY (= 16:29 Jashore) the ring names Asr",
+  els["#ring-name"].textContent === "আসর", els["#ring-name"].textContent);
+check("Fix #12 ring: label is 'বর্তমান নামাজ', sub is 'শেষ হতে বাকি', count ০০:৩৩:০০",
+  els["#ring-label"].textContent === "বর্তমান নামাজ" &&
+  els["#ring-sub"].textContent === "শেষ হতে বাকি" &&
+  els["#ring-count"].textContent === "০০:৩৩:০০",
+  `${els["#ring-label"].textContent} / ${els["#ring-sub"].textContent} / ${els["#ring-count"].textContent}`);
+check("Fix #12 ring: the next prayer row is Maghrib (orange dot)",
+  els["#prayer-list"].innerHTML.includes('class="prayer-row next tappable" data-detail="Maghrib"'));
+globalThis.Date = RealDate; settings.lang = _lang12;
 Object.assign(settings, {country:_saved12.country, city:_saved12.city, lat:_saved12.lat, lon:_saved12.lon,
   tzName:_saved12.tzName, locId:_saved12.locId, tzLoc:_saved12.tzLoc, method:_saved12.method,
   school:_saved12.school, schoolExplicit:_saved12.schoolExplicit});
