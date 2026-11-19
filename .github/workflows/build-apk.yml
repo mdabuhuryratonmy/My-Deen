@@ -42,11 +42,16 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
+      # Runs #11/#14: android-actions/setup-android@v3 is broken — it
+      # installs cmdline-tools 16.0 then runs `sdkmanager tools`, but
+      # Google removed the "tools" package, so it always fails now.
+      # The runner already has the SDK preinstalled at
+      # /usr/local/lib/android/sdk with a working sdkmanager
+      # (cmdline-tools/latest, v20.0) — use it directly.
       - name: Install Android SDK platform 36
         run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
           yes | sdkmanager --licenses
           sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
