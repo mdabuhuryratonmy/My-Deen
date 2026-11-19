@@ -18,6 +18,8 @@ globalThis.requestAnimationFrame = () => 0;
 globalThis.cancelAnimationFrame = () => {};
 
 eval(fs.readFileSync("/home/hatch/workspace/deen-day/www/data/hadiths.js", "utf8"));
+eval(fs.readFileSync("/home/hatch/workspace/deen-day/www/data/duas.js", "utf8")); // DUAS, DUA_CATS, DHIKR_PRESETS
+eval(fs.readFileSync("/home/hatch/workspace/deen-day/www/assets/quran-meta.js", "utf8")); // bundled 114-surah meta (offline)
 const src = fs.readFileSync("/home/hatch/workspace/deen-day/www/app.js", "utf8");
 const cut = src.indexOf('document.addEventListener("DOMContentLoaded"');
 eval(src.slice(0, cut) + `
@@ -30,6 +32,22 @@ globalThis.renderForbidden=renderForbidden;
 globalThis.syncPrayerAlarms=syncPrayerAlarms; globalThis.refreshAlarmStatus=refreshAlarmStatus;
 globalThis.renderAlarmStatus=renderAlarmStatus; globalThis.nextAzanInfo=nextAzanInfo;
 globalThis.__getAlarmStatus=()=>alarmStatus;
+globalThis.togglePrayer=togglePrayer; globalThis.isDone=isDone;
+globalThis.tapTasbih=tapTasbih; globalThis.renderTasbih=renderTasbih;
+globalThis.__getTasbihCount=()=>tasbih.count;
+globalThis.renderDuaCats=renderDuaCats; globalThis.renderDuas=renderDuas;
+globalThis.__setDuaCat=v=>{ duaCat=v; };
+globalThis.banglaDate=banglaDate; globalThis.renderDates=renderDates;
+globalThis.checkAzan=checkAzan; globalThis.__getRungToday=()=>rungToday;
+globalThis.effMethod=effMethod; globalThis.methodForRegion=methodForRegion;
+globalThis.saveSettings=saveSettings; globalThis.fillSettings=fillSettings;
+globalThis.updateNotifBadge=updateNotifBadge;
+globalThis.toggleSurahRead=toggleSurahRead; globalThis.quranAyahsRead=quranAyahsRead;
+globalThis.renderQuranProgress=renderQuranProgress;
+globalThis.__setSurahMeta=v=>{ surahMeta=v; };
+globalThis.renderSurahList=renderSurahList; globalThis.TOTAL_AYAH=TOTAL_AYAH;
+globalThis.validSurahMeta=validSurahMeta;
+globalThis.SEHRI_ID=SEHRI_ID; globalThis.IFTAR_ID=IFTAR_ID; globalThis.TAHAJJUD_ID=TAHAJJUD_ID; globalThis.DUHA_ID=DUHA_ID;
 globalThis.renderCalendarPage=renderCalendarPage; globalThis.openPrayerDetail=openPrayerDetail;
 globalThis.updateDetailTime=updateDetailTime; globalThis.renderAlarmPage=renderAlarmPage;
 globalThis.renderLoginState=renderLoginState; globalThis.renderReminderSettings=renderReminderSettings; globalThis.dhikrMinFromOffset=dhikrMinFromOffset; globalThis.renderTracker=renderTracker; globalThis.renderFastHadith=renderFastHadith;
@@ -640,6 +658,133 @@ Object.assign(settings, _savedTz);
     check("Fix #19: native stores only armed alarms (getStatus count is honest)",
       fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/PrayerAlarmPlugin.java", "utf8").includes("if (AlarmScheduler.schedule(getContext(), a)) { scheduled++; next.put(a); }"),
       "store armed only");
+
+    // ---- Fix #20: two-step verification — EVERY feature/option checked ----
+    // Salah tracker: mark one prayer, the ring shows 20%; unmark, back to 0%.
+    togglePrayer("Fajr");
+    check("Fix #20: salah tracker marks Fajr prayed and the ring shows 20%",
+      isDone("Fajr") && els["#feat-tracker-ring"].textContent === "২০%", els["#feat-tracker-ring"].textContent);
+    togglePrayer("Fajr");
+    check("Fix #20: salah tracker unmarks Fajr and the ring shows 0%",
+      !isDone("Fajr") && els["#feat-tracker-ring"].textContent === "০%", els["#feat-tracker-ring"].textContent);
+    // Tasbih: 3 taps → count 3, bar ~9% of the 33 target.
+    tapTasbih(); tapTasbih(); tapTasbih(); renderTasbih();
+    check("Fix #20: tasbih counts 3 taps and the bar fills ~9% of target 33",
+      __getTasbihCount() === 3 && els["#tasbih-count"].textContent === "৩" &&
+      parseFloat(els["#tasbih-bar"].style.width) > 9 && parseFloat(els["#tasbih-bar"].style.width) < 9.1,
+      els["#tasbih-bar"].style.width);
+    // Duas: real bundled data renders; category filter narrows it.
+    renderDuaCats(); renderDuas();
+    const _duaAll = (els["#dua-list"].innerHTML.match(/class="dua"/g) || []).length;
+    const _cat0 = globalThis.DUA_CATS.find(c=>c.id !== "all" && c.id !== "saved").id;
+    __setDuaCat(_cat0); renderDuas();
+    const _duaCat = (els["#dua-list"].innerHTML.match(/class="dua"/g) || []).length;
+    __setDuaCat("all");
+    check("Fix #20: duas render from bundled data and the category filter narrows them",
+      globalThis.DUAS.length >= 10 && globalThis.DUA_CATS.length >= 4 &&
+      _duaAll === globalThis.DUAS.length && _duaCat > 0 && _duaCat < _duaAll,
+      `${_duaAll} all, ${_duaCat} in ${_cat0}`);
+    // Quran: bundled 114-surah meta (offline) renders; search works; a failed
+    // list shows a retry button, never a misleading empty list.
+    check("Fix #20: bundled Quran meta is complete (114 surahs, offline)",
+      validSurahMeta(window.QURAN_META) && window.QURAN_META.length === 114, String(window.QURAN_META.length));
+    renderSurahList();
+    check("Fix #20: Quran list renders all 114 surahs",
+      (els["#surah-list"].innerHTML.match(/data-surah="/g) || []).length === 114, "114 rows");
+    renderSurahList("fatiha");
+    check("Fix #20: Quran search finds Al-Faatiha (common spelling)",
+      (els["#surah-list"].innerHTML.match(/data-surah="/g) || []).length === 1, "1 row");
+    renderSurahList("faatiha");
+    check("Fix #21: Quran search still finds Al-Faatiha with the original spelling",
+      (els["#surah-list"].innerHTML.match(/data-surah="/g) || []).length === 1, "1 row");
+    renderSurahList("baqara");
+    check("Fix #21: Quran search finds Al-Baqara",
+      (els["#surah-list"].innerHTML.match(/data-surah="/g) || []).length === 1, "1 row");
+    __setSurahMeta(null); renderSurahList();
+    check("Fix #20: a missing surah list shows a retry button, not an empty list",
+      els["#surah-list"].innerHTML.includes("btn-retry-surah"), "retry shown");
+    __setSurahMeta(window.QURAN_META);
+    // Quran progress: marking Al-Faatiha read counts its 7 ayahs of 6236.
+    toggleSurahRead(1);
+    check("Fix #20: Quran progress counts Al-Faatiha's 7 ayahs of 6236",
+      quranAyahsRead() === 7 && els["#quran-progress-detail"].textContent.includes("৭") &&
+      els["#quran-progress-detail"].textContent.includes("৬২৩৬"),
+      els["#quran-progress-detail"].textContent);
+    toggleSurahRead(1);
+    // Bengali dates (pure local calc): 14 Apr 2026 = 1 Boishakh 1433,
+    // 19 Nov 2026 = 5 Ogrohayon 1433. Home dates render with a "…" Hijri
+    // placeholder when the Hijri info has not loaded yet.
+    const _bd1 = banglaDate(new Date(2026, 3, 14)), _bd2 = banglaDate(new Date(2026, 10, 19));
+    check("Fix #20: Bangla dates are correct (14 Apr 2026 = 1 Boishakh 1433; 19 Nov 2026 = 5 Ogrohayon 1433)",
+      _bd1.day === 1 && _bd1.month === 0 && _bd1.year === 1433 && _bd2.day === 5 && _bd2.month === 7 && _bd2.year === 1433,
+      `${_bd1.text} / ${_bd2.text}`);
+    renderDates();
+    check("Fix #20: home dates render (Gregorian shown, Hijri '…' until it loads)",
+      els["#date-line"].innerHTML.includes("নভেম্বর") && els["#date-line"].innerHTML.includes("…"), "dates ok");
+    // In-app azan: silent at 18:57, fires exactly once at the 18:58 Maghrib minute.
+    els["#audio-azan"].play = ()=>Promise.resolve();
+    const RealDate20 = Date;
+    const _tz20 = settings.tzName; settings.tzName = "";
+    let t20 = new Date(); t20.setHours(18, 57, 0, 0);
+    globalThis.Date = class extends RealDate20 {
+      constructor(...a){ super(...(a.length ? a : [t20.getTime()])); }
+      static now(){ return t20.getTime(); }
+    };
+    checkAzan();
+    check("Fix #20: in-app azan does NOT fire one minute before Maghrib",
+      Object.keys(__getRungToday()).length === 0, "no ring at 18:57");
+    t20 = new Date(); t20.setHours(18, 58, 0, 0);
+    checkAzan();
+    check("Fix #20: in-app azan fires exactly once at the Maghrib minute (18:58)",
+      Object.keys(__getRungToday()).length === 1 && Object.keys(__getRungToday())[0].endsWith("Maghrib"),
+      Object.keys(__getRungToday()).join(","));
+    globalThis.Date = RealDate20; settings.tzName = _tz20;
+    // Alarm list extras: Sehri / Iftar / Tahajjud / Duha entries appear only
+    // when their toggle is on.
+    const _al0 = buildPrayerAlarmList().map(a=>a.id);
+    check("Fix #20: Sehri/Iftar/Tahajjud/Duha alarms are OFF by default",
+      !_al0.includes(SEHRI_ID) && !_al0.includes(IFTAR_ID) && !_al0.includes(TAHAJJUD_ID) && !_al0.includes(DUHA_ID), "off");
+    settings.alarmOn.Sehri = true; settings.alarmOn.Iftar = true;
+    settings.alarmOn.Tahajjud = true; settings.alarmOn.Duha = true;
+    const _al1 = buildPrayerAlarmList().map(a=>a.id);
+    check("Fix #20: Sehri/Iftar/Tahajjud/Duha alarms appear when switched on",
+      _al1.includes(SEHRI_ID) && _al1.includes(IFTAR_ID) && _al1.includes(TAHAJJUD_ID) && _al1.includes(DUHA_ID), "on");
+    settings.alarmOn.Sehri = false; settings.alarmOn.Iftar = false;
+    settings.alarmOn.Tahajjud = false; settings.alarmOn.Duha = false;
+    // Calculation method: Malaysia auto-picks JAKIM (17); an explicit pick wins.
+    const _savedM = {country: settings.country, method: settings.method};
+    settings.country = "Malaysia"; settings.method = 0;
+    check("Fix #20: method auto-picks JAKIM (17) for Malaysia", effMethod() === 17, String(effMethod()));
+    settings.method = 1;
+    check("Fix #20: an explicit calculation method wins over auto", effMethod() === 1, String(effMethod()));
+    Object.assign(settings, _savedM);
+    // Settings round-trip: save → localStorage holds it; fillSettings shows it.
+    settings.tasbihTarget = 99; saveSettings();
+    check("Fix #20: settings save to localStorage",
+      JSON.parse(localStorage.getItem("dd_settings")).tasbihTarget === 99, "saved 99");
+    settings.tasbihTarget = 33; saveSettings();
+    fillSettings();
+    check("Fix #20: settings page shows the saved values",
+      els["#set-azan"].checked === true && els["#set-profile-name"].value === (settings.profileName || ""), "shown");
+    // Notification badge: hidden once today's feed is seen, shown otherwise.
+    store.set("notif_seen", todayKey()); updateNotifBadge();
+    check("Fix #20: notification badge hides after today's feed is seen",
+      els["#notif-badge"].classList.contains("hidden") === true, "hidden");
+    store.set("notif_seen", ""); updateNotifBadge();
+    check("Fix #20: notification badge shows when today's feed is unseen",
+      els["#notif-badge"].classList.contains("hidden") === false, "shown");
+    // Structure: every view and every settings control exists; no ad SDK.
+    const _views = ["home","notif","quran","reader","tasbih","duas","learn","ruqyah","qibla","fasting","alarm","prayer-detail","calendar","settings","privacy"];
+    check("Fix #20: all 15 views exist in the app",
+      _views.every(v=>html.includes(`id="view-${v}"`)), `${_views.length} views`);
+    const _sets = ["set-adhan","set-autoloc","set-azan","set-daily","set-dark","set-durood","set-lang","set-method","set-notif","set-profile-gmail","set-profile-name","set-reciter","set-school"];
+    check("Fix #20: all 13 settings controls exist",
+      _sets.every(s=>html.includes(`id="${s}"`)), `${_sets.length} controls`);
+    check("Fix #20: ruqyah + privacy views exist",
+      html.includes('id="view-ruqyah"') && html.includes('id="view-privacy"'), "present");
+    check("Fix #20: no ad SDK anywhere in the code (no ads, ever)",
+      !/admob|adsense|googlesyndication|audience-network/i.test(src), "clean");
+    check("Fix #20: Quran has 6236 ayahs total", TOTAL_AYAH === 6236, String(TOTAL_AYAH));
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);
