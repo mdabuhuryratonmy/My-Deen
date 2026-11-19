@@ -12,12 +12,24 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      ANDROID_HOME: /usr/local/lib/android/sdk
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # Fix #4 §4/§6: the old logo and the istighfar audio travel as base64
+      # text files (assets/logo.b64, assets/istighfar.b64) because binary
+      # files cannot be pushed through the text-only snapshot flow.
+      # Decode them here, before `npx cap sync` copies www/ into the APK.
+      - name: Decode bundled assets (logo + istighfar audio)
+        run: |
+          python3 -c "import base64; open('icons/my-deen-logo.png','wb').write(base64.b64decode(open('assets/logo.b64').read()))"
+          python3 -c "import base64; d=base64.b64decode(open('assets/istighfar.b64').read()); open('www/audio/istighfar.mp3','wb').write(d); open('android/app/src/main/res/raw/istighfar.mp3','wb').write(d)"
+
+      # Fix #4 §4: regenerate every app icon from the old logo.
+      - name: Generate app icons from logo
+        run: |
+          pip install pillow
+          python3 scripts/make_icons.py
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -30,13 +42,13 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Install Android SDK platform 36
         run: |
-          if command -v sdkmanager >/dev/null 2>&1; then SDKMANAGER=sdkmanager;
-          elif [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager";
-          else SDKMANAGER="$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager"; fi
-          yes | "$SDKMANAGER" --licenses
-          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+          yes | sdkmanager --licenses
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
       - name: Set up Gradle 8.14.3
         uses: gradle/actions/setup-gradle@v3
