@@ -5182,8 +5182,13 @@ function bindEvents(){
   const fQu = $("#feat-quran"); if (fQu) fQu.onclick=()=>showView("quran");
   const fQi = $("#feat-qibla"); if (fQi) fQi.onclick=()=>showView("qibla");
   const fRu = $("#feat-ruqyah"); if (fRu) fRu.onclick=()=>showView("ruqyah");
-  const fTi = $("#feat-tilawat"); if (fTi) fTi.onclick=()=>openSurah(currentSurah || 1);
-  const fTa = $("#feat-tafsir"); if (fTa) fTa.onclick=()=>showView("quran");
+  /* Fix #36: the Tilawat + Tafsir grid tiles are gone — they live INSIDE
+     the Quran view now (#btn-quran-tilawat / #btn-quran-tafsir). Tilawat
+     opens the reader for the current surah (same as the old tile). There
+     is NO separate tafsir text in the app — the old tile just opened the
+     Quran list — so the Tafsir button takes the user to the surah list. */
+  const qTi = $("#btn-quran-tilawat"); if (qTi) qTi.onclick=()=>openSurah(currentSurah || 1);
+  const qTa = $("#btn-quran-tafsir"); if (qTa) qTa.onclick=()=>{ const l = $("#surah-list"); if (l) l.scrollIntoView({behavior:"smooth", block:"start"}); };
   const fNa = $("#feat-names"); if (fNa) fNa.onclick=()=>showView("tasbih");
   const fTs = $("#feat-tasbih"); if (fTs) fTs.onclick=()=>showView("tasbih");
   const fDu = $("#feat-duas"); if (fDu) fDu.onclick=()=>showView("duas"); // Fix #30: Duas opens from the Home grid

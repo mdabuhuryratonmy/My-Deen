@@ -76,15 +76,22 @@
       <div class="home-section">
         <div class="row between"><h2 class="sec-title">🎯 টপ ফিচার</h2><button class="btn ghost" id="btn-more-features">আরও দেখুন</button></div>
         <div class="feat-grid">
+          <!-- Fix #36 (user 22:28): duplicate features merged — one Quran card
+               (Tilawat + Tafsir live INSIDE the Quran view now) and one Roza
+               card (the fasting view already holds Sehri/Iftar times + the
+               fasting timetable). Both merged cards sit at the bottom of the
+               grid as new cards; the rest stay exactly as they were. There
+               is no separate FastTime card in the app — the Roza card opens
+               the fasting view, which is where the times live. Ruqyah was
+               not in the user's keep-list but was NOT asked to be removed,
+               so it stays in place. -->
           <button class="feat-item" id="feat-tracker"><span class="feat-ring" id="feat-tracker-ring">০%</span><span>ট্র্যাকার</span></button>
-          <button class="feat-item" id="feat-quran"><span class="feat-ic">📖</span><span>কুরআন</span></button>
           <button class="feat-item" id="feat-qibla"><span class="feat-ic">🕋</span><span>কিবলা</span></button>
           <button class="feat-item" id="feat-ruqyah"><span class="feat-ic">🛡️</span><span>রুকইয়াহ</span></button>
-          <button class="feat-item" id="feat-tilawat"><span class="feat-ic">🎧</span><span>তিলাওয়াত</span></button>
-          <button class="feat-item" id="feat-tafsir"><span class="feat-ic">📚</span><span>তাফসীর</span></button>
           <button class="feat-item" id="feat-names"><span class="feat-ic">الله</span><span>৯৯ নাম</span></button>
           <button class="feat-item" id="feat-tasbih"><span class="feat-ic">📿</span><span>তাসবিহ</span></button>
           <button class="feat-item" id="feat-duas"><span class="feat-ic">🤲</span><span>দোয়া</span></button><!-- Fix #30: Duas had no Home card — now it does, since the bottom nav no longer links to it -->
+          <button class="feat-item" id="feat-quran"><span class="feat-ic">📖</span><span>কুরআন</span></button>
           <button class="feat-item" id="feat-fasting"><span class="feat-ic">🌙</span><span>রোজা</span></button><!-- Fix #30: Fasting tile on Home (its Sehri/Iftar "বড় করে দেখুন" button also opens it) -->
         </div>
       </div>
@@ -139,6 +146,14 @@
           <button class="chip on" data-qtab="all" data-i18n="allSurahs">সব সূরা</button>
           <button class="chip" data-qtab="bookmarks" data-i18n="bookmarksTab">🔖 বুকমার্ক</button>
           <button class="chip" data-qtab="read" data-i18n="readTab">✅ পড়া শেষ</button>
+        </div>
+        <!-- Fix #36: Tilawat + Tafsir live INSIDE the Quran view now (their
+             grid tiles are gone). Tilawat opens the reader; Tafsir takes
+             the user to the surah list — the app has no separate tafsir
+             text, the old tile just opened this same list. -->
+        <div class="row wrap mt">
+          <button class="btn" id="btn-quran-tilawat">🎧 তিলাওয়াত</button>
+          <button class="btn" id="btn-quran-tafsir">📚 তাফসীর</button>
         </div>
       </div>
       <div id="surah-list"><p class="muted">সূরার তালিকা লোড হচ্ছে…</p></div>

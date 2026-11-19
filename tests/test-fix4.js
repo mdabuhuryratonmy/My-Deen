@@ -397,13 +397,15 @@ check("feat tracker ring shows today's prayer %",
   els["#feat-tracker-ring"].textContent === "০%");
 
 // ---- Fix #7: home rebuilt exactly like the reference (no ads) ----
-const homeOrder = ["home-top","ring-hero","prayer-list","btn-home-alarm","feat-tilawat","forbid-section","nafl-rows","nafl-strip","btn-go-fasting"];
+// Fix #36 updated the grid anchor + tile list: the Tilawat/Tafsir tiles
+// are gone (merged into the Quran view), Quran + Roza sit at the bottom.
+const homeOrder = ["home-top","ring-hero","prayer-list","btn-home-alarm","feat-tracker","forbid-section","nafl-rows","nafl-strip","btn-go-fasting"];
 check("home sections are in the reference order",
   homeOrder.every((id,i)=> i===0 || html.indexOf(id) > html.indexOf(homeOrder[i-1])));
 check("home date row has Hijri + Gregorian + share + bell",
   html.includes('id="home-date-hijri"') && html.includes('id="home-date-greg"') && html.includes('id="btn-home-share"') && html.includes('id="btn-home-notif"') && html.includes('id="home-notif-badge"'));
-check("home has all 8 feature tiles",
-  ["feat-tracker","feat-quran","feat-qibla","feat-ruqyah","feat-tilawat","feat-tafsir","feat-names","feat-tasbih"].every(id=>html.includes(`id="${id}"`)));
+check("home has all 8 feature tiles (Fix #36 merged grid: no tilawat/tafsir tiles; duas + fasting included)",
+  ["feat-tracker","feat-qibla","feat-ruqyah","feat-names","feat-tasbih","feat-duas","feat-quran","feat-fasting"].every(id=>html.includes(`id="${id}"`)));
 check("old home pieces are gone (location card, tracker cards, bottom alarm row)",
   !html.includes('id="home-loc-text"') && !html.includes('id="btn-home-detect-loc"') && !html.includes('id="quran-tracker-card"') && !html.includes('id="h-tracker"') && !html.includes('id="btn-go-alarm"') && !html.includes("আজকের নামাজের সময়"));
 check("forbidden + nafl sections are unwrapped with red title",
@@ -1217,6 +1219,46 @@ Object.assign(settings, _savedTz);
       src.includes("function playDurood(force)") &&
       src.includes('if (settings.duroodRemSound !== false) playDurood(true)'),
       "reminder kept");
+
+    // ---- Fix #36: merge duplicate Home grid cards ----
+    // The user (22:28): Quran + Tilawat + Tafsir → ONE Quran card, with
+    // Tilawat + Tafsir inside its view; FastTime + Roza → ONE Roza card,
+    // with Sehri/Iftar times + fasting records inside; both merged cards
+    // at the bottom of the grid; the rest unchanged; bottom nav stays
+    // Home + Settings only. (There is no separate FastTime card in the
+    // app — the Roza card opens the fasting view, which already holds
+    // the Sehri/Iftar timetable — and no separate tafsir text either.)
+    const _gi = id => html.indexOf(`id="${id}"`);
+    check("Fix #36: the Tilawat + Tafsir tiles are gone from the grid",
+      !html.includes('id="feat-tilawat"') && !html.includes('id="feat-tafsir"') &&
+      !src.includes('$("#feat-tilawat")') && !src.includes('$("#feat-tafsir")'),
+      "tiles removed");
+    check("Fix #36: the merged Quran + Roza cards are the last two in the grid, the rest keep their order",
+      ["feat-tracker","feat-qibla","feat-ruqyah","feat-names","feat-tasbih","feat-duas","feat-quran","feat-fasting"]
+        .every((id, i, a) => i === 0 || _gi(a[i-1]) < _gi(id)) &&
+      _gi("feat-quran") > _gi("feat-duas") && _gi("feat-fasting") > _gi("feat-quran"),
+      "8 tiles, merged last");
+    check("Fix #36: Ruqyah stays in place (not in the keep-list, but never asked to be removed)",
+      html.includes('id="feat-ruqyah"') && html.includes("রুকইয়াহ"), "ruqyah kept");
+    check("Fix #36: Tilawat + Tafsir are inside the Quran view as buttons",
+      html.includes('id="btn-quran-tilawat"') && html.includes('id="btn-quran-tafsir"') &&
+      html.includes("🎧 তিলাওয়াত") && html.includes("📚 তাফসীর"),
+      "inside Quran");
+    check("Fix #36: the in-view buttons are wired (Tilawat opens the reader, Tafsir goes to the surah list)",
+      src.includes('$("#btn-quran-tilawat")') && src.includes('$("#btn-quran-tafsir")') &&
+      src.includes('qTi.onclick=()=>openSurah(currentSurah || 1)') &&
+      src.includes('scrollIntoView({behavior:"smooth", block:"start"})'),
+      "wired");
+    check("Fix #36: the single Roza card opens the fasting view, which holds Sehri/Iftar times + the fasting timetable",
+      html.includes('id="feat-fasting"') && html.includes("সাওমের সময়সূচি") &&
+      html.includes('id="fast-schedule"') &&
+      src.includes('fFa.onclick=()=>showView("fasting")'),
+      "roza inside");
+    check("Fix #36: bottom nav is still only Home + Settings (nothing else)",
+      (() => { const nav = html.slice(html.indexOf('<nav id="bottom-nav">'), html.indexOf('</nav>'));
+        return (nav.match(/data-view="/g) || []).length === 2 &&
+          nav.includes('data-view="home"') && nav.includes('data-view="settings"'); })(),
+      "nav unchanged");
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);
