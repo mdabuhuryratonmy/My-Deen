@@ -23,6 +23,7 @@ const cut = src.indexOf('document.addEventListener("DOMContentLoaded"');
 eval(src.slice(0, cut) + `
 ;globalThis.settings=settings; globalThis.store=store;
 globalThis.forbiddenWindows=forbiddenWindows; globalThis.nextEvent=nextEvent;
+globalThis.computeTimingsLocal=computeTimingsLocal; globalThis.effSchool=effSchool; globalThis.schoolForRegion=schoolForRegion; globalThis.toMin=toMin;
 globalThis.buildPrayerAlarmList=buildPrayerAlarmList; globalThis.renderPrayers=renderPrayers;
 globalThis.renderCalendarPage=renderCalendarPage; globalThis.openPrayerDetail=openPrayerDetail;
 globalThis.updateDetailTime=updateDetailTime; globalThis.renderAlarmPage=renderAlarmPage;
@@ -86,22 +87,56 @@ const fw = forbiddenWindows();
 check("forbidden windows = 3", fw.length===3);
 check("morning forbidden sunrise→+15", fw[0].start===423 && fw[0].end===438, `${fw[0].start}–${fw[0].end}`);
 check("midday forbidden dhuhr−10→dhuhr", fw[1].start===770 && fw[1].end===780, `${fw[1].start}–${fw[1].end}`);
-check("evening forbidden maghrib−25→maghrib", fw[2].start===1113 && fw[2].end===1138, `${fw[2].start}–${fw[2].end}`);
+check("evening forbidden maghrib−15→maghrib", fw[2].start===1123 && fw[2].end===1138, `${fw[2].start}–${fw[2].end}`);
 
 // ---- nextEvent / countdown ring ----
 const atNoon = new Date(); atNoon.setHours(12,0,0,0);
 const ne1 = nextEvent(atNoon);
 // ForbNoon (12:50) starts before Dhuhr (13:00), so it IS the next event.
-check("nextEvent at 12:00 is the midday forbidden window", ne1.kind==="forbidden" && ne1.id==="ForbNoon" && ne1.at.getHours()===12 && ne1.at.getMinutes()===50, ne1.id);
+check("nextEvent at 12:00 is the midday forbidden window (upcoming)", ne1.kind==="forbidden" && ne1.id==="ForbNoon" && ne1.at.getHours()===12 && ne1.at.getMinutes()===50 && ne1.state==="upcoming", ne1.id);
 const at1305 = new Date(); at1305.setHours(13,5,0,0);
 const ne1b = nextEvent(at1305);
-check("nextEvent at 13:05 is Asr", ne1b.kind==="prayer" && ne1b.id==="Asr", ne1b.id);
+check("nextEvent at 13:05 is Asr (upcoming)", ne1b.kind==="prayer" && ne1b.id==="Asr" && ne1b.state==="upcoming", ne1b.id);
 const at1255 = new Date(); at1255.setHours(12,55,0,0);
 const ne1c = nextEvent(at1255);
-check("inside midday forbidden window counts to its end (13:00)", ne1c.kind==="forbidden" && ne1c.at.getHours()===13 && ne1c.at.getMinutes()===0, ne1c.kind+" "+ne1c.at.getHours()+":"+ne1c.at.getMinutes());
+check("inside midday forbidden window counts to its end (13:00)", ne1c.kind==="forbidden" && ne1c.at.getHours()===13 && ne1c.at.getMinutes()===0 && ne1c.state==="current", ne1c.kind+" "+ne1c.at.getHours()+":"+ne1c.at.getMinutes());
 const at705 = new Date(); at705.setHours(7,5,0,0);
 const ne2 = nextEvent(at705);
-check("inside morning forbidden window counts to its end", ne2.kind==="forbidden" && ne2.at.getHours()===7 && ne2.at.getMinutes()===18, ne2.kind+" "+ne2.at.getHours()+":"+ne2.at.getMinutes());
+check("inside morning forbidden window counts to its end", ne2.kind==="forbidden" && ne2.at.getHours()===7 && ne2.at.getMinutes()===18 && ne2.state==="current", ne2.kind+" "+ne2.at.getHours()+":"+ne2.at.getMinutes());
+
+// ---- Fix #11: forbidden window must never displace a prayable prayer ----
+// The user's report: 19 Nov, 18:27, Asr running — the ring showed the
+// forbidden window as if it were already running.
+const at1827 = new Date(); at1827.setHours(18,27,0,0);
+const ne1827 = nextEvent(at1827);
+check("Fix #11: at 18:27 the ring shows Asr (current), counting to 18:43", ne1827.kind==="prayer" && ne1827.id==="Asr" && ne1827.state==="current" && ne1827.at.getHours()===18 && ne1827.at.getMinutes()===43, ne1827.kind+" "+ne1827.id+" "+ne1827.at.getHours()+":"+ne1827.at.getMinutes());
+const at1700 = new Date(); at1700.setHours(17,0,0,0);
+const ne1700 = nextEvent(at1700);
+check("Fix #11: at 17:00 the ring shows Asr (current), counting to 18:43", ne1700.kind==="prayer" && ne1700.id==="Asr" && ne1700.state==="current" && ne1700.at.getHours()===18 && ne1700.at.getMinutes()===43, ne1700.kind+" "+ne1700.id);
+const at1850 = new Date(); at1850.setHours(18,50,0,0);
+const ne1850 = nextEvent(at1850);
+check("Fix #11: at 18:50 (inside evening window) the ring shows forbidden, counting to 18:58", ne1850.kind==="forbidden" && ne1850.id==="ForbEvening" && ne1850.state==="current" && ne1850.at.getHours()===18 && ne1850.at.getMinutes()===58, ne1850.kind+" "+ne1850.id);
+const at0725 = new Date(); at0725.setHours(7,25,0,0);
+const ne0725 = nextEvent(at0725);
+check("Fix #11: at 07:25 (no prayer current) the next forbidden window is upcoming, not current", ne0725.kind==="forbidden" && ne0725.id==="ForbNoon" && ne0725.state==="upcoming", ne0725.kind+" "+ne0725.id+" "+ne0725.state);
+
+// ---- Fix #11: Asr school follows the region (Malaysia = Shafi'i) ----
+const _savedS = {country:settings.country, school:settings.school, schoolExplicit:settings.schoolExplicit, lat:settings.lat, lon:settings.lon, city:settings.city, tzName:settings.tzName, locId:settings.locId, tzLoc:settings.tzLoc, method:settings.method};
+settings.country = "Malaysia"; settings.schoolExplicit = false; settings.school = 1;
+check("Fix #11: effSchool is Shafi'i (0) in Malaysia even with a saved Hanafi value", effSchool()===0, String(effSchool()));
+settings.country = "Bangladesh"; settings.schoolExplicit = false;
+check("Fix #11: effSchool is Hanafi (1) in Bangladesh", effSchool()===1, String(effSchool()));
+settings.country = "Malaysia"; settings.school = 1; settings.schoolExplicit = true;
+check("Fix #11: an explicit Hanafi pick in Malaysia still wins", effSchool()===1, String(effSchool()));
+// Local (offline) Ipoh times for 19 Nov 2026 must match the real JAKIM
+// times (Fajr 05:42, Asr 16:24, Maghrib 18:58) within 2 minutes.
+settings.country = "Malaysia"; settings.city = "Ipoh"; settings.lat = 4.6; settings.lon = 101.07;
+settings.tzName = "Asia/Kuala_Lumpur"; settings.locId = "ipoh"; settings.tzLoc = "ipoh";
+settings.method = 0; settings.school = 1; settings.schoolExplicit = false;
+const t1911 = computeTimingsLocal(new Date(2026, 10, 19));
+check("Fix #11: local Ipoh Asr matches real JAKIM Asr 16:24 (±2 min)", t1911 && Math.abs(toMin(t1911.Asr) - 984) <= 2, t1911 ? t1911.Asr : "null");
+check("Fix #11: local Ipoh Fajr/Maghrib match real times (±2 min)", t1911 && Math.abs(toMin(t1911.Fajr) - 342) <= 2 && Math.abs(toMin(t1911.Maghrib) - 1138) <= 2, t1911 ? t1911.Fajr + " " + t1911.Maghrib : "null");
+Object.assign(settings, _savedS);
 
 // ---- Alarm list ----
 let list = buildPrayerAlarmList();
