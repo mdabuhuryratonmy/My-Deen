@@ -1808,7 +1808,7 @@ const Lb = (bn, en) => { const l = settings.lang; if (l==="bn") return bn;
 const DEFAULTS = {city:"", country:"", lat:null, lon:null, method:0, school:0, schoolExplicit:false,
   lang:"en", theme:"dark", azan:true, adhan:"a1", reciter:"ar.alafasy", notif:false, tasbihTarget:33,
   autoLoc:true, useCoords:false, profileName:"", gmail:"", duroodOnUnlock:true, learnMadhhab:"hanafi",
-  dailyNotif:true, duroodRemOn:true, duroodRemMin:30, astaghRemOn:true, astaghRemMin:30,
+  dailyNotif:true, duroodRemOn:true, duroodRemMin:30, duroodRemSound:true, astaghRemOn:true, astaghRemMin:30, astaghRemSound:true,
   /* Location identity: locId names the CURRENT location ("c:lat,lon" for
      coordinate locations, "n:city|country" for city-name ones). The
      timings cache, the stored coordinates (coordsLoc) and the stored
@@ -4221,16 +4221,22 @@ const DUROOD_AR = "اللَّهُمَّ صَلِّ وَسَلِّمْ عَلَى
 const ASTAGH_AR = "أَسْتَغْفِرُ اللَّهَ";
 let lastDuroodRemAt = Date.now(), lastAstaghRemAt = Date.now();
 function fireDhikrReminder(kind){
+  /* Fix #33: the reminder audio plays only when that reminder's sound
+     switch is on. Sound off = the toast + notification still arrive,
+     but silently (no audio). */
   if (kind === "durood"){
-    playDurood(true);
+    if (settings.duroodRemSound !== false) playDurood(true);
     toast("📿 " + Lb("দরুদ পড়ুন", "Recite Durood") + ": " + DUROOD_AR);
     if (settings.notif && "Notification" in window && Notification.permission === "granted"){
       try { new Notification("My Deen — " + Lb("দরুদ শরিফ", "Durood Sharif"),
         { body: DUROOD_AR, icon:"icons/icon-192.png" }); } catch(e){}
     }
   } else {
-    const a = $("#audio-istighfar");
-    if (a){ a.currentTime = 0; a.play().catch(()=>{}); }
+    /* Fix #33: istighfar audio only when its sound switch is on. */
+    if (settings.astaghRemSound !== false){
+      const a = $("#audio-istighfar");
+      if (a){ a.currentTime = 0; a.play().catch(()=>{}); }
+    }
     toast("🤲 " + Lb("আস্তাগফিরুল্লাহ পড়ুন", "Recite Astaghfirullah") + ": " + ASTAGH_AR);
     if (settings.notif && "Notification" in window && Notification.permission === "granted"){
       try { new Notification("My Deen — " + Lb("ইস্তিগফার", "Istighfar"),
@@ -4262,17 +4268,31 @@ async function scheduleNativeDhikr(){
     // fresh v2 channel IDs (the old ones are deleted by the native
     // ensureChannels). The per-notification sound fields stay: the
     // plugin strips the ".mp3" and resolves R.raw.durood/istighfar.
+    // Fix #33: each kind has TWO channels — the v2 channel WITH its
+    // sound (durood.mp3 / istighfar.mp3) and a "-silent" channel with NO
+    // sound. Android never updates an existing channel's sound, so the
+    // sound on/off switch works by scheduling into the other channel.
+    // The silent channels are HIGH importance too, so the notification
+    // still pops up — just without any audio. The native ensureChannels
+    // creates the same two silent channels at app start (authoritative);
+    // this createChannel is skipped when they already exist.
     await LN.createChannel({ id: "dhikr-durood-v2", name: "Durood reminders",
       description: "Durood Sharif reminders", sound: "durood.mp3", importance: 4, vibration: true });
     await LN.createChannel({ id: "dhikr-istighfar-v2", name: "Istighfar reminders",
       description: "Astaghfirullah reminders", sound: "istighfar.mp3", importance: 4, vibration: true });
+    await LN.createChannel({ id: "dhikr-durood-v2-silent", name: "Durood reminders (silent)",
+      description: "Durood Sharif reminders without sound", importance: 4, vibration: true });
+    await LN.createChannel({ id: "dhikr-istighfar-v2-silent", name: "Istighfar reminders (silent)",
+      description: "Astaghfirullah reminders without sound", importance: 4, vibration: true });
     const jobs = [
       { on: settings.duroodRemOn, min: settings.duroodRemMin || 30, base: DUROOD_REM_BASE,
-        channelId: "dhikr-durood-v2", sound: "durood.mp3",
+        channelId: settings.duroodRemSound !== false ? "dhikr-durood-v2" : "dhikr-durood-v2-silent",
+        sound: settings.duroodRemSound !== false ? "durood.mp3" : undefined,
         title: "My Deen — " + Lb("দরুদ শরিফ", "Durood Sharif"),
         body: DUROOD_AR + " — " + Lb("দরুদ পড়ুন", "Recite Durood upon the Prophet ﷺ") },
       { on: settings.astaghRemOn, min: settings.astaghRemMin || 30, base: ASTAGH_REM_BASE,
-        channelId: "dhikr-istighfar-v2", sound: "istighfar.mp3",
+        channelId: settings.astaghRemSound !== false ? "dhikr-istighfar-v2" : "dhikr-istighfar-v2-silent",
+        sound: settings.astaghRemSound !== false ? "istighfar.mp3" : undefined,
         title: "My Deen — " + Lb("ইস্তিগফার", "Istighfar"),
         body: ASTAGH_AR + " — " + Lb("আস্তাগফিরুল্লাহ পড়ুন, আল্লাহর কাছে ক্ষমা চান", "Recite Astaghfirullah — seek Allah's forgiveness") }
     ];
@@ -4301,13 +4321,21 @@ function remPanel(kind, icon, titleBn, titleEn, on, min){
   const m = clampDhikrMin(min || 30);
   /* Fix #31: no slider, no offset, nothing like the namaz adjuster — just
      − / + buttons; each tap moves the interval by 1 minute. The big number
-     in the middle IS the interval; the line below it says it in words. */
+     in the middle IS the interval; the line below it says it in words.
+     Fix #33: a sound switch under the stepper — on = the notification
+     plays its audio, off = it arrives silently. */
+  const soundOn = kind === "durood" ? settings.duroodRemSound !== false : settings.astaghRemSound !== false;
   const ctl = `<div class="row" style="gap:10px;align-items:center;justify-content:center;margin-top:8px">
     <button class="btn" data-rem-step="${kind}:-1" aria-label="কমান">−</button>
     <span style="font-size:20px;font-weight:700;min-width:96px;text-align:center">${num(m)} ${Lb("মিনিট", "min")}</span>
     <button class="btn" data-rem-step="${kind}:+1" aria-label="বাড়ান">+</button>
   </div>
-  <p class="muted small" style="margin:8px 0 0;text-align:center" id="rem-${kind}-label">${remStepLabel(kind, m)}</p>`;
+  <p class="muted small" style="margin:8px 0 0;text-align:center" id="rem-${kind}-label">${remStepLabel(kind, m)}</p>
+  <div class="row between" style="margin-top:10px">
+    <span class="small">🔊 ${Lb("সাউন্ড", "Sound")}</span>
+    <label class="switch"><input type="checkbox" id="rem-${kind}-sound" ${soundOn ? "checked" : ""}><span class="slider"></span></label>
+  </div>
+  <p class="muted small" style="margin:4px 0 0" id="rem-${kind}-sound-label">${soundOn ? Lb("চালু — নোটিফিকেশনে অডিও বাজবে।", "On — the notification plays its audio.") : Lb("বন্ধ — নোটিফিকেশন নীরবে আসবে।", "Off — the notification arrives silently.")}</p>`;
   return `<div class="adj-panel">
     <div class="adj-head"><span>${icon} ${Lb(titleBn, titleEn)}</span>
       <label class="switch"><input type="checkbox" id="rem-${kind}-on" ${on ? "checked" : ""}><span class="slider"></span></label></div>
@@ -4326,6 +4354,16 @@ function renderReminderSettings(){
   if (aOn) aOn.onchange = e=>{ settings.astaghRemOn = e.target.checked; lastAstaghRemAt = Date.now();
     saveSettings(); scheduleNativeDhikr(); renderReminderSettings();
     toast(settings.astaghRemOn ? Lb("আস্তাগফিরুল্লাহ রিমাইন্ডার চালু ✓", "Astaghfirullah reminder on ✓") : Lb("আস্তাগফিরুল্লাহ রিমাইন্ডার বন্ধ", "Astaghfirullah reminder off")); };
+  /* Fix #33: sound switches — flipping one re-schedules that reminder
+     into the other channel (sound channel ↔ silent channel) immediately,
+     so the switch REALLY works: on = audio plays, off = silent. */
+  const dSnd = $("#rem-durood-sound"), aSnd = $("#rem-astagh-sound");
+  if (dSnd) dSnd.onchange = e=>{ settings.duroodRemSound = e.target.checked;
+    saveSettings(); scheduleNativeDhikr(); renderReminderSettings();
+    toast(settings.duroodRemSound ? Lb("দরুদ রিমাইন্ডারের সাউন্ড চালু ✓", "Durood reminder sound on ✓") : Lb("দরুদ রিমাইন্ডারের সাউন্ড বন্ধ — নীরবে আসবে", "Durood reminder sound off — arrives silently")); };
+  if (aSnd) aSnd.onchange = e=>{ settings.astaghRemSound = e.target.checked;
+    saveSettings(); scheduleNativeDhikr(); renderReminderSettings();
+    toast(settings.astaghRemSound ? Lb("আস্তাগফিরুল্লাহ রিমাইন্ডারের সাউন্ড চালু ✓", "Astaghfirullah reminder sound on ✓") : Lb("আস্তাগফিরুল্লাহ রিমাইন্ডারের সাউন্ড বন্ধ — নীরবে আসবে", "Astaghfirullah reminder sound off — arrives silently")); };
   /* Fix #31: − / + stepper — each tap moves the interval by exactly 1
      minute (clamped 1..60) and saves + re-syncs immediately. No slider,
      no offset, no preset position, nothing like the namaz adjuster. */

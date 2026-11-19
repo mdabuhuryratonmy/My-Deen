@@ -212,10 +212,13 @@ globalThis.Date = RealDate16; settings.tzName = _tz16;
 // channelId/createChannel id anywhere in the schedule path.
 const _src18 = fs.readFileSync("/home/hatch/workspace/deen-day/www/app.js", "utf8");
 const _java18 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AlarmScheduler.java", "utf8");
-check("Fix #18: JS schedules durood reminders on the v2 channel with durood.mp3",
-  _src18.includes('channelId: "dhikr-durood-v2", sound: "durood.mp3"'), "channelId dhikr-durood-v2");
-check("Fix #18: JS schedules istighfar reminders on the v2 channel with istighfar.mp3",
-  _src18.includes('channelId: "dhikr-istighfar-v2", sound: "istighfar.mp3"'), "channelId dhikr-istighfar-v2");
+// Fix #33 rewrote the channel pick: sound on → the v2 channel with its
+// sound, sound off → the silent twin. The default (sound on) still
+// schedules on the v2 channel with the sound — that is what these check.
+check("Fix #18: JS schedules durood reminders on the v2 channel with durood.mp3 (sound on)",
+  _src18.includes('settings.duroodRemSound !== false ? "dhikr-durood-v2"') && _src18.includes('settings.duroodRemSound !== false ? "durood.mp3"'), "channelId dhikr-durood-v2");
+check("Fix #18: JS schedules istighfar reminders on the v2 channel with istighfar.mp3 (sound on)",
+  _src18.includes('settings.astaghRemSound !== false ? "dhikr-istighfar-v2"') && _src18.includes('settings.astaghRemSound !== false ? "istighfar.mp3"'), "channelId dhikr-istighfar-v2");
 check("Fix #18: the old channel IDs are gone from the JS schedule path (exact quoted ids)",
   !/"dhikr-durood"/.test(_src18) && !/"dhikr-istighfar"/.test(_src18), "no old ids in app.js");
 check("Fix #18: native creates the v2 channels with the raw sounds + HIGH importance",
@@ -346,6 +349,31 @@ settings.duroodRemMin = 35; renderReminderSettings();
 check("Fix #31: the big number follows the saved interval (35 min)",
   els["#reminder-settings"].innerHTML.includes("৩৫") && !els["#reminder-settings"].innerHTML.includes('data-rem-slider='));
 settings.duroodRemMin = 30;
+
+// ---- Fix #33: sound on/off switch for each dhikr reminder ----
+check("Fix #33: reminder sound defaults to on (both kinds)",
+  settings.duroodRemSound === true && settings.astaghRemSound === true);
+settings.duroodRemSound = true; settings.astaghRemSound = true; renderReminderSettings();
+const remHtml33 = els["#reminder-settings"].innerHTML;
+check("Fix #33: both panels have a sound switch with the on label",
+  remHtml33.includes('id="rem-durood-sound"') && remHtml33.includes('id="rem-astagh-sound"') &&
+  remHtml33.includes("সাউন্ড") && remHtml33.includes("অডিও বাজবে"));
+settings.duroodRemSound = false; settings.astaghRemSound = false; renderReminderSettings();
+check("Fix #33: sound off shows the silent label in both panels",
+  els["#reminder-settings"].innerHTML.includes("নীরবে আসবে"));
+/* Flip the REAL switch handlers on the stub elements: the switch must
+   save the flag (and re-schedule) — it really works, not just a display. */
+settings.duroodRemSound = true; settings.astaghRemSound = true; renderReminderSettings();
+els["#rem-durood-sound"].onchange({ target: { checked: false } });
+check("Fix #33: flipping the durood sound switch off saves the flag",
+  settings.duroodRemSound === false);
+els["#rem-durood-sound"].onchange({ target: { checked: true } });
+check("Fix #33: flipping the durood sound switch on saves the flag",
+  settings.duroodRemSound === true);
+els["#rem-astagh-sound"].onchange({ target: { checked: false } });
+check("Fix #33: flipping the astagh sound switch off saves the flag",
+  settings.astaghRemSound === false);
+settings.duroodRemSound = true; settings.astaghRemSound = true;
 
 // ---- Fix #6: home matches the reference design (no ads) ----
 check("countdown ring hero is in the home HTML",
@@ -1104,6 +1132,37 @@ Object.assign(settings, _savedTz);
       remPanel("durood", "📿", "দরুদ শরিফ রিমাইন্ডার", "Durood Sharif reminder", true, 1).includes("১") &&
       remPanel("astagh", "🤲", "আস্তাগফিরুল্লাহ রিমাইন্ডার", "Astaghfirullah reminder", true, 99).includes("৬০"),
       "1 and 60");
+
+    // ---- Fix #33: sound on/off for dhikr reminders (really works) ----
+    // The user (22:06): the durood reminder notification must play its
+    // audio, with a sound on/off option that REALLY works — on = audio
+    // plays, off = it arrives silently. Same for astaghfirullah.
+    // Android never updates an existing channel's sound, so the switch
+    // works by scheduling into the sound channel or a silent twin.
+    const _as33 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AlarmScheduler.java", "utf8");
+    check("Fix #33: sound defaults on in app.js (duroodRemSound / astaghRemSound)",
+      src.includes("duroodRemSound:true") && src.includes("astaghRemSound:true"), "defaults on");
+    check("Fix #33: native scheduler picks the sound or the silent channel by the switch",
+      src.includes('settings.duroodRemSound !== false ? "dhikr-durood-v2" : "dhikr-durood-v2-silent"') &&
+      src.includes('settings.astaghRemSound !== false ? "dhikr-istighfar-v2" : "dhikr-istighfar-v2-silent"'),
+      "channel pick");
+    check("Fix #33: both silent channels are created (JS + native)",
+      src.includes('id: "dhikr-durood-v2-silent"') && src.includes('id: "dhikr-istighfar-v2-silent"') &&
+      _as33.includes('"dhikr-durood-v2-silent"') && _as33.includes('"dhikr-istighfar-v2-silent"'),
+      "silent channels");
+    check("Fix #33: native silent channels are HIGH importance with no sound (they still pop up, silently)",
+      _as33.includes('createChannel(nm, ctx, "dhikr-durood-v2-silent"') &&
+      _as33.includes('NotificationManager.IMPORTANCE_HIGH, -1)'),
+      "silent, still pops up");
+    check("Fix #33: foreground audio is gated on the switch (sound off = toast + notification only, no audio)",
+      src.includes('if (settings.duroodRemSound !== false) playDurood(true)') &&
+      src.includes('if (settings.astaghRemSound !== false)'),
+      "audio gated");
+    check("Fix #33: the sound switches re-schedule immediately (the switch really works)",
+      src.includes('dSnd.onchange') && src.includes('aSnd.onchange') &&
+      src.includes('settings.duroodRemSound = e.target.checked') &&
+      src.includes('settings.astaghRemSound = e.target.checked'),
+      "wired");
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);
