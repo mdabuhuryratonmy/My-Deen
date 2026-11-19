@@ -84,6 +84,8 @@
           <button class="feat-item" id="feat-tafsir"><span class="feat-ic">📚</span><span>তাফসীর</span></button>
           <button class="feat-item" id="feat-names"><span class="feat-ic">الله</span><span>৯৯ নাম</span></button>
           <button class="feat-item" id="feat-tasbih"><span class="feat-ic">📿</span><span>তাসবিহ</span></button>
+          <button class="feat-item" id="feat-duas"><span class="feat-ic">🤲</span><span>দোয়া</span></button><!-- Fix #30: Duas had no Home card — now it does, since the bottom nav no longer links to it -->
+          <button class="feat-item" id="feat-fasting"><span class="feat-ic">🌙</span><span>রোজা</span></button><!-- Fix #30: Fasting tile on Home (its Sehri/Iftar "বড় করে দেখুন" button also opens it) -->
         </div>
       </div>
 
@@ -430,13 +432,8 @@
     </section>
   </main>
 
-  <nav id="bottom-nav">
+  <nav id="bottom-nav"><!-- Fix #30: only Home + Settings here. Quran / Tasbih / Duas / Qibla / Fasting live on the Home screen only (Top Features grid + the Sehri/Iftar strip), and open from there. -->
     <button data-view="home" class="on"><span class="ic">🕌</span><span data-i18n="nav_home">হোম</span></button>
-    <button data-view="quran"><span class="ic">📖</span><span data-i18n="nav_quran">কুরআন</span></button>
-    <button data-view="tasbih"><span class="ic">📿</span><span data-i18n="nav_tasbih">তাসবিহ</span></button>
-    <button data-view="duas"><span class="ic">🤲</span><span data-i18n="nav_duas">দোয়া</span></button>
-    <button data-view="qibla"><span class="ic">🧭</span><span data-i18n="nav_qibla">কিবলা</span></button>
-    <button data-view="fasting"><span class="ic">🌙</span><span data-i18n="nav_fasting">রোজা</span></button>
     <button data-view="settings"><span class="ic">⚙️</span><span data-i18n="nav_settings">সেটিংস</span></button>
   </nav>
 </div>

@@ -1045,6 +1045,30 @@ Object.assign(settings, _savedTz);
     check("Fix #29: autoLoc still defaults on and still gates auto-detect on launch",
       settings.autoLoc === true && src.includes("if (settings.autoLoc && !settings.locManual) detectLocation(true)"),
       "behaviour kept");
+
+    // ---- Fix #30: bottom nav has ONLY Home + Settings ----
+    // The user (21:33, screenshot): Quran / Tasbih / Duas / Qibla / Fasting
+    // do NOT belong in the bottom bar — they live on the Home screen only
+    // (Top Features cards, opened from there). The bottom bar keeps just
+    // Home (the namaz screen) and Settings.
+    const _nav = html.slice(html.indexOf('<nav id="bottom-nav">'), html.indexOf("</nav>", html.indexOf('<nav id="bottom-nav">')));
+    const _navViews = [..._nav.matchAll(/data-view="([^"]+)"/g)].map(m=>m[1]);
+    check("Fix #30: the bottom nav has exactly two buttons — Home and Settings",
+      _navViews.length === 2 && _navViews[0] === "home" && _navViews[1] === "settings",
+      _navViews.join(" + "));
+    check("Fix #30: Quran / Tasbih / Duas / Qibla / Fasting are gone from the bottom nav",
+      !["quran","tasbih","duas","qibla","fasting"].some(v=>_navViews.includes(v)),
+      "none in nav");
+    check("Fix #30: all five still have a Home card (Quran, Tasbih, Duas, Qibla, Fasting)",
+      ["feat-quran","feat-tasbih","feat-duas","feat-qibla","feat-fasting"].every(id=>html.includes(`id="${id}"`)),
+      "5 home cards");
+    check("Fix #30: the two new Home cards are wired (Duas and Fasting open their views)",
+      src.includes('$("#feat-duas")') && src.includes('showView("duas")') &&
+      src.includes('$("#feat-fasting")') && src.includes('showView("fasting")'),
+      "wired");
+    check("Fix #30: the five views themselves still exist (only the nav buttons were removed)",
+      ["view-quran","view-tasbih","view-duas","view-qibla","view-fasting"].every(v=>html.includes(`id="${v}"`)),
+      "views intact");
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);

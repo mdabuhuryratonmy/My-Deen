@@ -5156,6 +5156,8 @@ function bindEvents(){
   const fTa = $("#feat-tafsir"); if (fTa) fTa.onclick=()=>showView("quran");
   const fNa = $("#feat-names"); if (fNa) fNa.onclick=()=>showView("tasbih");
   const fTs = $("#feat-tasbih"); if (fTs) fTs.onclick=()=>showView("tasbih");
+  const fDu = $("#feat-duas"); if (fDu) fDu.onclick=()=>showView("duas"); // Fix #30: Duas opens from the Home grid
+  const fFa = $("#feat-fasting"); if (fFa) fFa.onclick=()=>showView("fasting"); // Fix #30: Fasting tile on Home
   const fMore = $("#btn-more-features"); if (fMore) fMore.onclick=()=>{ const t = $("#forbid-section"); if (t) t.scrollIntoView({behavior:"smooth", block:"start"}); };
   const backAlarm = $("#btn-back-alarm"); if (backAlarm) backAlarm.onclick=()=>showView("home");
   const backCal = $("#btn-back-calendar"); if (backCal) backCal.onclick=()=>showView("home");
