@@ -4,7 +4,7 @@
   "private": true,
   "description": "My Deen — free Islamic app: prayer times, Quran, tasbih, duas, Qibla",
   "scripts": {
-    "build:www": "rm -rf www && mkdir -p www/data www/icons www/audio www/assets && cp index.html styles.css app.js praycalc.js manifest.json sw.js privacy.html www/ && cp data/duas.js data/hadiths.js www/data/ && cp assets/quran-meta.js assets/quran-full.js www/assets/ && cp icons/* www/icons/ && cp audio/azan.mp3 audio/reminder.mp3 audio/durood.mp3 www/audio/",
+    "build:www": "rm -rf www && mkdir -p www/data www/icons www/audio www/assets && cp index.html styles.css app.js praycalc.js manifest.json sw.js privacy.html www/ && cp data/duas.js data/hadiths.js www/data/ && cp assets/quran-meta.js assets/quran-full.js www/assets/ && cp icons/* www/icons/ && cp audio/azan.mp3 audio/reminder.mp3 audio/durood.mp3 audio/istighfar.mp3 www/audio/",
     "sync": "npm run build:www && npx cap sync android"
   },
   "dependencies": {
