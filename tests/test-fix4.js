@@ -140,12 +140,14 @@ const at0650 = new Date(); at0650.setHours(6,50,0,0);
 const ne0650 = nextEvent(at0650);
 check("Fix #15: at 06:50 the ring shows Fajr (current), counting to sunrise 07:03", ne0650.kind==="prayer" && ne0650.id==="Fajr" && ne0650.state==="current" && ne0650.at.getHours()===7 && ne0650.at.getMinutes()===3, ne0650.kind+" "+ne0650.id);
 
-// ---- Fix #16: forbidden time shows the message, no countdown ----
-// During a forbidden window the ring must show "এখন সালাতের নিষিদ্ধ
-// সময়, এই সময়ে নামাজ পড়া নিষিদ্ধ" — no "শেষ হতে বাকি" countdown.
-// In a normal waqt the ring shows the prayer name + countdown as
-// before. Also: the forbidden section's midday cell must show the
-// Fix #15 window (12:56–13:02), not the old hardcoded 12:50–13:00.
+// ---- Fix #16 + Fix #17: forbidden time shows the message ----
+// During a forbidden window the ring name shows "এখন সালাতের নিষিদ্ধ
+// সময়, এই সময়ে নামাজ পড়া নিষিদ্ধ". Fix #16 first hid the countdown;
+// the user then reversed that (Fix #17): the "শেষ হতে বাকি"
+// countdown IS shown too. In a normal waqt the ring shows the prayer
+// name + countdown as before. Also: the forbidden section's midday
+// cell must show the Fix #15 window (12:56–13:02), not the old
+// hardcoded 12:50–13:00.
 const RealDate16 = Date;
 const _tz16 = settings.tzName; settings.tzName = "";
 const fake16 = (h, m, s=0) => {
@@ -157,10 +159,10 @@ const fake16 = (h, m, s=0) => {
 };
 settings.lang = "bn";
 fake16(18, 50); renderPrayers();
-check("Fix #16: at 18:50 (inside evening window) the ring shows the forbidden message, no countdown",
+check("Fix #17: at 18:50 (inside evening window) the ring shows the forbidden message AND the countdown (user reversed the no-countdown part)",
   els["#ring-name"].textContent === "এখন সালাতের নিষিদ্ধ সময়, এই সময়ে নামাজ পড়া নিষিদ্ধ" &&
-  els["#ring-count"].textContent === "" && els["#ring-count"].style.display === "none" &&
-  els["#ring-sub"].textContent === "" && els["#ring-label"].textContent === "নিষিদ্ধ সময়",
+  els["#ring-count"].textContent === "০০:০৮:০০" && els["#ring-count"].style.display !== "none" &&
+  els["#ring-sub"].textContent === "শেষ হতে বাকি" && els["#ring-label"].textContent === "নিষিদ্ধ সময়",
   `${els["#ring-name"].textContent} / count='${els["#ring-count"].textContent}' / sub='${els["#ring-sub"].textContent}'`);
 fake16(18, 36); renderPrayers();
 check("Fix #16: at 18:36 (Asr) the ring still shows Asr + countdown + 'শেষ হতে বাকি'",
