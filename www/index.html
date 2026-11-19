@@ -19,11 +19,11 @@
   <header>
     <div class="head-row">
       <div class="brand">
-        <img src="icons/icon-192.png" alt="My Deen">
+        <img src="icons/my-deen-logo.png" alt="My Deen">
         <div><h1>My Deen</h1><small data-i18n="appTagline">নামাজ • কুরআন • দোয়া</small></div>
       </div>
       <div class="row">
-        <img id="hdr-avatar" class="hdr-avatar hidden" alt="">
+        <button class="icon-btn" id="btn-share" title="শেয়ার করুন">↗️</button>
         <button class="icon-btn" id="btn-notif" title="নোটিফিকেশন">🔔<span class="badge hidden" id="notif-badge">১</span></button>
       </div>
     </div>
@@ -34,15 +34,23 @@
   <main>
     <!-- ============ HOME ============ -->
     <section class="view active" id="view-home">
-      <div class="card sky-hero" id="sky-hero" data-sky="day">
-        <div class="sky-orb" id="sky-orb"></div>
-        <div class="sky-stars" id="sky-stars"></div>
-        <div class="sky-cloud c1"></div><div class="sky-cloud c2"></div>
-        <div class="sky-inner">
-          <div class="small" id="next-label" data-i18n="nextPrayer">পরবর্তী নামাজ</div>
-          <div class="np-name" id="next-name">—</div>
-          <div class="np-count" id="next-count">--:--:--</div>
-          <div class="np-time" id="next-time">—</div>
+      <div class="card ring-hero" id="ring-hero" data-sky="day">
+        <div class="ring-wrap">
+          <svg class="ring-svg" viewBox="0 0 220 220" aria-hidden="true">
+            <circle class="ring-bg" cx="110" cy="110" r="96"></circle>
+            <circle class="ring-fg" id="ring-fg" cx="110" cy="110" r="96"></circle>
+          </svg>
+          <div class="ring-center">
+            <div class="ring-moon">🌙</div>
+            <div class="small" id="ring-label">পরের নামাজ</div>
+            <div class="ring-name" id="ring-name">—</div>
+            <div class="ring-count" id="ring-count">--:--:--</div>
+            <div class="ring-sub" id="ring-sub">শেষ হতে বাকি</div>
+          </div>
+        </div>
+        <div class="pills">
+          <span class="pill" id="pill-loc">📍 —</span>
+          <span class="pill" id="pill-sun">🌅 — • 🌇 —</span>
         </div>
       </div>
 
@@ -57,7 +65,7 @@
 
       <div class="card">
         <div class="row between"><h2 id="h-prayers" data-i18n="prayersToday">আজকের নামাজের সময়</h2><span class="muted small" id="prayer-city">—</span></div>
-        <p class="muted small" style="margin:2px 0 4px">কোনো ওয়াক্তের নাম বা সময়ে চাপ দিলে সেই ওয়াক্তের আজান আগে-পরে করা যাবে।</p>
+        <p class="muted small" style="margin:2px 0 4px">কোনো ওয়াক্তে চাপ দিলে সেই ওয়াক্তের অ্যালার্ম সেটিংস খুলবে।</p>
         <div id="prayer-list"><p class="muted">সময় লোড হচ্ছে…</p></div>
       </div>
 
@@ -87,24 +95,27 @@
       </div>
 
       <div class="card">
-        <h2 data-i18n="forbiddenTitle">সালাতের নিষিদ্ধ সময়</h2>
-        <p class="muted small" data-i18n="forbiddenNote">এই সময়গুলোতে সালাত আদায় নিষিদ্ধ (ব্যতিক্রম: সূর্যগ্রহণের নামাজ ও কাজা ফরজ)।</p>
+        <div class="row between"><h2 data-i18n="forbiddenTitle">সালাতের নিষিদ্ধ সময়</h2><button class="link-btn" id="btn-forbidden-ref">রেফারেন্স দেখুন</button></div>
+        <p class="muted small">এই সময়গুলোতে সালাত আদায় নিষিদ্ধ (ব্যতিক্রম: সূর্যাস্তকালীন একই দিনের আসর সালাত)</p>
+        <p class="muted small hidden" id="forbidden-ref">সহিহ মুসলিম ৮৩১ — সূর্যোদয়, ঠিক দুপুর ও সূর্যাস্তের সময় সালাত নিষিদ্ধ। আসরের ব্যতিক্রম: সহিহ বুখারি ৫৫৬ — সূর্য ডোবার আগে আসরের এক রাকাত পেলে পুরো আসর পাওয়া গেল।</p>
         <div id="forbidden-list"></div>
       </div>
 
       <div class="card nafl-card" id="nafl-card">
-        <div class="row between"><h2 data-i18n="naflTitle">নফল সালাতের সময়</h2></div>
+        <div class="row between"><h2 data-i18n="naflTitle">নফল সালাতের সময়</h2><button class="link-btn" id="btn-nafl-ref">রেফারেন্স দেখুন</button></div>
+        <p class="muted small hidden" id="nafl-ref"></p>
         <div id="nafl-rows"></div>
         <div class="nafl-strip">
           <div class="nafl-cell"><b id="nafl-sehri">—</b><span id="nafl-sehri-label">পরবর্তী সাহরি</span></div>
           <div class="nafl-cell"><b id="nafl-iftar">—</b><span id="nafl-iftar-label">পরবর্তী ইফতার</span></div>
           <div class="nafl-cell"><b id="nafl-count">--:--:--</b><span id="nafl-count-label">ইফতারের বাকি</span></div>
         </div>
-        <div class="nafl-more" id="nafl-more"><div class="nafl-more-inner">
-          <div id="nafl-extra"></div>
-        </div></div>
-        <button class="btn ghost block mt" id="btn-go-fasting" data-i18n="fastCal">রোজার ক্যালেন্ডার দেখুন →</button>
-        <button class="nafl-expand" id="btn-nafl-expand" aria-expanded="false"><span id="nafl-expand-label">বড় করে দেখুন</span><span class="nafl-chev" aria-hidden="true">›</span></button>
+        <button class="btn ghost block mt" id="btn-go-fasting">বড় করে দেখুন ›</button>
+      </div>
+
+      <div class="row mt">
+        <button class="btn block" id="btn-go-alarm">⏰ অ্যালার্ম</button>
+        <button class="btn ghost block" id="btn-go-calendar">📅 ক্যালেন্ডার</button>
       </div>
     </section>
 
@@ -251,8 +262,29 @@
     <!-- ============ FASTING ============ -->
     <section class="view" id="view-fasting">
       <div class="card">
-        <h2 data-i18n="fastingTitle">রোজা</h2>
-        <div id="fast-countdown"></div>
+        <button class="btn ghost" id="btn-back-fasting">← হোম</button>
+        <h2 class="mt" data-i18n="fastingTitle">রোজা</h2>
+        <div class="ring-wrap small-ring">
+          <svg class="ring-svg" viewBox="0 0 220 220" aria-hidden="true">
+            <circle class="ring-bg" cx="110" cy="110" r="96"></circle>
+            <circle class="ring-fg" id="fast-ring-fg" cx="110" cy="110" r="96"></circle>
+          </svg>
+          <div class="ring-center">
+            <div class="ring-moon">🌙</div>
+            <div class="small" id="fast-ring-label">পরবর্তী ইফতার</div>
+            <div class="ring-count" id="fast-ring-count">--:--:--</div>
+            <div class="ring-sub" id="fast-ring-sub">ইফতারের বাকি</div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>রোজা সম্পর্কে হাদিস</h3>
+        <div id="fast-hadith"></div>
+        <div class="dots" id="fast-hadith-dots"></div>
+      </div>
+      <div class="card">
+        <h3>সাওমের সময়সূচি</h3>
+        <div id="fast-schedule"></div>
       </div>
       <div class="card">
         <h3 data-i18n="sunnahTitle">সুন্নত রোজার রিমাইন্ডার</h3>
@@ -264,19 +296,68 @@
       </div>
     </section>
 
+    <!-- ============ ALARM ============ -->
+    <section class="view" id="view-alarm">
+      <div class="card">
+        <button class="btn ghost" id="btn-back-alarm">← হোম</button>
+        <h2 class="mt">অ্যালার্ম সেট করুন</h2>
+        <div class="switch-row"><span><b>সকল নামাজের অ্যালার্ম</b><br><small class="muted">অ্যালার্ম চালু</small></span>
+          <label class="switch"><input type="checkbox" id="alarm-master"><span class="slider"></span></label></div>
+      </div>
+      <div class="card">
+        <h3>ফরজ নামাজসমূহ</h3>
+        <div id="alarm-fard"></div>
+      </div>
+      <div class="card">
+        <h3>নফল নামাজসমূহ</h3>
+        <div id="alarm-nafl"></div>
+      </div>
+      <div class="card">
+        <h3>নিষিদ্ধ সময়</h3>
+        <div id="alarm-forbidden"></div>
+      </div>
+    </section>
+
+    <!-- ============ PRAYER DETAIL ============ -->
+    <section class="view" id="view-prayer-detail">
+      <div class="card">
+        <button class="btn ghost" id="btn-back-detail">← অ্যালার্ম</button>
+        <h2 class="mt" id="detail-title">—</h2>
+        <div class="switch-row"><span><b id="detail-toggle-label">নামাজের অ্যালার্ম</b><br><small class="muted">অ্যালার্ম চালু</small></span>
+          <label class="switch"><input type="checkbox" id="detail-toggle"><span class="slider"></span></label></div>
+      </div>
+      <div class="card">
+        <h3>Time Adjustment</h3>
+        <p class="muted small">স্লাইডার দিয়ে আজানের সময় ৩০ মিনিট আগে বা পরে করা যাবে (১ মিনিট ধাপে)।</p>
+        <input type="range" id="detail-slider" min="-30" max="30" step="1" value="0" class="adj-slider">
+        <div class="row between small"><span>−৩০ মিনিট</span><b id="detail-exact">Exact time</b><span>+৩০ মিনিট</span></div>
+        <p class="center mt"><b id="detail-time">—</b></p>
+      </div>
+      <div class="card">
+        <h3>Alarm Sound</h3>
+        <div id="detail-sounds"></div>
+      </div>
+      <div class="row mt"><button class="btn gold block" id="btn-detail-save">সংরক্ষণ করুন</button></div>
+    </section>
+
+    <!-- ============ CALENDAR ============ -->
+    <section class="view" id="view-calendar">
+      <div class="card">
+        <button class="btn ghost" id="btn-back-calendar">← হোম</button>
+        <h2 class="mt">ক্যালেন্ডার</h2>
+        <div class="row mt">
+          <select id="cal-month" style="flex:2"></select>
+          <select id="cal-year" style="flex:1"></select>
+        </div>
+      </div>
+      <div id="cal-days"></div>
+    </section>
+
     <!-- ============ SETTINGS ============ -->
     <section class="view" id="view-settings">
       <div class="card">
         <h2 data-i18n="profileTitle">প্রোফাইল</h2>
         <p class="muted small">আপনার নাম ও Gmail ঠিকানা শুধু আপনার ফোনেই থাকে — কোনো সার্ভারে যায় না, কোনো পাসওয়ার্ড লাগে না।</p>
-        <div class="profile-photo-row">
-          <div class="avatar-big" id="profile-avatar"><span>?</span></div>
-          <div>
-            <button class="btn gold" id="btn-change-photo">📷 ছবি বদলান</button>
-            <p class="muted small">ছবি শুধু আপনার ফোনেই থাকে, কোথাও আপলোড হয় না।</p>
-          </div>
-          <input type="file" id="profile-photo-input" accept="image/*" class="hidden">
-        </div>
         <label data-i18n="yourName">আপনার নাম</label>
         <input type="text" id="set-profile-name" placeholder="নাম">
         <label>Gmail ঠিকানা</label>
@@ -284,7 +365,6 @@
         <div class="row mt">
           <button class="btn gold block" id="btn-gmail-login">Gmail দিয়ে লগইন করুন</button>
         </div>
-        <p class="muted small mt hidden" id="gmail-status"></p>
         <div class="row mt">
           <button class="btn block" id="btn-save-profile" data-i18n="saveBtn">সংরক্ষণ করুন</button>
           <button class="btn ghost" id="btn-clear-profile" data-i18n="clearBtn">মুছুন</button>
@@ -315,7 +395,6 @@
           <label class="switch"><input type="checkbox" id="set-azan" checked><span class="slider"></span></label></div>
         <div class="switch-row"><span data-i18n="duroodLabel">📿 ফোন আনলক করলে দরুদ</span>
           <label class="switch"><input type="checkbox" id="set-durood" checked><span class="slider"></span></label></div>
-        <div class="row mt"><button class="btn" id="btn-test-durood">🔊 দরুদ পরীক্ষা করুন</button></div>
         <p class="muted small">আনলকে দরুদ না বাজলে: ফোনের Settings → Apps → My Deen → Autostart চালু করুন, আর Battery saver → No restrictions দিন। (Xiaomi ফোন অ্যাপ বন্ধ করে দিলে আনলকের দরুদ বাজে না।)</p>
         <div id="reminder-settings"></div>
         <label data-i18n="adhanLabel">আজানের সুর</label>
@@ -324,6 +403,8 @@
         <select id="set-reciter"></select>
         <div class="switch-row"><span data-i18n="notifLabel">নোটিফিকেশন</span>
           <label class="switch"><input type="checkbox" id="set-notif"><span class="slider"></span></label></div>
+        <div class="row mt"><button class="btn block" id="btn-permissions">🔔 সব অনুমতি দিন — নোটিফিকেশন ও সঠিক সময়ে অ্যালার্ম</button></div>
+        <p class="muted small">সঠিক সময়ে আজান ও অ্যালার্ম বাজাতে এই অনুমতিগুলো লাগে। ফোনের সেটিংস খুললে "Alarms &amp; reminders" (অ্যালার্ম ও রিমাইন্ডার) চালু করে দিন।</p>
         <div class="switch-row"><span id="daily-label">🌅 প্রতিদিন সকালে হাদিস ও আয়াত</span>
           <label class="switch"><input type="checkbox" id="set-daily" checked><span class="slider"></span></label></div>
         <p class="muted small" id="daily-desc"></p>
@@ -365,6 +446,7 @@
 <audio id="audio-ayah" preload="none"></audio>
 <audio id="audio-azan" preload="none" src="audio/azan.mp3"></audio>
 <audio id="audio-durood" preload="none" src="audio/durood.mp3"></audio>
+<audio id="audio-istighfar" preload="none" src="audio/istighfar.mp3"></audio>
 <audio id="audio-reminder" preload="none" src="audio/reminder.mp3"></audio>
 <div id="lang-first" style="position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:99;padding:20px">
   <div class="card" style="max-width:420px;width:100%;max-height:86vh;overflow:auto">
