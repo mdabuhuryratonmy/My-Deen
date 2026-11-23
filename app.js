@@ -1828,7 +1828,7 @@ const DEFAULTS = {city:"", country:"", lat:null, lon:null, method:0, school:0, s
      permanent default and is always selected; the user may add one more
      (azan / notification / beep / ring). "silent" stands alone. */
   alarmSound:{Fajr:["name"], Dhuhr:["name"], Asr:["name"], Maghrib:["name"], Isha:["name"], Duha:["name"], Tahajjud:["name"], ForbMorning:["name"], ForbNoon:["name"], ForbEvening:["name"], Sehri:["name"], Iftar:["name"]},
-  permAsked:false, onboarded:false};
+  permAsked:false, onboarded:false, permStepsAsked:{}};
 let settings = {...DEFAULTS};
 /* True when this device already has saved settings (a returning user).
    A saved language choice is always respected; only a first-run user —
@@ -1840,6 +1840,7 @@ try { Object.assign(settings, JSON.parse(LS.getItem("dd_settings") || "{}")); } 
    settings object would drop the new keys — fill them from DEFAULTS. */
 settings.offsets = {...DEFAULTS.offsets, ...(settings.offsets||{})};
 settings.alarmOn = {...DEFAULTS.alarmOn, ...(settings.alarmOn||{})};
+settings.permStepsAsked = {...DEFAULTS.permStepsAsked, ...(settings.permStepsAsked||{})};
 settings.alarmSound = {...DEFAULTS.alarmSound, ...(settings.alarmSound||{})};
 /* Fix #10: alarm sound is now a multi-select ARRAY (max 2, "name" always
    included unless the choice is silent alone). Older saved values were
@@ -1881,6 +1882,18 @@ const coordsKeyOf = () => `c:${settings.lat},${settings.lon}`;
 /* One-time migration for installs saved before locId existed: derive the
    identity from the saved location so its cache/timezone stay valid. */
 if (hasLocation() && !settings.locId){
+  settings.locId = (settings.useCoords && isFinite(+settings.lat) && isFinite(+settings.lon))
+    ? coordsKeyOf() : cityKeyOf(settings.city, settings.country);
+  saveSettings();
+}
+/* Build #19, Fix #7: a phone that already stored "Chepor" (the
+   geocoder's spelling) keeps showing it until the next GPS detect —
+   fix the stored value once, here, so the pill shows Chemor at once.
+   The location identity is re-derived from the corrected name so the
+   cached times/timezone re-resolve for Chemor instead of being served
+   under the old name. */
+if (settings.city && String(settings.city).trim().toLowerCase() === "chepor"){
+  settings.city = "Chemor";
   settings.locId = (settings.useCoords && isFinite(+settings.lat) && isFinite(+settings.lon))
     ? coordsKeyOf() : cityKeyOf(settings.city, settings.country);
   saveSettings();
@@ -2579,12 +2592,8 @@ function renderDates(){
   const h = hijriInfo ? (Lb(`${bnNum(hijriInfo.day)} ${escHtml(hijriInfo.month.en)} ${bnNum(hijriInfo.year)} হিজরি`, `${hijriInfo.day} ${escHtml(hijriInfo.month.en)} ${hijriInfo.year} AH`)) : "…";
   const b = banglaDate(now);
   $("#date-line").innerHTML = `📅 ${g}<br>🌙 <b>${h}</b> &nbsp;•&nbsp; 🇧🇩 ${Lb(b.text, b.textEn)}`;
-  /* Home date row (Fix #7, reference top): weekday + Hijri, then Gregorian. */
-  const wdShort = ["রবি","সোম","মঙ্গল","বুধ","বৃহঃ","শুক্র","শনি"][now.getDay()];
-  const hd = $("#home-date-hijri");
-  if (hd) hd.textContent = hijriInfo ? `${wdShort}, ${bnNum(hijriInfo.day)} ${hijriInfo.month.en}` : "…";
-  const gd = $("#home-date-greg");
-  if (gd) gd.textContent = `${bnNum(now.getDate())} ${["জানুয়ারি","ফেব্রুয়ারি","মার্চ","এপ্রিল","মে","জুন","জুলাই","আগস্ট","সেপ্টেম্বর","অক্টোবর","নভেম্বর","ডিসেম্বর"][now.getMonth()]}`;
+  /* Build #19, Fix #1: the home date row is gone — the header date
+     line above is the only date on Home. */
 }
 
 /* ---------------- salah tracker ---------------- */
@@ -2717,7 +2726,6 @@ function updateNotifBadge(){
   const seen = store.get("notif_seen", "");
   const hide = seen === todayKey();
   const b = $("#notif-badge"); if (b) b.classList.toggle("hidden", hide);
-  const hb = $("#home-notif-badge"); if (hb) hb.classList.toggle("hidden", hide);
 }
 
 /* ---------------- local profile (name + Gmail, phone-only) ---------------- */
@@ -4058,14 +4066,40 @@ function beepPreview(ring){
     setTimeout(()=>{ try{ ctx.close(); }catch(e){} }, 2200);
   } catch(e){}
 }
-function speakText(text){
+function speakText(text, lang){
   try {
     if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = settings.lang === "bn" ? "bn-BD" : "en-US";
+    /* Build #19, Fix #5: the pre-azan texts are always Bengali, so
+       their voice is forced to bn-BD even when the UI language is
+       English — otherwise an English voice would garble the Bengali
+       words. Other callers keep the UI-language default. */
+    u.lang = lang || (settings.lang === "bn" ? "bn-BD" : "en-US");
     window.speechSynthesis.speak(u);
   } catch(e){}
+}
+/* Build #19, Fix #5 — spoken pre-azan reminders, foreground path: when
+   the app is open, at T-5 and T-2 before every fard prayer, SPEAK the
+   exact Fix #8 text (verbatim) with the phone's Bengali voice. Always
+   on, like the pre-azan reminders themselves — even when a prayer's
+   azan alarm is off (Fix #9 §3). The background path is the native
+   AlarmReceiver TTS (the "speak" flag on the pre-azan alarm entries).
+   Tahajjud has no azan, so it gets no voice. Once per day per slot. */
+function checkPreAzanVoice(){
+  if (!timings) return;
+  const now = locNow();
+  const mins = now.getHours()*60 + now.getMinutes();
+  for (const p of PRAYER_IDS){
+    const base = toMin(timings[p]); if (base == null) continue;
+    const at = base + (settings.offsets[p] || 0);
+    for (const before of [5, 2]){
+      if (at - before === mins && !rungToday[`${todayKey()}_${p}_pre${before}`]){
+        rungToday[`${todayKey()}_${p}_pre${before}`] = true;
+        speakText(PREAZAN_TEXTS[p], "bn-BD");
+      }
+    }
+  }
 }
 function saveDetailPage(){
   if (!detailId || !detailDraft) return;
@@ -4080,7 +4114,7 @@ function saveDetailPage(){
 /* ---------------- Calendar page (Fix #4 §10) -----------------------
    Day cards (not a long thin table), one after another, scrollable.
    Month + year dropdowns on top. Each card: green header (English date
-   + weekday + Hijri date + share icon), prayer lines, a second line
+   + weekday + Hijri date — Build #19, Fix #2: the share icon is gone),
    (sunrise, sunset, Sehri, Iftar), and the forbidden times. Times are
    computed on-device for each day (computeTimingsLocal) — no network. */
 const GREG_BN_MONTHS = ["জানুয়ারি","ফেব্রুয়ারি","মার্চ","এপ্রিল","মে","জুন","জুলাই","আগস্ট","সেপ্টেম্বর","অক্টোবর","নভেম্বর","ডিসেম্বর"];
@@ -4117,28 +4151,12 @@ function renderCalendarPage(){
       <div class="cal-line"><span>${Lb("ইফতার","Iftar")}</span><b>${fmtTime(t.Maghrib)}</b></div>`;
     const sr = toMin(t.Sunrise), dh = toMin(t.Dhuhr), mg = toMin(t.Maghrib);
     const forb = `<div class="cal-forb">${Lb("সালাতের নিষিদ্ধ সময়", "Forbidden prayer times")}: ${fmtTime(t.Sunrise)} – ${fmtTime(minsToHHMM(sr+15))} • ${fmtTime(minsToHHMM(dh-10))} – ${fmtTime(t.Dhuhr)} • ${fmtTime(minsToHHMM(mg-25))} – ${fmtTime(t.Maghrib)}</div>`;
-    html += `<div class="card cal-card"><div class="cal-head"><span>${head}</span>
-      <button class="mini-btn" data-cal-share="${d}" title="${Lb("শেয়ার","Share")}">↗️</button></div>
+    /* Build #19, Fix #2: the share button on every calendar day card
+       is gone — the card head is just the date now. */
+    html += `<div class="card cal-card"><div class="cal-head"><span>${head}</span></div>
       ${prayLines}${second}${forb}</div>`;
   }
   box.innerHTML = html || `<div class="card"><p class="muted">${Lb("তথ্য পাওয়া যায়নি।", "No data available.")}</p></div>`;
-  $$("#cal-days [data-cal-share]").forEach(b=>b.onclick=()=>{
-    const d = +b.dataset.calShare;
-    const date = new Date(calYear, calMonth, d);
-    const t = computeTimingsLocal(date); if (!t) return;
-    const text = `${bnNum(d)} ${GREG_BN_MONTHS[calMonth]} ${bnNum(calYear)} — ${Lb("নামাজের সময়", "Prayer times")}: ` +
-      PRAYER_IDS.map(pid=>`${pname(pid)} ${fmtTime(t[pid])}`).join(", ");
-    shareText(text);
-  });
-}
-
-/* Share helper: Web Share API when available, clipboard fallback. */
-async function shareText(text){
-  try {
-    if (navigator.share){ await navigator.share({ text }); return; }
-  } catch(e){}
-  try { await navigator.clipboard.writeText(text); toast(Lb("কপি হয়েছে ✓", "Copied ✓")); }
-  catch(e){ toast(text); }
 }
 
 /* ---------------- Durood on phone unlock ----------------
@@ -4288,34 +4306,37 @@ async function scheduleNativeDhikr(){
     // istighfar.mp3), because Android 8+ plays the CHANNEL sound.
     // Fix #18: the old channel IDs were created without a working sound
     // on the user's phone (notification arrived, no audio) and Android
-    // never updates an existing channel — so the reminders now use
-    // fresh v2 channel IDs (the old ones are deleted by the native
-    // ensureChannels). The per-notification sound fields stay: the
-    // plugin strips the ".mp3" and resolves R.raw.durood/istighfar.
-    // Fix #33: each kind has TWO channels — the v2 channel WITH its
+    // never updates an existing channel — so the reminders use fresh
+    // channel IDs (v2 in Fix #18, v3 in Build #19 — the old ones are
+    // deleted by the native ensureChannels). The per-notification sound
+    // fields stay: the plugin strips the ".mp3" and resolves
+    // R.raw.durood/istighfar.
+    // Fix #33: each kind has TWO channels — the sound channel WITH its
     // sound (durood.mp3 / istighfar.mp3) and a "-silent" channel with NO
     // sound. Android never updates an existing channel's sound, so the
     // sound on/off switch works by scheduling into the other channel.
     // The silent channels are HIGH importance too, so the notification
-    // still pops up — just without any audio. The native ensureChannels
-    // creates the same two silent channels at app start (authoritative);
-    // this createChannel is skipped when they already exist.
-    await LN.createChannel({ id: "dhikr-durood-v2", name: "Durood reminders",
-      description: "Durood Sharif reminders", sound: "durood.mp3", importance: 4, vibration: true });
-    await LN.createChannel({ id: "dhikr-istighfar-v2", name: "Istighfar reminders",
-      description: "Astaghfirullah reminders", sound: "istighfar.mp3", importance: 4, vibration: true });
-    await LN.createChannel({ id: "dhikr-durood-v2-silent", name: "Durood reminders (silent)",
-      description: "Durood Sharif reminders without sound", importance: 4, vibration: true });
-    await LN.createChannel({ id: "dhikr-istighfar-v2-silent", name: "Istighfar reminders (silent)",
-      description: "Astaghfirullah reminders without sound", importance: 4, vibration: true });
+    // still pops up — just without any audio.
+    // Build #19, Fix #4: the user reports the durood reminder STILL
+    // arrives silently with the sound switch ON. The v2 channel on his
+    // phone was created without a working sound (the same class of
+    // failure as Fix #18/#24 — two channel creators, JS createChannel
+    // + native ensureChannels, racing, and a channel created once
+    // without sound stays silent forever). Repair, same proven pattern:
+    // fresh v3 channel IDs, the old v2 channels deleted by the native
+    // ensureChannels — and the native side is now the SOLE channel
+    // creator (MainActivity.onCreate runs it before any JS loads), so
+    // the JS createChannel calls are gone entirely: one creator, one
+    // sound, no race. The switch (Fix #33) keeps working exactly as
+    // before, now picking the v3 sound channel or the v3 silent twin.
     const jobs = [
       { on: settings.duroodRemOn, min: settings.duroodRemMin || 30, base: DUROOD_REM_BASE,
-        channelId: settings.duroodRemSound !== false ? "dhikr-durood-v2" : "dhikr-durood-v2-silent",
+        channelId: settings.duroodRemSound !== false ? "dhikr-durood-v3" : "dhikr-durood-v3-silent",
         sound: settings.duroodRemSound !== false ? "durood.mp3" : undefined,
         title: "My Deen — " + Lb("দরুদ শরিফ", "Durood Sharif"),
         body: DUROOD_AR + " — " + Lb("দরুদ পড়ুন", "Recite Durood upon the Prophet ﷺ") },
       { on: settings.astaghRemOn, min: settings.astaghRemMin || 30, base: ASTAGH_REM_BASE,
-        channelId: settings.astaghRemSound !== false ? "dhikr-istighfar-v2" : "dhikr-istighfar-v2-silent",
+        channelId: settings.astaghRemSound !== false ? "dhikr-istighfar-v3" : "dhikr-istighfar-v3-silent",
         sound: settings.astaghRemSound !== false ? "istighfar.mp3" : undefined,
         title: "My Deen — " + Lb("ইস্তিগফার", "Istighfar"),
         body: ASTAGH_AR + " — " + Lb("আস্তাগফিরুল্লাহ পড়ুন, আল্লাহর কাছে ক্ষমা চান", "Recite Astaghfirullah — seek Allah's forgiveness") }
@@ -4534,11 +4555,16 @@ function buildPrayerAlarmList(){
     // pre-azan (Fix #8 + #9): the same text twice — 5 minutes before
     // and 2 minutes before the azan. ALWAYS on: no toggle, no option,
     // even when this prayer's azan alarm is off.
+    // Build #19, Fix #5: the reminder is also SPOKEN — the alarm
+    // carries speak:true, and the native AlarmReceiver reads the body
+    // aloud with the phone's Bengali TTS voice (the foreground path in
+    // checkPreAzanVoice speaks it when the app is open). The body is
+    // the exact Fix #8 text, verbatim — never altered.
     [5, 2].forEach((mins, j)=>{
       const preAt = new Date(at.getTime() - mins*60000);
       if (preAt <= now) preAt.setDate(preAt.getDate()+1);
       list.push({ id: (j===0 ? PREAZAN5_IDS : PREAZAN_IDS)[i], at: preAt, type: "preazan",
-        title: "My Deen — " + name, body: PREAZAN_TEXTS[id], sound: "none", prayerId: id });
+        title: "My Deen — " + name, body: PREAZAN_TEXTS[id], sound: "none", prayerId: id, speak: true });
     });
     if (!settings.alarmOn[id]) return;
     /* Fix #38: "silent" must actually silence — before this every azan
@@ -4599,7 +4625,7 @@ async function syncPrayerAlarms(){
       // install, with the exact-alarm permission still missing, EVERY
       // alarm was silently skipped and the user only found out when the
       // azan never rang. Now the skipped count is recorded and shown.
-      const r = await PA.scheduleAlarms({ alarms: list.map(a=>({ id:a.id, at:a.at.getTime(), type:a.type, title:a.title, body:a.body, sound:a.sound, prayerId:a.prayerId })) });
+      const r = await PA.scheduleAlarms({ alarms: list.map(a=>({ id:a.id, at:a.at.getTime(), type:a.type, title:a.title, body:a.body, sound:a.sound, prayerId:a.prayerId, speak: !!a.speak })) });
       alarmStatus.checked = true;
       alarmStatus.scheduled = (r && typeof r.scheduled === "number") ? r.scheduled : list.length;
       alarmStatus.skipped = (r && typeof r.skipped === "number") ? r.skipped : 0;
@@ -4814,9 +4840,20 @@ function openLocSetup(){
 function closeLocSetup(){ const o = $("#loc-setup"); if (o) o.style.display = "none"; }
 /* Village-first place naming (Fix #2): prefer the smallest place
    (village / hamlet), then the town / city, then the wider area. */
+/* Known geocoder spelling fixes (Build #19, Fix #7): OpenStreetMap
+   Nominatim returns the user's home area as "Chepor" — the locality
+   next to Chemor — but the place is Chemor, so the displayed name is
+   corrected here, at the one funnel every Nominatim name passes
+   through (detectLocation + saveManualLocation). */
+const CITY_NAME_FIXES = { "chepor": "Chemor" };
+function normalizeCityName(name){
+  const n = String(name || "").trim();
+  const fixed = CITY_NAME_FIXES[n.toLowerCase()];
+  return fixed || n;
+}
 function villageNameOf(a){
   a = a || {};
-  return a.village || a.hamlet || a.suburb || a.neighbourhood || a.town || a.city || a.municipality || a.county || a.state_district || a.state || "";
+  return normalizeCityName(a.village || a.hamlet || a.suburb || a.neighbourhood || a.town || a.city || a.municipality || a.county || a.state_district || a.state || "");
 }
 
 /* Offline gazetteer (Fix #2) — village / upazila / city fallback.
@@ -4879,7 +4916,7 @@ const GAZETTEER = {
   "gazipur sadar": [24.00, 90.43], "narayanganj sadar": [23.62, 90.50], "chandpur sadar": [23.23, 90.65],
   "cumilla sadar": [23.46, 91.18],
   /* Malaysia */
-  "ipoh": [4.60, 101.08], "chemor": [4.72, 101.12], "jelapang": [4.65, 101.07],
+  "ipoh": [4.60, 101.08], "chemor": [4.72, 101.12], "chepor": [4.72, 101.12], "jelapang": [4.65, 101.07],
   "kuala lumpur": [3.14, 101.69], "kl": [3.14, 101.69], "george town": [5.41, 100.34],
   "penang": [5.41, 100.34], "johor bahru": [1.49, 103.76], "malacca": [2.19, 102.25],
   "melaka": [2.19, 102.25], "kuantan": [3.81, 103.33], "kuching": [1.55, 110.35],
@@ -4937,15 +4974,15 @@ async function saveManualLocation(city, country){
     const g = gazetteerLookup(city + (country ? ", " + country : ""));
     if (g){
       settings.lat = g[0]; settings.lon = g[1]; settings.useCoords = true;
-      settings.city = city; settings.country = country;
+      settings.city = normalizeCityName(city); settings.country = country;
       settings.locId = coordsKeyOf(); settings.coordsLoc = settings.locId;
       resolved = true;
     }
   }
   settings.locManual = true;
   if (!resolved){
-    settings.city = city; settings.country = country; settings.useCoords = false;
-    settings.locId = cityKeyOf(city, country);
+    settings.city = normalizeCityName(city); settings.country = country; settings.useCoords = false;
+    settings.locId = cityKeyOf(settings.city, country);
     /* Coordinates left over from a DIFFERENT place must not survive:
        the offline calculator and Qibla would silently keep using the
        old location, so the old times appeared unchanged. They are kept
@@ -4971,7 +5008,11 @@ const METHODS = [[17,"Malaysia (JAKIM)"],[2,"ISNA (North America)"],[3,"Muslim W
 const LEARN_ENABLED = false;
 function showView(v){
   if (v === "learn" && !LEARN_ENABLED) v = "home";
-  const hdr = $("header"); if (hdr) hdr.style.display = v === "home" ? "none" : "";
+  /* Build #19, Fix #1: the header is ALWAYS visible now — its date
+     line is the one date on Home (the duplicate home date card is
+     gone). Hiding it on Home used to leave the home-top card as the
+     only date, and on first launch (before any showView call) BOTH
+     dates showed — the duplicate the user reported. */
   $$(".view").forEach(s=>s.classList.remove("active"));
   const el = $("#view-"+v); if (el) el.classList.add("active");
   $$("#bottom-nav button").forEach(b=>b.classList.toggle("on", b.dataset.view===v));
@@ -5033,7 +5074,36 @@ function maybeAskPermissions(){
 // launch; the Fix #19 home banner stays as the fallback, and the
 // Settings "সব অনুমতি দিন" button re-runs the chain for what is missing.
 const PERM_STEPS = ["notifications", "exact", "battery", "autostart"];
+/* Build #19, Fix #3 — why the chain re-prompted / stalled, and the repair:
+   (a) The chain only marked onboarded at the very END. Any interruption
+       — the app killed while the user is on a Settings page (Xiaomi
+       kills background apps aggressively), or a plugin promise that
+       never settles (the permission dialog's activity result is lost
+       when the activity is recreated) — restarted the WHOLE chain on
+       the next launch, re-opening pages the user already saw. Autostart
+       can never be detected as granted, so it re-opened EVERY time
+       until the chain completed.
+   (b) The fix: every step is recorded the moment it is ASKED
+       (settings.permStepsAsked, saved at once) and the auto chain never
+       asks the same step twice. A kill mid-chain resumes from the next
+       unasked step on the next launch; a decline is never re-asked
+       (the Fix #19 home banner stays the fallback).
+   (c) Stall guard: every step's request races a timeout (90 s for the
+       user-paced notification dialog, 30 s for the rest, which resolve
+       as soon as their page opens) — a promise that never settles can
+       no longer hang the chain forever; the step is marked asked and
+       the chain moves on and still marks onboarded.
+   The Settings "সব অনুমতি দিন" button re-runs with force=true: it
+   re-asks whatever is still missing by real status, ignoring the
+   asked flags — the user tapped it on purpose. */
 let permChainRunning = false, permChainWaiting = false, permChainIdx = 0;
+function permStepsAsked(){ return settings.permStepsAsked || (settings.permStepsAsked = {}); }
+function permMarkAsked(id){ permStepsAsked()[id] = true; saveSettings(); }
+function permTimeout(promise, ms){
+  let timer = null;
+  return Promise.race([promise, new Promise(r=>{ timer = setTimeout(()=>r("timeout"), ms); })])
+    .finally(()=>{ if (timer) clearTimeout(timer); });
+}
 function permPA(){ return (typeof window.Capacitor !== "undefined" && window.Capacitor.Plugins) ? window.Capacitor.Plugins.PrayerAlarm : null; }
 async function permStatus(){
   const PA = permPA();
@@ -5047,17 +5117,22 @@ async function permRequestStep(id){
   if (PA && PA.requestStep){ try { await PA.requestStep({ step: id }); } catch(e){} return; }
   if (id === "notifications" && typeof Notification !== "undefined" && Notification.requestPermission){ try { await Notification.requestPermission(); } catch(e){} }
 }
-async function runPermChain(){
+async function runPermChain(force){
   if (permChainRunning) return;
   permChainRunning = true; permChainWaiting = false;
-  await permChainFrom(0);
+  await permChainFrom(0, !!force);
 }
-async function permChainFrom(idx){
+async function permChainFrom(idx, force){
   for (let i = idx; i < PERM_STEPS.length; i++){
     const id = PERM_STEPS[i];
-    const st = await permStatus();
-    if (st[id]) continue; // already granted (or N/A on web)
-    await permRequestStep(id);
+    if (!force && permStepsAsked()[id]) continue; // asked once already — never auto-ask again
+    const st = await permTimeout(permStatus(), 10000);
+    if (st && st !== "timeout" && st[id]) { permMarkAsked(id); continue; } // already granted (or N/A on web)
+    // Mark asked BEFORE awaiting the request: if the app is killed
+    // while the user is on the Settings page (or the promise never
+    // settles), the next launch does not re-open this page.
+    permMarkAsked(id);
+    await permTimeout(permRequestStep(id), id === "notifications" ? 90000 : 30000);
     if (id === "exact" || id === "autostart"){
       // A system page opened — the user is away from the app. Pause the
       // chain here; the foreground handler resumes it when they return.
@@ -5071,19 +5146,20 @@ async function permChainFrom(idx){
       for (let t = 0; t < 15; t++){
         await new Promise(r=>setTimeout(r, 1000));
         if (!permChainRunning) return;
-        const s2 = await permStatus();
-        if (s2.battery) break;
+        const s2 = await permTimeout(permStatus(), 10000);
+        if (s2 && s2 !== "timeout" && s2.battery) break;
       }
     }
     // notifications: the plugin promise resolves only after the user
-    // answers the system dialog, so reaching here means it was answered.
+    // answers the system dialog, so reaching here means it was answered
+    // (or the 90 s stall guard fired).
   }
   finishPermChain();
 }
 function resumePermChain(){
   if (!permChainRunning || !permChainWaiting) return;
   permChainWaiting = false;
-  permChainFrom(permChainIdx);
+  permChainFrom(permChainIdx, false);
 }
 function finishPermChain(){
   permChainRunning = false; permChainWaiting = false;
@@ -5187,21 +5263,11 @@ function bindEvents(){
   $("#set-dark").onchange=e=>{ settings.theme = e.target.checked?"dark":"light"; saveSettings(); applyTheme(); };
   $("#btn-save-settings").onclick=saveSettingsFromUI;
   $("#btn-go-fasting").onclick=()=>showView("fasting");
-  // Fix #4: home buttons, reference toggles, share, alarm + calendar + detail pages
-  const shareBtn = $("#btn-share");
-  if (shareBtn) shareBtn.onclick=()=>{
-    if (!timings){ toast(Lb("নামাজের সময় এখনো লোড হয়নি", "Prayer times are not loaded yet")); return; }
-    const today = Lb(`${bnNum(locNow().getDate())} ${GREG_BN_MONTHS[locNow().getMonth()]} — ${settings.city || ""}`, locNow().toDateString());
-    shareText(`My Deen — ${today}\n` + PRAYER_IDS.map(pid=>`${pname(pid)}: ${fmtTime(timings[pid])}`).join(" • "));
-  };
-  /* Home date row (Fix #7): same share + bell as the header. */
-  const shareBtnHome = $("#btn-home-share");
-  if (shareBtnHome) shareBtnHome.onclick=()=>{
-    if (!timings){ toast(Lb("নামাজের সময় এখনো লোড হয়নি", "Prayer times are not loaded yet")); return; }
-    const today = Lb(`${bnNum(locNow().getDate())} ${GREG_BN_MONTHS[locNow().getMonth()]} — ${settings.city || ""}`, locNow().toDateString());
-    shareText(`My Deen — ${today}\n` + PRAYER_IDS.map(pid=>`${pname(pid)}: ${fmtTime(timings[pid])}`).join(" • "));
-  };
-  const notifBtnHome = $("#btn-home-notif"); if (notifBtnHome) notifBtnHome.onclick=()=>showView("notif");
+  // Fix #4: home buttons, reference toggles, alarm + calendar + detail pages
+  // (Build #19, Fix #2: the share buttons are gone — header, home row
+  // and calendar day cells — so the share wiring and shareText are gone
+  // too. Build #19, Fix #1: the home bell went with the home-top row;
+  // the header bell (#btn-notif) is the one bell now.)
   const pillLoc = $("#pill-loc"); if (pillLoc) pillLoc.onclick=()=>openLocSetup(false);
   const goAlarm = $("#btn-go-alarm"); if (goAlarm) goAlarm.onclick=()=>showView("alarm");
   const goCal = $("#btn-go-calendar"); if (goCal) goCal.onclick=()=>showView("calendar");
@@ -5241,7 +5307,7 @@ function bindEvents(){
   const naflRef = $("#btn-nafl-ref");
   if (naflRef) naflRef.onclick=()=>{ const r = $("#nafl-ref"); if (r) r.classList.toggle("hidden"); };
   const permBtn = $("#btn-permissions");
-  if (permBtn) permBtn.onclick=()=>runPermChain(); // Fix #32: directly asks the system for whatever is still missing (no modal)
+  if (permBtn) permBtn.onclick=()=>runPermChain(true); // Fix #32 + Build #19: directly asks the system for whatever is still missing (no modal); force=true re-asks missing steps even if the first-launch chain already asked them once
   // Fasting hadith swipe (left/right) on the hadith card.
   const fh = $("#fast-hadith");
   if (fh){
@@ -5345,7 +5411,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   if (settings.autoLoc && !settings.locManual && hasLocation() && (!settings.useCoords || Date.now() - lastLocOk > 12*3600*1000)){
     detectLocation(true);
   }
-  setInterval(()=>{ renderPrayers(); checkAzan(); }, 1000);
+  setInterval(()=>{ renderPrayers(); checkAzan(); checkPreAzanVoice(); }, 1000);
   /* Countdown resync (Fix #2): timers freeze while the tab / app is
      hidden — re-render the moment it comes back, and pick up a
      location saved in another tab. */

@@ -121,6 +121,10 @@ public final class AlarmScheduler {
         i.putExtra("body", alarm.optString("body", ""));
         i.putExtra("sound", alarm.optString("sound", "none"));
         i.putExtra("prayerId", alarm.optString("prayerId", ""));
+        // Build #19, Fix #5: spoken pre-azan reminders — the alarm
+        // carries speak=true for the T-5/T-2 entries; AlarmReceiver
+        // reads the body aloud with the phone's Bengali TTS voice.
+        i.putExtra("speak", alarm.optBoolean("speak", false));
         i.putExtra("at", alarm.optLong("at", 0));
         return PendingIntent.getBroadcast(ctx, alarm.optInt("id", 0), i,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
@@ -167,21 +171,32 @@ public final class AlarmScheduler {
             // existing channel's sound, so the only reliable repair is
             // fresh channel IDs. Delete the old (possibly silent) ones
             // and create v2 channels with the sound + HIGH importance.
+            // Build #19, Fix #4: the v2 channel on the user's phone was
+            // itself created without a working sound (the durood
+            // reminder still arrives silently with the switch ON) — the
+            // same repair again: delete v2, create v3 with the sound +
+            // HIGH importance. The native side is now the SOLE creator
+            // of the dhikr channels (the JS createChannel calls are
+            // gone), so no second creator can ever make a silent one.
             nm.deleteNotificationChannel("dhikr-durood");
             nm.deleteNotificationChannel("dhikr-istighfar");
-            createChannel(nm, ctx, "dhikr-durood-v2", "Durood reminders", "Durood Sharif reminders",
+            nm.deleteNotificationChannel("dhikr-durood-v2");
+            nm.deleteNotificationChannel("dhikr-istighfar-v2");
+            nm.deleteNotificationChannel("dhikr-durood-v2-silent");
+            nm.deleteNotificationChannel("dhikr-istighfar-v2-silent");
+            createChannel(nm, ctx, "dhikr-durood-v3", "Durood reminders", "Durood Sharif reminders",
                     NotificationManager.IMPORTANCE_HIGH, R.raw.durood);
-            createChannel(nm, ctx, "dhikr-istighfar-v2", "Istighfar reminders", "Astaghfirullah reminders",
+            createChannel(nm, ctx, "dhikr-istighfar-v3", "Istighfar reminders", "Astaghfirullah reminders",
                     NotificationManager.IMPORTANCE_HIGH, R.raw.istighfar);
             // Fix #33: silent variants of the dhikr channels — same HIGH
             // importance (the notification still pops up) but rawRes -1,
             // so no sound is set at all. The sound switch works by
-            // scheduling into the v2 channel (sound on) or the -silent
+            // scheduling into the v3 channel (sound on) or the -silent
             // channel (sound off), because Android never updates an
             // existing channel's sound.
-            createChannel(nm, ctx, "dhikr-durood-v2-silent", "Durood reminders (silent)", "Durood Sharif reminders without sound",
+            createChannel(nm, ctx, "dhikr-durood-v3-silent", "Durood reminders (silent)", "Durood Sharif reminders without sound",
                     NotificationManager.IMPORTANCE_HIGH, -1);
-            createChannel(nm, ctx, "dhikr-istighfar-v2-silent", "Istighfar reminders (silent)", "Astaghfirullah reminders without sound",
+            createChannel(nm, ctx, "dhikr-istighfar-v3-silent", "Istighfar reminders (silent)", "Astaghfirullah reminders without sound",
                     NotificationManager.IMPORTANCE_HIGH, -1);
         } catch (Exception ignored) {}
     }

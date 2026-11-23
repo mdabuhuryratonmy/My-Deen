@@ -5,8 +5,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.os.Bundle;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
+import java.util.Locale;
 import org.json.JSONObject;
 
 /**
@@ -14,6 +18,15 @@ import org.json.JSONObject;
  * on the channel for the alarm type, then re-schedules the same alarm
  * for +24h so daily alarms keep working without opening the app.
  * Never crashes the alarm path.
+ *
+ * Build #19, Fix #5: spoken pre-azan reminders — an alarm that carries
+ * speak=true (the T-5 and T-2 entries before every fard prayer) has
+ * its body read aloud with the phone's Bengali text-to-speech voice,
+ * in parallel with the notification. The body is the exact Fix #8
+ * Bengali text, verbatim. Speaking is best-effort: if TTS is missing
+ * or has no Bengali voice, the notification still posts and nothing
+ * breaks. Only pre-azan entries speak — azan entries play the azan
+ * through their channel, Tahajjud stays a silent notification.
  */
 public class AlarmReceiver extends BroadcastReceiver {
     @Override
@@ -43,6 +56,19 @@ public class AlarmReceiver extends BroadcastReceiver {
                     context.getResources(), R.drawable.ic_notification_large);
             if (largeIcon != null) builder.setLargeIcon(largeIcon);
             NotificationManagerCompat.from(context).notify(id, builder.build());
+            // Build #19, Fix #5: speak the pre-azan text aloud. The
+            // notification above already posted; speaking runs on its
+            // own thread with goAsync so the broadcast stays alive
+            // while TTS finishes (or the 25 s safety net fires).
+            if (intent.getBooleanExtra("speak", false) && body != null && !body.isEmpty()) {
+                final String text = body;
+                final Context appCtx = context.getApplicationContext();
+                final BroadcastReceiver.PendingResult result = goAsync();
+                new Thread(() -> {
+                    try { speakViaTts(appCtx, text); } catch (Exception ignored) {}
+                    try { result.finish(); } catch (Exception ignored) {}
+                }).start();
+            }
             // Daily alarm → same time tomorrow (based on the original
             // fire time, so a late delivery cannot drift the schedule).
             JSONObject alarm = new JSONObject();
@@ -52,6 +78,7 @@ public class AlarmReceiver extends BroadcastReceiver {
             alarm.put("body", body);
             alarm.put("sound", intent.getStringExtra("sound"));
             alarm.put("prayerId", intent.getStringExtra("prayerId"));
+            alarm.put("speak", intent.getBooleanExtra("speak", false));
             long at = intent.getLongExtra("at", 0);
             if (at > 0) {
                 alarm.put("at", at);
@@ -59,6 +86,53 @@ public class AlarmReceiver extends BroadcastReceiver {
             }
         } catch (Exception ignored) {
             // Never crash the alarm path.
+        }
+    }
+
+    /** Speak one Bengali text with the phone's text-to-speech voice.
+        Blocks the calling (background) thread until the utterance
+        finishes or 25 s pass, then shuts TTS down. Returns silently
+        when TTS is unavailable or has no Bengali voice — the
+        notification was already posted, so nothing is lost. */
+    private void speakViaTts(Context context, String text) {
+        final Object lock = new Object();
+        final boolean[] done = { false };
+        final TextToSpeech[] holder = new TextToSpeech[1];
+        try {
+            holder[0] = new TextToSpeech(context, status -> {
+                if (status != TextToSpeech.SUCCESS) {
+                    synchronized (lock) { done[0] = true; lock.notifyAll(); }
+                    return;
+                }
+                TextToSpeech tts = holder[0];
+                int lang = tts.setLanguage(new Locale("bn"));
+                if (lang == TextToSpeech.LANG_MISSING_DATA || lang == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    synchronized (lock) { done[0] = true; lock.notifyAll(); }
+                    return;
+                }
+                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                    @Override public void onStart(String id) {}
+                    @Override public void onDone(String id) {
+                        synchronized (lock) { done[0] = true; lock.notifyAll(); }
+                    }
+                    @Override public void onError(String id) {
+                        synchronized (lock) { done[0] = true; lock.notifyAll(); }
+                    }
+                });
+                tts.speak(text, TextToSpeech.QUEUE_FLUSH, new Bundle(), "preazan");
+            });
+            synchronized (lock) {
+                long deadline = System.currentTimeMillis() + 25000;
+                while (!done[0]) {
+                    long left = deadline - System.currentTimeMillis();
+                    if (left <= 0) break;
+                    lock.wait(left);
+                }
+            }
+        } catch (Exception ignored) {
+            // TTS unavailable — notification already posted.
+        } finally {
+            try { if (holder[0] != null) holder[0].shutdown(); } catch (Exception ignored) {}
         }
     }
 }

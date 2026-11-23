@@ -62,6 +62,11 @@ globalThis.pname=pname; globalThis.Lb=Lb; globalThis.num=num; globalThis.t=t;
 globalThis.migrateAlarmSounds=migrateAlarmSounds;
 globalThis.normalizeSounds=normalizeSounds; globalThis.toggleDetailSound=toggleDetailSound;
 globalThis.detailSoundExplain=detailSoundExplain; globalThis.renderDetailSounds=renderDetailSounds;
+// Build #19 test hooks: spoken pre-azan voice, city-name normaliser,
+// permission-chain helpers
+globalThis.speakText=speakText; globalThis.checkPreAzanVoice=checkPreAzanVoice;
+globalThis.villageNameOf=villageNameOf; globalThis.normalizeCityName=normalizeCityName;
+globalThis.permStepsAsked=permStepsAsked; globalThis.permMarkAsked=permMarkAsked; globalThis.permTimeout=permTimeout;
 globalThis.qiblaBearing=qiblaBearing; globalThis.updateNeedle=updateNeedle;
 globalThis.__setQiblaDeg=v=>{ qiblaDeg=v; }; globalThis.__setHeading=v=>{ heading=v; };
 globalThis.fetchQibla=fetchQibla; globalThis.__getQiblaDeg=()=>qiblaDeg;
@@ -219,21 +224,24 @@ globalThis.Date = RealDate16; settings.tzName = _tz16;
 // channelId/createChannel id anywhere in the schedule path.
 const _src18 = fs.readFileSync("/home/hatch/workspace/deen-day/www/app.js", "utf8");
 const _java18 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AlarmScheduler.java", "utf8");
-// Fix #33 rewrote the channel pick: sound on → the v2 channel with its
+// Fix #33 rewrote the channel pick: sound on → the v3 channel with its
 // sound, sound off → the silent twin. The default (sound on) still
-// schedules on the v2 channel with the sound — that is what these check.
-check("Fix #18: JS schedules durood reminders on the v2 channel with durood.mp3 (sound on)",
-  _src18.includes('settings.duroodRemSound !== false ? "dhikr-durood-v2"') && _src18.includes('settings.duroodRemSound !== false ? "durood.mp3"'), "channelId dhikr-durood-v2");
-check("Fix #18: JS schedules istighfar reminders on the v2 channel with istighfar.mp3 (sound on)",
-  _src18.includes('settings.astaghRemSound !== false ? "dhikr-istighfar-v2"') && _src18.includes('settings.astaghRemSound !== false ? "istighfar.mp3"'), "channelId dhikr-istighfar-v2");
+// schedules on the v3 channel with the sound — that is what these check.
+// (Build #19, Fix #4: v2 → v3, same repair as Fix #18 — the v2 channel
+// on the user's phone was itself created without a working sound.)
+check("Fix #18: JS schedules durood reminders on the v3 channel with durood.mp3 (sound on)",
+  _src18.includes('settings.duroodRemSound !== false ? "dhikr-durood-v3"') && _src18.includes('settings.duroodRemSound !== false ? "durood.mp3"'), "channelId dhikr-durood-v3");
+check("Fix #18: JS schedules istighfar reminders on the v3 channel with istighfar.mp3 (sound on)",
+  _src18.includes('settings.astaghRemSound !== false ? "dhikr-istighfar-v3"') && _src18.includes('settings.astaghRemSound !== false ? "istighfar.mp3"'), "channelId dhikr-istighfar-v3");
 check("Fix #18: the old channel IDs are gone from the JS schedule path (exact quoted ids)",
   !/"dhikr-durood"/.test(_src18) && !/"dhikr-istighfar"/.test(_src18), "no old ids in app.js");
-check("Fix #18: native creates the v2 channels with the raw sounds + HIGH importance",
-  _java18.includes('createChannel(nm, ctx, "dhikr-durood-v2"') && _java18.includes("IMPORTANCE_HIGH, R.raw.durood") &&
-  _java18.includes('createChannel(nm, ctx, "dhikr-istighfar-v2"') && _java18.includes("IMPORTANCE_HIGH, R.raw.istighfar"),
-  "native v2 channels");
+check("Fix #18: native creates the v3 channels with the raw sounds + HIGH importance",
+  _java18.includes('createChannel(nm, ctx, "dhikr-durood-v3"') && _java18.includes("IMPORTANCE_HIGH, R.raw.durood") &&
+  _java18.includes('createChannel(nm, ctx, "dhikr-istighfar-v3"') && _java18.includes("IMPORTANCE_HIGH, R.raw.istighfar"),
+  "native v3 channels");
 check("Fix #18: native deletes the old (possibly silent) dhikr channels",
-  _java18.includes('deleteNotificationChannel("dhikr-durood")') && _java18.includes('deleteNotificationChannel("dhikr-istighfar")'),
+  _java18.includes('deleteNotificationChannel("dhikr-durood")') && _java18.includes('deleteNotificationChannel("dhikr-istighfar")') &&
+  _java18.includes('deleteNotificationChannel("dhikr-durood-v2")') && _java18.includes('deleteNotificationChannel("dhikr-istighfar-v2")'),
   "old channels deleted");
 
 // ---- Fix #11: Asr school follows the region (Malaysia = Shafi'i) ----
@@ -322,7 +330,7 @@ check("HTML has ring hero", html.includes("ring-hero") && html.includes("ring-fg
 check("HTML has alarm + detail + calendar views", html.includes('id="view-alarm"') && html.includes('id="view-prayer-detail"') && html.includes('id="view-calendar"'));
 check("HTML has detail slider −30..+30 step 1", html.includes('id="detail-slider"') && html.includes('min="-30"') && html.includes('max="30"') && html.includes('step="1"'));
 check("HTML has istighfar audio element", html.includes('id="audio-istighfar"') && html.includes("audio/istighfar.mp3"));
-check("HTML has share button", html.includes('id="btn-share"'));
+check("Build #19 Fix #2: share button is GONE from the HTML (header + home row + calendar cells)", !html.includes('id="btn-share"') && !html.includes('id="btn-home-share"') && !html.includes("data-cal-share") && !html.includes("share")); 
 check("sw.js cache v20 + istighfar cached", sw.includes("my-deen-v20") && sw.includes("audio/istighfar.mp3"));
 check("no ads anywhere in source", !src.includes("admob") && !src.includes("AdMob") && !src.includes("adsbygoogle"));
 
@@ -402,11 +410,13 @@ check("feat tracker ring shows today's prayer %",
 // ---- Fix #7: home rebuilt exactly like the reference (no ads) ----
 // Fix #36 updated the grid anchor + tile list: the Tilawat/Tafsir tiles
 // are gone (merged into the Quran view), Quran + Roza sit at the bottom.
-const homeOrder = ["home-top","ring-hero","prayer-list","btn-home-alarm","feat-tracker","forbid-section","nafl-rows","nafl-strip","btn-go-fasting"];
+// Build #19, Fix #1: the duplicate home-top date card is gone — the
+// header date (#date-line) is now the only date on Home.
+const homeOrder = ["ring-hero","prayer-list","btn-home-alarm","feat-tracker","forbid-section","nafl-rows","nafl-strip","btn-go-fasting"];
 check("home sections are in the reference order",
   homeOrder.every((id,i)=> i===0 || html.indexOf(id) > html.indexOf(homeOrder[i-1])));
-check("home date row has Hijri + Gregorian + share + bell",
-  html.includes('id="home-date-hijri"') && html.includes('id="home-date-greg"') && html.includes('id="btn-home-share"') && html.includes('id="btn-home-notif"') && html.includes('id="home-notif-badge"'));
+check("Build #19 Fix #1: duplicate home date card is gone, header date stays the only date",
+  !html.includes('id="home-date-hijri"') && !html.includes('id="home-date-greg"') && !html.includes('class="home-top"') && !html.includes('id="btn-home-share"') && !html.includes('id="btn-home-notif"') && !html.includes('id="home-notif-badge"') && html.includes('id="date-line"'));
 check("home has all 8 feature tiles (Fix #36 merged grid: no tilawat/tafsir tiles; duas + fasting included)",
   ["feat-tracker","feat-qibla","feat-ruqyah","feat-names","feat-tasbih","feat-duas","feat-quran","feat-fasting"].every(id=>html.includes(`id="${id}"`)));
 check("old home pieces are gone (location card, tracker cards, bottom alarm row)",
@@ -417,8 +427,8 @@ check("ring is full-bleed with dark arc + dark text on light skies",
   css.includes("#view-home .ring-hero") && css.includes('.ring-hero[data-sky="day"] .ring-fg'));
 check("prayer rows use 24h ranges + done circles, no old azan lines",
   src.includes("done-circle") && src.includes('class="p-range"') && !src.includes('class="dotbtn" data-pray') && src.includes("num(timings[pid])"));
-check("header hides on home",
-  src.includes("hdr.style.display") && src.includes('v === "home" ? "none"'));
+check("Build #19 Fix #1: header is ALWAYS visible now (never hidden on Home — its date is the one date)",
+  !src.includes("hdr.style.display") && !src.includes('v === "home" ? "none"'));
 check("renderTracker guards the removed tracker card",
   src.includes("if (!box) return;"));
 
@@ -933,8 +943,8 @@ Object.assign(settings, _savedTz);
     check("Fix #32: the chain ends by marking onboarded (a decline is never re-asked every launch)",
       src.includes("function finishPermChain()") && src.includes("settings.onboarded = true; settings.permAsked = true;"),
       "once only");
-    check("Fix #32: Settings 'সব অনুমতি দিন' button runs the direct chain for what is missing",
-      src.includes('permBtn.onclick=()=>runPermChain()'), "direct re-run");
+    check("Fix #32: Settings 'সব অনুমতি দিন' button runs the direct chain for what is missing (force re-ask)",
+      src.includes('permBtn.onclick=()=>runPermChain(true)'), "direct re-run");
     check("Fix #32: onboarded flag defaults to false (new installs get asked once)",
       src.includes("onboarded:false"), "default false");
     check("Fix #32: on the web (no plugin) only the standard notification dialog is asked",
@@ -1176,15 +1186,18 @@ Object.assign(settings, _savedTz);
     check("Fix #33: sound defaults on in app.js (duroodRemSound / astaghRemSound)",
       src.includes("duroodRemSound:true") && src.includes("astaghRemSound:true"), "defaults on");
     check("Fix #33: native scheduler picks the sound or the silent channel by the switch",
-      src.includes('settings.duroodRemSound !== false ? "dhikr-durood-v2" : "dhikr-durood-v2-silent"') &&
-      src.includes('settings.astaghRemSound !== false ? "dhikr-istighfar-v2" : "dhikr-istighfar-v2-silent"'),
+      src.includes('settings.duroodRemSound !== false ? "dhikr-durood-v3" : "dhikr-durood-v3-silent"') &&
+      src.includes('settings.astaghRemSound !== false ? "dhikr-istighfar-v3" : "dhikr-istighfar-v3-silent"'),
       "channel pick");
-    check("Fix #33: both silent channels are created (JS + native)",
-      src.includes('id: "dhikr-durood-v2-silent"') && src.includes('id: "dhikr-istighfar-v2-silent"') &&
-      _as33.includes('"dhikr-durood-v2-silent"') && _as33.includes('"dhikr-istighfar-v2-silent"'),
+    // Build #19, Fix #4: the JS createChannel calls are gone — the
+    // native side is now the SOLE dhikr channel creator (no dual-creator
+    // race), so the silent channels exist only in the native code.
+    check("Fix #33: both silent channels are created natively (Build #19: native is the sole creator, no JS createChannel)",
+      !/createChannel\(\{ id: "dhikr-durood-v3"/.test(src) && !/createChannel\(\{ id: "dhikr-istighfar-v3"/.test(src) &&
+      _as33.includes('"dhikr-durood-v3-silent"') && _as33.includes('"dhikr-istighfar-v3-silent"'),
       "silent channels");
     check("Fix #33: native silent channels are HIGH importance with no sound (they still pop up, silently)",
-      _as33.includes('createChannel(nm, ctx, "dhikr-durood-v2-silent"') &&
+      _as33.includes('createChannel(nm, ctx, "dhikr-durood-v3-silent"') &&
       _as33.includes('NotificationManager.IMPORTANCE_HIGH, -1)'),
       "silent, still pops up");
     check("Fix #33: foreground audio is gated on the switch (sound off = toast + notification only, no audio)",
@@ -1332,6 +1345,123 @@ Object.assign(settings, _savedTz);
     check("Fix #39: a fired alarm that is no longer stored is cancelled, never re-armed",
       javaSched.includes("if (!inStored)") && javaSched.includes("cancel(ctx, alarm.optInt(\"id\", -1))"),
       "no resurrection");
+
+    // ---- Build #19 (user's 23 Nov 2026 WhatsApp list) ----
+    const javaReceiver = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AlarmReceiver.java", "utf8");
+    const javaUnlock = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodUnlockReceiver.java", "utf8");
+    const javaManifest = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/AndroidManifest.xml", "utf8");
+
+    // Fix #1: duplicate home date card is gone (HTML check lives above
+    // in the home section); the orphaned CSS rules are gone too and
+    // showView no longer hides the header on Home.
+    check("Build #19 Fix #1: orphaned home date CSS rules are gone",
+      !/\.home-top\s*\{/.test(css) && !/\.home-date\s*\{/.test(css) && !/\.home-cal\s*\{/.test(css) &&
+      !/\.home-date-hijri\s*\{/.test(css) && !/\.home-date-greg\s*\{/.test(css) && !/\.home-actions\s*\{/.test(css) &&
+      !/#btn-home-notif\s*\{/.test(css), "no home-top rules");
+    check("Build #19 Fix #1: showView never hides the header (header date is the one date)",
+      !/headerEl\.style\.display/.test(src.slice(src.indexOf("function showView"), src.indexOf("function showView") + 1200)), "header always visible");
+
+    // Fix #2: share buttons are gone from the JS too (HTML check above).
+    check("Build #19 Fix #2: shareText + share wirings are gone from JS",
+      !src.includes("function shareText") && !src.includes("data-cal-share") &&
+      !src.includes('$("#btn-share")') && !src.includes('$("#btn-home-share")'), "no share code");
+
+    // Fix #3: permission chain asks once.
+    check("Build #19 Fix #3: per-step asked flags exist in DEFAULTS + are merged on load",
+      src.includes("permStepsAsked:{}") && src.includes("settings.permStepsAsked = {...DEFAULTS.permStepsAsked"),
+      "asked flags");
+    check("Build #19 Fix #3: a step is marked asked BEFORE its request is awaited (a kill mid-chain never re-opens it)",
+      (() => { const fn = src.slice(src.indexOf("async function permChainFrom"), src.indexOf("function resumePermChain"));
+        return fn.indexOf("permMarkAsked(id)") < fn.indexOf("await permTimeout(permRequestStep(id)") && fn.includes("if (!force && permStepsAsked()[id]) continue"); })(),
+      "mark before await");
+    check("Build #19 Fix #3: the chain has a stall guard (timeout race) and resumes on foreground return",
+      src.includes("function permTimeout(promise, ms)") && src.includes("permTimeout(permRequestStep(id)") && src.includes("resumePermChain()"),
+      "stall guard");
+    check("Build #19 Fix #3: marking a step asked persists immediately",
+      (() => { const before = (settings.permStepsAsked || {}).notifications; permMarkAsked("notifications"); const ok = permStepsAsked().notifications === true && settings.permStepsAsked.notifications === true; if (!before) delete settings.permStepsAsked.notifications; saveSettings(); return ok; })(),
+      "persisted");
+
+    // Fix #4: v3 dhikr channels (native is the sole creator) — see also
+    // the updated Fix #18 / Fix #33 checks above.
+    check("Build #19 Fix #4: no JS createChannel for dhikr (native is the sole creator)",
+      !/LN\.createChannel\(\{ id: "dhikr-/.test(src), "one creator");
+    check("Build #19 Fix #4: native deletes the v2 channels (incl. silent twins)",
+      javaSched.includes('deleteNotificationChannel("dhikr-durood-v2")') && javaSched.includes('deleteNotificationChannel("dhikr-istighfar-v2")') &&
+      javaSched.includes('deleteNotificationChannel("dhikr-durood-v2-silent")') && javaSched.includes('deleteNotificationChannel("dhikr-istighfar-v2-silent")'),
+      "v2 deleted");
+
+    // Fix #5: spoken pre-azan reminders.
+    check("Build #19 Fix #5: both pre-azan entries carry speak:true (T-5 and T-2, every fard prayer)",
+      ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>{
+        const pres = buildPrayerAlarmList().filter(a=>a.type==="preazan" && a.prayerId===pid);
+        return pres.length===2 && pres.every(a=>a.speak===true && a.body===PREAZAN_TEXTS[pid]);
+      }), "speak flag");
+    check("Build #19 Fix #5: syncPrayerAlarms passes speak through to the native plugin",
+      src.includes("speak: !!a.speak"), "passthrough");
+    check("Build #19 Fix #5: foreground voice check exists, speaks the exact Fix #8 text in Bengali, and is wired into the 1 s tick",
+      src.includes("function checkPreAzanVoice()") && src.includes('speakText(PREAZAN_TEXTS[p], "bn-BD")') &&
+      src.includes("checkAzan(); checkPreAzanVoice();"), "foreground voice");
+    check("Build #19 Fix #5: native pending intent carries speak + the reschedule keeps it",
+      javaSched.includes('i.putExtra("speak", alarm.optBoolean("speak", false))') &&
+      javaReceiver.includes('alarm.put("speak", intent.getBooleanExtra("speak", false))'), "native carry");
+    check("Build #19 Fix #5: native AlarmReceiver speaks the body with Bengali TTS (goAsync, best-effort)",
+      javaReceiver.includes('tts.setLanguage(new Locale("bn"))') && javaReceiver.includes('tts.speak(text, TextToSpeech.QUEUE_FLUSH') &&
+      javaReceiver.includes("goAsync()") && javaReceiver.includes("speakViaTts"), "native TTS");
+    // Functional: at Fajr-5 the foreground voice speaks the exact Fajr text once.
+    {
+      const _tzB19 = settings.tzName; settings.tzName = "";
+      const _spoken = [];
+      globalThis.SpeechSynthesisUtterance = class { constructor(t){ this.text = t; this.lang = ""; } };
+      globalThis.speechSynthesis = { cancel(){}, speak(u){ _spoken.push(u); } };
+      __setTimings({ Fajr:"05:42", Dhuhr:"13:01", Asr:"16:24", Maghrib:"18:58", Isha:"20:11" });
+      const _RealDateB19 = Date;
+      const _t5 = new Date(); _t5.setHours(5,37,0,0);
+      globalThis.Date = class extends _RealDateB19 {
+        constructor(...a){ super(...(a.length ? a : [_t5.getTime()])); }
+        static now(){ return _t5.getTime(); }
+      };
+      checkPreAzanVoice();
+      check("Build #19 Fix #5: at Fajr-5 the voice speaks the exact Fajr pre-azan text in Bengali, once",
+        _spoken.length === 1 && _spoken[0].text === PREAZAN_TEXTS.Fajr && _spoken[0].lang === "bn-BD",
+        _spoken.length ? _spoken[0].text.slice(0, 40) : "nothing spoken");
+      checkPreAzanVoice();
+      check("Build #19 Fix #5: the same minute does not speak twice (once-per-day guard)",
+        _spoken.length === 1, "spoken once");
+      const _t2 = new Date(); _t2.setHours(5,40,0,0);
+      globalThis.Date = class extends _RealDateB19 {
+        constructor(...a){ super(...(a.length ? a : [_t2.getTime()])); }
+        static now(){ return _t2.getTime(); }
+      };
+      checkPreAzanVoice();
+      check("Build #19 Fix #5: at Fajr-2 the voice speaks the same exact text again",
+        _spoken.length === 2 && _spoken[1].text === PREAZAN_TEXTS.Fajr && _spoken[1].lang === "bn-BD",
+        "T-2 spoken");
+      globalThis.Date = _RealDateB19; settings.tzName = _tzB19;
+      delete globalThis.speechSynthesis; delete globalThis.SpeechSynthesisUtterance;
+    }
+
+    // Fix #6: durood on unlock — receiver hardened; manifest still
+    // registers it and the JS still syncs the native toggle at init.
+    check("Build #19 Fix #6: unlock receiver uses explicit notification audio attributes + full volume",
+      javaUnlock.includes("AudioAttributes.USAGE_NOTIFICATION") && javaUnlock.includes("CONTENT_TYPE_SONIFICATION") &&
+      javaUnlock.includes("setVolume(1.0f, 1.0f)") && javaUnlock.includes("createPlayer"), "explicit audio");
+    check("Build #19 Fix #6: unlock receiver keeps the create() fallback if the explicit build fails",
+      javaUnlock.includes("MediaPlayer.create(context, R.raw.durood)"), "fallback");
+    check("Build #19 Fix #6: receiver is still registered for USER_PRESENT and the JS still syncs the toggle at init",
+      javaManifest.includes("DuroodUnlockReceiver") && javaManifest.includes("android.intent.action.USER_PRESENT") &&
+      src.includes("syncDuroodToggleNative()"), "wiring intact");
+
+    // Fix #7: "Chepor" → "Chemor".
+    check("Build #19 Fix #7: villageNameOf normalises Chepor → Chemor (all Nominatim fields)",
+      villageNameOf({ city: "Chepor" }) === "Chemor" && villageNameOf({ village: "Chepor" }) === "Chemor" &&
+      villageNameOf({ suburb: "Chepor" }) === "Chemor" && villageNameOf({ city: "Chemor" }) === "Chemor",
+      "normalised");
+    check("Build #19 Fix #7: no stray 'Chepor' literal in the app source (only the fix mapping + comments)",
+      !/Chepor/.test(html) && !/Chepor/.test(css) &&
+      !/Chepor/.test(src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "")),
+      "no stray Chepor");
+    check("Build #19 Fix #7: the gazetteer knows Chepor's coordinates as Chemor",
+      src.includes('"chepor": [4.72, 101.12]'), "gazetteer");
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);

@@ -426,16 +426,9 @@ hr.sep{border:none; border-top:1px solid var(--line); margin:14px 0}
 .feat-ic,.feat-ring{width:58px; height:58px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:26px; background:var(--card); border:1.5px solid var(--gold)}
 .feat-ring{font-size:15px; font-weight:700; color:var(--gold-d)}
 [data-theme="dark"] .feat-ring{color:var(--gold-l)}
-/* home: reference layout (Fix #7) — date row, full-bleed ring, ref rows */
-.home-top{display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:2px 2px 14px}
-.home-date{display:flex; gap:8px; align-items:flex-start}
-.home-cal{font-size:20px; line-height:1.2}
-.home-date-hijri{font-size:15px; font-weight:600}
-.home-date-greg{font-size:13px; color:var(--muted); margin-top:2px}
-.home-actions{display:flex; gap:8px}
-.home-actions .icon-btn{width:40px; height:40px; border-radius:50%; background:var(--emerald); color:#fff; border:none; font-size:18px; position:relative; display:flex; align-items:center; justify-content:center; padding:0}
-#btn-home-notif{background:#1f2937}
-.home-actions .icon-btn .badge{position:absolute; top:-4px; right:-4px}
+/* home: reference layout (Fix #7) — full-bleed ring, ref rows.
+   Build #19, Fix #1: the home-top date row is gone (the header date
+   is the one date now), so its rules go too. */
 #view-home .ring-hero{margin:0 -14px 14px; border-radius:0; padding-top:26px}
 .ring-hero .ring-moon{position:absolute; right:16px; top:104px; font-size:34px; line-height:1}
 .ring-hero[data-sky="day"] .ring-fg, .ring-hero[data-sky="dawn"] .ring-fg, .ring-hero[data-sky="golden"] .ring-fg{stroke:#16324f}
