@@ -124,7 +124,11 @@ public final class AlarmScheduler {
         // Build #19, Fix #5: spoken pre-azan reminders — the alarm
         // carries speak=true for the T-5/T-2 entries; AlarmReceiver
         // reads the body aloud with the phone's Bengali TTS voice.
+        // Fix #40: azan entries also carry speakText (the spoken
+        // announcement); pre-azan entries have no speakText and speak
+        // the body. Silent entries never carry speak=true.
         i.putExtra("speak", alarm.optBoolean("speak", false));
+        i.putExtra("speakText", alarm.optString("speakText", ""));
         i.putExtra("at", alarm.optLong("at", 0));
         return PendingIntent.getBroadcast(ctx, alarm.optInt("id", 0), i,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);

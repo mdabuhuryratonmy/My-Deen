@@ -4449,6 +4449,14 @@ function playAzan(){
     new Notification("My Deen — " + (pname(nm.id)), {body: Lb("নামাজের সময় হয়েছে", "It is time for prayer"), icon:"icons/icon-192.png"});
   }
 }
+/* Fix #40: is the native exact alarm armed right now? When it is, the
+   native AlarmReceiver posts the notification, plays the azan and speaks
+   the announcement — the foreground tick must stay quiet, or the same
+   prayer rings twice at once (once from the alarm, once from the tick). */
+function nativeAzanArmed(){
+  return (typeof window.Capacitor !== "undefined" && window.Capacitor.Plugins && window.Capacitor.Plugins.PrayerAlarm) &&
+    alarmStatus.checked && alarmStatus.notifications && alarmStatus.exact && alarmStatus.skipped === 0;
+}
 function checkAzan(){
   if (!timings || !settings.azan) return;
   const now = locNow(); const key = `${todayKey()}_${now.getHours()}:${now.getMinutes()}`;
@@ -4456,7 +4464,21 @@ function checkAzan(){
   for (const p of PRAYER_IDS){
     if (!settings.alarmOn[p]) continue;
     const at = toMin(timings[p]) + (settings.offsets[p] || 0);
-    if (at===mins && !rungToday[key+p]){ rungToday[key+p]=true; playAzan(); toast(`🕌 ${Lb("নামাজের সময় হয়েছে", "Time for prayer")} — ${p}`); }
+    if (at===mins && !rungToday[key+p]){
+      rungToday[key+p]=true;
+      /* Fix #40: the native alarm already rings + speaks at this minute
+         — the tick must not play a second azan. A "silent" prayer stays
+         silent here too (Fix #38): the foreground path never honoured
+         silent before. Otherwise play the azan and speak the
+         announcement — "[Waqt] নামাজের সময় হয়েছে, নামাজ পড়ে নাও" —
+         with the Bengali voice. */
+      const silent = normalizeSounds(settings.alarmSound[p]).includes("silent");
+      if (!nativeAzanArmed() && !silent){
+        playAzan();
+        speakText(AZAN_SPEAK_TEXTS[p], "bn-BD");
+      }
+      toast(`🕌 ${Lb("নামাজের সময় হয়েছে", "Time for prayer")} — ${p}`);
+    }
   }
 }
 
@@ -4498,6 +4520,23 @@ async function cancelLegacyCheckReminders(){
     for (let i=100;i<160;i++) ids.push(i);
     const PA = window.Capacitor.Plugins.PrayerAlarm;
     if (PA && PA.cancelAlarms){ try { await PA.cancelAlarms({ ids }); } catch(e){} }
+    /* Fix #40: the azan-family ids were ALSO scheduled through
+       LocalNotifications by the old LN fallback (scheduleNativeAzan,
+       repeats:true) — and a stale LN repeat is never cancelled by the
+       native path, so it kept ringing the azan on its own cadence (the
+       repeat interval is the gap between the sync and the prayer time
+       — ~30 min when the app synced half an hour before Dhuhr — which
+       is exactly the second azan the user reported). Cancel them
+       through LN on EVERY sync, before the native plugin re-arms:
+       cheap, idempotent, and it kills any stale repeat the first time
+       the new build syncs. */
+    try {
+      const LN2 = window.Capacitor.Plugins.LocalNotifications;
+      if (LN2 && LN2.cancel){
+        const azanFamily = [...AZAN_IDS, ...PREAZAN_IDS, ...PREAZAN5_IDS, TAHAJJUD_ID, SEHRI_ID, IFTAR_ID, ...FORB_IDS, DUHA_ID];
+        await LN2.cancel({ notifications: azanFamily.map(id=>({id})) });
+      }
+    } catch(e){}
     if (store.get("legacy_check_cancelled", false)) return;
     const LN = window.Capacitor.Plugins.LocalNotifications; if (!LN) return;
     await LN.cancel({ notifications: ids.map(id=>({id})) });
@@ -4515,6 +4554,19 @@ const PREAZAN_TEXTS = {
   Asr: "আসরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন",
   Maghrib: "মাগরিবের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন",
   Isha: "ইশার নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন"
+};
+/* Azan-time announcement (Fix #40, user 24 Nov 2026 voice call): at
+   prayer time the notification SPEAKS the waqt name — "[Waqt] নামাজের
+   সময় হয়েছে, নামাজ পড়ে নাও". Spoken by the native AlarmReceiver
+   (speakText on the azan entry) and by the foreground checkAzan when
+   the app is open. Tahajjud gets none (no azan). These are NEW texts —
+   the Fix #8 pre-azan texts above stay verbatim and untouched. */
+const AZAN_SPEAK_TEXTS = {
+  Fajr: "ফজরের নামাজের সময় হয়েছে, নামাজ পড়ে নাও",
+  Dhuhr: "যোহরের নামাজের সময় হয়েছে, নামাজ পড়ে নাও",
+  Asr: "আসরের নামাজের সময় হয়েছে, নামাজ পড়ে নাও",
+  Maghrib: "মাগরিবের নামাজের সময় হয়েছে, নামাজ পড়ে নাও",
+  Isha: "ইশার নামাজের সময় হয়েছে, নামাজ পড়ে নাও"
 };
 const TAHAJJUD_TEXT = "তাহাজ্জুদের সময় হয়েছে, উঠে নামাজের প্রস্তুতি নিন";
 const PREAZAN_IDS = [31,32,33,34,35];
@@ -4573,9 +4625,16 @@ function buildPrayerAlarmList(){
        selection now posts on the silent channel instead; every other
        selection (including the "name" default) still plays the azan. */
     const snd = soundFor(id);
-    list.push({ id: AZAN_IDS[i], at, type: snd==="none" ? "azan-v2-silent" : "azan-v2", title: "My Deen — " + name,
+    /* Fix #40: the azan itself SPEAKS — the announcement "[Waqt]
+       নামাজের সময় হয়েছে, নামাজ পড়ে নাও" is read aloud with the
+       phone's Bengali voice (native AlarmReceiver TTS; the foreground
+       path in checkAzan speaks it when the app is open). A "silent"
+       prayer does not speak. The Fix #8 pre-azan texts are untouched. */
+    const azanEntry = { id: AZAN_IDS[i], at, type: snd==="none" ? "azan-v2-silent" : "azan-v2", title: "My Deen — " + name,
       body: Lb("মিসওয়াক ও অজু করে নামাজের জন্য প্রস্তুত হোন", "Use miswak and perform wudu to prepare for prayer"),
-      sound: snd, prayerId: id });
+      sound: snd, prayerId: id, speak: snd!=="none" };
+    if (snd!=="none") azanEntry.speakText = AZAN_SPEAK_TEXTS[id];
+    list.push(azanEntry);
   });
   // Tahajjud: notification ONLY, never an azan — and only when its
   // alarm is set (Fix #4 §7).
@@ -4625,7 +4684,7 @@ async function syncPrayerAlarms(){
       // install, with the exact-alarm permission still missing, EVERY
       // alarm was silently skipped and the user only found out when the
       // azan never rang. Now the skipped count is recorded and shown.
-      const r = await PA.scheduleAlarms({ alarms: list.map(a=>({ id:a.id, at:a.at.getTime(), type:a.type, title:a.title, body:a.body, sound:a.sound, prayerId:a.prayerId, speak: !!a.speak })) });
+      const r = await PA.scheduleAlarms({ alarms: list.map(a=>({ id:a.id, at:a.at.getTime(), type:a.type, title:a.title, body:a.body, sound:a.sound, prayerId:a.prayerId, speak: !!a.speak, speakText: a.speakText || "" })) });
       alarmStatus.checked = true;
       alarmStatus.scheduled = (r && typeof r.scheduled === "number") ? r.scheduled : list.length;
       alarmStatus.skipped = (r && typeof r.skipped === "number") ? r.skipped : 0;
@@ -4705,9 +4764,15 @@ async function scheduleNativeAzan(){
     await LN.createChannel({ id: "forbidden", name: "Forbidden times", description: "Forbidden prayer time alerts", importance: 4, vibration: true });
     await LN.createChannel({ id: "duha", name: "Duha", description: "Duha prayer alarm", sound: "reminder.mp3", importance: 4, vibration: true });
     const soundFile = s => s==="azan" ? "azan.mp3" : s==="durood" ? "durood.mp3" : s==="istighfar" ? "istighfar.mp3" : s==="reminder" ? "reminder.mp3" : undefined;
+    /* Fix #40: NO repeats here. The LN plugin repeats an `at` anchor
+       with interval = (at − now) — whatever gap the sync happened to
+       have — so an azan scheduled 30 min before Dhuhr repeated every
+       30 min (the user's second azan). One-shot for the next
+       occurrence only; the app re-syncs on every open/foreground, and
+       the native path re-arms daily. */
     const notifs = buildPrayerAlarmList().map(a=>{
       const n = { id: a.id, title: a.title, body: a.body,
-        schedule: { at: a.at, repeats: true, allowWhileIdle: true }, channelId: a.type };
+        schedule: { at: a.at, allowWhileIdle: true }, channelId: a.type };
       const sf = soundFile(a.sound);
       if (sf) n.sound = sf;
       return n;

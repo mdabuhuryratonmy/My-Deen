@@ -65,6 +65,7 @@ globalThis.detailSoundExplain=detailSoundExplain; globalThis.renderDetailSounds=
 // Build #19 test hooks: spoken pre-azan voice, city-name normaliser,
 // permission-chain helpers
 globalThis.speakText=speakText; globalThis.checkPreAzanVoice=checkPreAzanVoice;
+globalThis.AZAN_SPEAK_TEXTS=AZAN_SPEAK_TEXTS; globalThis.nativeAzanArmed=nativeAzanArmed; globalThis.scheduleNativeDhikr=scheduleNativeDhikr;
 globalThis.villageNameOf=villageNameOf; globalThis.normalizeCityName=normalizeCityName;
 globalThis.permStepsAsked=permStepsAsked; globalThis.permMarkAsked=permMarkAsked; globalThis.permTimeout=permTimeout;
 globalThis.qiblaBearing=qiblaBearing; globalThis.updateNeedle=updateNeedle;
@@ -1335,8 +1336,11 @@ Object.assign(settings, _savedTz);
     check("Fix #39: no hurry wording anywhere — JS or native",
       !src.includes("তাড়াতাড়ি") && !javaSched.includes("তাড়াতাড়ি") && !javaPlugin.includes("তাড়াতাড়ি"),
       "no hurry text");
+    // NOTE (Fix #40): window widened 1400 → 2200 — the Fix #40
+    // azan-family LN-cancel block lengthened this function; the check's
+    // intent (native cancel before the one-time flag) is unchanged.
     check("Fix #39: the legacy cancel hits the NATIVE plugin on every sync (not behind the one-time flag)",
-      (() => { const fn = src.slice(src.indexOf("async function cancelLegacyCheckReminders"), src.indexOf("async function cancelLegacyCheckReminders") + 1400);
+      (() => { const fn = src.slice(src.indexOf("async function cancelLegacyCheckReminders"), src.indexOf("async function cancelLegacyCheckReminders") + 2200);
         return fn.includes("PA.cancelAlarms({ ids })") && fn.indexOf("PA.cancelAlarms") < fn.indexOf("legacy_check_cancelled"); })(),
       "native cancel first");
     check("Fix #39: native schedule cancels stale stored alarms no longer in the new list",
@@ -1474,6 +1478,157 @@ Object.assign(settings, _savedTz);
       src.includes("minsToHHMM(dh-4)") && src.includes("minsToHHMM(dh+2)") && src.includes("minsToHHMM(mg-15)") &&
       !src.includes("dh-10") && !src.includes("mg-25"),
       "aligned");
+
+    // ---- Fix #40 (24 Nov 2026 voice call): azan speaks the waqt name,
+    // durood reminder sound verified end to end, azan never rings twice.
+    check("Fix #40: azan announcement texts are exact ('[Waqt] নামাজের সময় হয়েছে, নামাজ পড়ে নাও', all 5 prayers)",
+      AZAN_SPEAK_TEXTS.Fajr === "ফজরের নামাজের সময় হয়েছে, নামাজ পড়ে নাও" &&
+      AZAN_SPEAK_TEXTS.Dhuhr === "যোহরের নামাজের সময় হয়েছে, নামাজ পড়ে নাও" &&
+      AZAN_SPEAK_TEXTS.Asr === "আসরের নামাজের সময় হয়েছে, নামাজ পড়ে নাও" &&
+      AZAN_SPEAK_TEXTS.Maghrib === "মাগরিবের নামাজের সময় হয়েছে, নামাজ পড়ে নাও" &&
+      AZAN_SPEAK_TEXTS.Isha === "ইশার নামাজের সময় হয়েছে, নামাজ পড়ে নাও",
+      "announcement texts");
+    check("Fix #40: Fix #8 pre-azan texts are still verbatim (md5 unchanged)",
+      (()=>{ const crypto = require("crypto"); const m = src.match(/const PREAZAN_TEXTS = \{[\s\S]*?\};/); return !!m && crypto.createHash("md5").update(m[0] + "\n").digest("hex") === "e0895852d481badfb2f41c441bd82a83"; })(),
+      "md5 e0895852");
+    check("Fix #40: syncPrayerAlarms passes speakText through to the native plugin",
+      src.includes("speakText: a.speakText"), "passthrough");
+    check("Fix #40: native pending intent carries speakText + the reschedule keeps it",
+      javaSched.includes('i.putExtra("speakText", alarm.optString("speakText", ""))') &&
+      javaReceiver.includes('alarm.put("speakText", st)'), "native carry");
+    check("Fix #40: native AlarmReceiver prefers speakText over the body when speaking",
+      javaReceiver.includes('String toSpeak = (speakText != null && !speakText.isEmpty()) ? speakText : body;'),
+      "speakText preferred");
+    check("Fix #40: LN fallback schedules one-shot azans — no repeats (the plugin repeats an `at` anchor with interval = at-now)",
+      !src.includes("repeats: true"), "no repeats");
+    check("Fix #40: every sync cancels the azan-family ids through LN (kills stale LN repeats)",
+      src.includes("const azanFamily = [...AZAN_IDS, ...PREAZAN_IDS, ...PREAZAN5_IDS, TAHAJJUD_ID, SEHRI_ID, IFTAR_ID, ...FORB_IDS, DUHA_ID];"),
+      "azan-family LN cancel");
+    check("Fix #40: native creates the v3 dhikr channels WITH their sounds (durood/istighfar) + silent twins without",
+      javaSched.includes('"dhikr-durood-v3"') && javaSched.includes("R.raw.durood") &&
+      javaSched.includes('"dhikr-istighfar-v3"') && javaSched.includes("R.raw.istighfar") &&
+      javaSched.includes('"dhikr-durood-v3-silent"') && javaSched.includes('"dhikr-istighfar-v3-silent"'),
+      "v3 sound channels");
+    // Functional Fix #40 block: alarm list, sync paths, dhikr channels, foreground tick.
+    {
+      const _saved40 = JSON.parse(JSON.stringify({ alarmOn: settings.alarmOn, alarmSound: settings.alarmSound, offsets: settings.offsets,
+        duroodRemOn: settings.duroodRemOn, duroodRemMin: settings.duroodRemMin, duroodRemSound: settings.duroodRemSound,
+        astaghRemOn: settings.astaghRemOn, astaghRemMin: settings.astaghRemMin, astaghRemSound: settings.astaghRemSound, azan: settings.azan }));
+      const _tz40 = settings.tzName; settings.tzName = "";
+      const _RealDate40 = Date;
+      const _lnCancel40 = [], _lnSched40 = [];
+      const _mock40 = (paSched, paStatus) => {
+        globalThis.Capacitor = { Plugins: {
+          PrayerAlarm: { scheduleAlarms: paSched, cancelAlarms: async()=>({cancelled:0}), getStatus: async()=>paStatus },
+          LocalNotifications: { cancel: async(a)=>{ _lnCancel40.push(a); return {}; },
+            requestPermissions: async()=>({display:"granted"}), createChannel: async()=>({}),
+            schedule: async(a)=>{ _lnSched40.push(a); return {}; } },
+        }};
+      };
+      try {
+        settings.azan = true;
+        settings.alarmOn = {Fajr:true, Dhuhr:true, Asr:true, Maghrib:true, Isha:true, Duha:false, Tahajjud:false, ForbMorning:false, ForbNoon:false, ForbEvening:false, Sehri:false, Iftar:false};
+        settings.alarmSound = {Fajr:["azan"], Dhuhr:["azan"], Asr:["azan"], Maghrib:["azan"], Isha:["azan"], Duha:["name"], Tahajjud:["name"], ForbMorning:["name"], ForbNoon:["name"], ForbEvening:["name"], Sehri:["name"], Iftar:["name"]};
+        settings.offsets = {Fajr:0, Dhuhr:0, Asr:0, Maghrib:0, Isha:0, Duha:0, Tahajjud:0, ForbMorning:0, ForbNoon:0, ForbEvening:0, Sehri:0, Iftar:0};
+        __setTimings({Fajr:"05:42", Sunrise:"07:03", Dhuhr:"13:01", Asr:"16:24", Maghrib:"18:58", Isha:"20:11", Imsak:"05:32", Sunset:"18:00", Lastthird:"03:01"});
+        // Alarm list: speak + speakText, one azan per prayer, silent stays silent.
+        const _al40 = buildPrayerAlarmList();
+        check("Fix #40: every azan entry carries speak:true + its announcement (all 5 prayers)",
+          ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>{
+            const a = _al40.filter(x=>x.type.startsWith("azan-v2") && x.prayerId===pid);
+            return a.length===1 && a[0].speak===true && a[0].speakText===AZAN_SPEAK_TEXTS[pid];
+          }), "speak + speakText");
+        check("Fix #40: exactly ONE azan entry per prayer per day (no duplicate ids)",
+          (()=>{
+            const ids = _al40.map(a=>a.id);
+            return new Set(ids).size === ids.length && _al40.filter(a=>a.type.startsWith("azan-v2")).length === 5;
+          })(), "one each");
+        settings.alarmSound.Dhuhr = ["silent"];
+        const _al40s = buildPrayerAlarmList().filter(a=>a.prayerId==="Dhuhr" && a.type.startsWith("azan-v2"));
+        check("Fix #40: a silent prayer posts on the silent channel and does NOT speak",
+          _al40s.length===1 && _al40s[0].type==="azan-v2-silent" && _al40s[0].speak===false && !_al40s[0].speakText,
+          "silent stays silent");
+        settings.alarmSound.Dhuhr = ["azan"];
+        settings.alarmOn.Dhuhr = false;
+        check("Fix #40: a prayer with its alarm off has no azan entry at all",
+          buildPrayerAlarmList().filter(a=>a.type.startsWith("azan-v2") && a.prayerId==="Dhuhr").length===0, "off = no entry");
+        settings.alarmOn.Dhuhr = true;
+        // Sync with the native plugin: the LN cancel must still kill the azan-family ids.
+        _lnCancel40.length = 0; _lnSched40.length = 0;
+        _mock40(async()=>({scheduled:30, skipped:0}), {notificationsGranted:true, exactAlarmGranted:true, alarmsScheduled:30});
+        await syncPrayerAlarms(); await refreshAlarmStatus();
+        check("Fix #40: native sync still cancels the azan-family ids through LN (stale repeats die)",
+          _lnCancel40.some(a=>{ const ids=(a.notifications||[]).map(n=>n.id); return [1,2,3,4,5,31,32,33,34,35,51,52,53,54,55,36,37,38,41,42,43,44].every(id=>ids.includes(id)); }),
+          "LN cancel on native sync");
+        check("Fix #40: native is reported armed after a clean sync (exact + notifications granted, 0 skipped)",
+          nativeAzanArmed()===true, "armed");
+        // Sync with the plugin throwing: the LN fallback schedules one-shots, never repeats.
+        _lnCancel40.length = 0; _lnSched40.length = 0;
+        _mock40(async()=>{ throw new Error("plugin down"); }, {notificationsGranted:true, exactAlarmGranted:true, alarmsScheduled:0});
+        await syncPrayerAlarms();
+        check("Fix #40: LN fallback schedules one-shot azans only (no repeats flag on any notification)",
+          _lnSched40.length>0 && _lnSched40.every(a=>(a.notifications||[]).every(n=>!n.schedule || !n.schedule.repeats)),
+          "fallback one-shot");
+        delete globalThis.Capacitor;
+        // Durood reminder channels: sound on → v3 + sound; sound off → v3-silent, no sound.
+        settings.duroodRemOn = true; settings.duroodRemMin = 10; settings.duroodRemSound = true;
+        settings.astaghRemOn = true; settings.astaghRemMin = 2; settings.astaghRemSound = true;
+        _lnSched40.length = 0;
+        globalThis.Capacitor = { Plugins: { LocalNotifications: { cancel: async()=>({}), schedule: async(a)=>{ _lnSched40.push(a); return {}; } } } };
+        await scheduleNativeDhikr();
+        const _d40 = _lnSched40.flatMap(a=>a.notifications||[]);
+        check("Fix #40: durood reminders schedule on the v3 sound channel with durood.mp3 (sound on)",
+          _d40.filter(n=>n.channelId==="dhikr-durood-v3").length===24 && _d40.filter(n=>n.channelId==="dhikr-durood-v3").every(n=>n.sound==="durood.mp3"),
+          "durood v3 sound");
+        check("Fix #40: istighfar reminders schedule on the v3 sound channel with istighfar.mp3 (sound on)",
+          _d40.filter(n=>n.channelId==="dhikr-istighfar-v3").length===24 && _d40.filter(n=>n.channelId==="dhikr-istighfar-v3").every(n=>n.sound==="istighfar.mp3"),
+          "istighfar v3 sound");
+        settings.duroodRemSound = false; settings.astaghRemSound = false;
+        _lnSched40.length = 0;
+        await scheduleNativeDhikr();
+        const _d40s = _lnSched40.flatMap(a=>a.notifications||[]);
+        check("Fix #40: sound off schedules on the v3-silent channels with no sound",
+          _d40s.filter(n=>n.channelId==="dhikr-durood-v3-silent").length===24 && _d40s.filter(n=>n.channelId==="dhikr-istighfar-v3-silent").length===24 &&
+          _d40s.every(n=>!n.sound), "silent twins");
+        delete globalThis.Capacitor;
+        // Foreground tick: web (no native) speaks + plays once; native-armed stays quiet; silent stays silent.
+        const _spoken40 = [];
+        globalThis.SpeechSynthesisUtterance = class { constructor(t){ this.text = t; this.lang = ""; } };
+        globalThis.speechSynthesis = { cancel(){}, speak(u){ _spoken40.push(u); } };
+        let _played40 = false;
+        __$("#audio-azan").play = ()=>{ _played40 = true; return Promise.resolve(); };
+        const _at40 = (h, m)=>{ const t = new Date(); t.setHours(h, m, 0, 0); return t; };
+        const _mockDate40 = (t)=>{ globalThis.Date = class extends _RealDate40 { constructor(...a){ super(...(a.length ? a : [t.getTime()])); } static now(){ return t.getTime(); } }; };
+        settings.alarmSound = {Fajr:["azan"], Dhuhr:["azan"], Asr:["azan"], Maghrib:["azan"], Isha:["azan"], Duha:["name"], Tahajjud:["name"], ForbMorning:["name"], ForbNoon:["name"], ForbEvening:["name"], Sehri:["name"], Iftar:["name"]};
+        _mockDate40(_at40(13, 1)); checkAzan();
+        check("Fix #40: foreground tick speaks the Dhuhr announcement once in Bengali and plays the azan (no native)",
+          _spoken40.length===1 && _spoken40[0].text===AZAN_SPEAK_TEXTS.Dhuhr && _spoken40[0].lang==="bn-BD" && _played40===true,
+          _spoken40.length ? _spoken40[0].text.slice(0, 40) : "nothing spoken");
+        checkAzan();
+        check("Fix #40: the same minute does not speak or play twice (once-per-day guard)",
+          _spoken40.length===1 && _played40===true, "once only");
+        // Native armed: Asr minute stays quiet (the native alarm rings + speaks instead).
+        _mock40(async()=>({scheduled:30, skipped:0}), {notificationsGranted:true, exactAlarmGranted:true, alarmsScheduled:30});
+        await syncPrayerAlarms(); await refreshAlarmStatus();
+        _spoken40.length = 0; _played40 = false;
+        _mockDate40(_at40(16, 24)); checkAzan();
+        check("Fix #40: with the native alarm armed the foreground tick plays nothing and speaks nothing (no double azan)",
+          _spoken40.length===0 && _played40===false && Object.keys(__getRungToday()).some(k=>k.endsWith("Asr")),
+          "native handles it");
+        delete globalThis.Capacitor;
+        // Silent: Isha minute stays quiet even with no native alarm.
+        settings.alarmSound.Isha = ["silent"];
+        _spoken40.length = 0; _played40 = false;
+        _mockDate40(_at40(20, 11)); checkAzan();
+        check("Fix #40: a silent prayer stays silent in the foreground tick too (no audio, no speech)",
+          _spoken40.length===0 && _played40===false, "silent foreground");
+        delete globalThis.speechSynthesis; delete globalThis.SpeechSynthesisUtterance;
+      } finally {
+        Object.assign(settings, _saved40);
+        settings.tzName = _tz40; globalThis.Date = _RealDate40;
+        delete globalThis.Capacitor;
+      }
+    }
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);

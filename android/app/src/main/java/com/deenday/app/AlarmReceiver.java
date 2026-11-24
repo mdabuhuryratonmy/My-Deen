@@ -25,8 +25,10 @@ import org.json.JSONObject;
  * in parallel with the notification. The body is the exact Fix #8
  * Bengali text, verbatim. Speaking is best-effort: if TTS is missing
  * or has no Bengali voice, the notification still posts and nothing
- * breaks. Only pre-azan entries speak — azan entries play the azan
- * through their channel, Tahajjud stays a silent notification.
+ * breaks. Pre-azan entries speak their body; azan entries ALSO speak —
+ * the announcement (speakText, Fix #40: "[Waqt] নামাজের সময় হয়েছে,
+ * নামাজ পড়ে নাও") — as well as playing the azan through their
+ * channel. Tahajjud stays a silent notification.
  */
 public class AlarmReceiver extends BroadcastReceiver {
     @Override
@@ -60,8 +62,14 @@ public class AlarmReceiver extends BroadcastReceiver {
             // notification above already posted; speaking runs on its
             // own thread with goAsync so the broadcast stays alive
             // while TTS finishes (or the 25 s safety net fires).
-            if (intent.getBooleanExtra("speak", false) && body != null && !body.isEmpty()) {
-                final String text = body;
+            // Fix #40: an azan entry carries speakText (the announcement
+            // "[Waqt] নামাজের সময় হয়েছে, নামাজ পড়ে নাও"); pre-azan
+            // entries have no speakText and speak the body (exact Fix #8
+            // text). Silent entries never carry speak=true.
+            String speakText = intent.getStringExtra("speakText");
+            String toSpeak = (speakText != null && !speakText.isEmpty()) ? speakText : body;
+            if (intent.getBooleanExtra("speak", false) && toSpeak != null && !toSpeak.isEmpty()) {
+                final String text = toSpeak;
                 final Context appCtx = context.getApplicationContext();
                 final BroadcastReceiver.PendingResult result = goAsync();
                 new Thread(() -> {
@@ -79,6 +87,8 @@ public class AlarmReceiver extends BroadcastReceiver {
             alarm.put("sound", intent.getStringExtra("sound"));
             alarm.put("prayerId", intent.getStringExtra("prayerId"));
             alarm.put("speak", intent.getBooleanExtra("speak", false));
+            String st = intent.getStringExtra("speakText");
+            if (st != null) alarm.put("speakText", st);
             long at = intent.getLongExtra("at", 0);
             if (at > 0) {
                 alarm.put("at", at);
