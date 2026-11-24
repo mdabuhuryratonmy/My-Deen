@@ -228,21 +228,23 @@ globalThis.Date = RealDate16; settings.tzName = _tz16;
 // channelId/createChannel id anywhere in the schedule path.
 const _src18 = fs.readFileSync("/home/hatch/workspace/deen-day/www/app.js", "utf8");
 const _java18 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AlarmScheduler.java", "utf8");
-// Fix #33 rewrote the channel pick: sound on → the v3 channel with its
+// Fix #33 rewrote the channel pick: sound on → the v4 channel with its
 // sound, sound off → the silent twin. The default (sound on) still
-// schedules on the v3 channel with the sound — that is what these check.
+// schedules on the v4 channel with the sound — that is what these check.
 // (Build #19, Fix #4: v2 → v3, same repair as Fix #18 — the v2 channel
-// on the user's phone was itself created without a working sound.)
-check("Fix #18: JS schedules durood reminders on the v3 channel with durood.mp3 (sound on)",
-  _src18.includes('settings.duroodRemSound !== false ? "dhikr-durood-v3"') && _src18.includes('settings.duroodRemSound !== false ? "durood.mp3"'), "channelId dhikr-durood-v3");
-check("Fix #18: JS schedules istighfar reminders on the v3 channel with istighfar.mp3 (sound on)",
-  _src18.includes('settings.astaghRemSound !== false ? "dhikr-istighfar-v3"') && _src18.includes('settings.astaghRemSound !== false ? "istighfar.mp3"'), "channelId dhikr-istighfar-v3");
+// on the user's phone was itself created without a working sound.
+// Fix #41 Step 3: v3 → v4 — v3 stayed silent on his phone through
+// clean installs of Builds 20/21/22; see the Step 3 block at the end.)
+check("Fix #18: JS schedules durood reminders on the v4 channel with durood.mp3 (sound on)",
+  _src18.includes('settings.duroodRemSound !== false ? "dhikr-durood-v4"') && _src18.includes('settings.duroodRemSound !== false ? "durood.mp3"'), "channelId dhikr-durood-v4");
+check("Fix #18: JS schedules istighfar reminders on the v4 channel with istighfar.mp3 (sound on)",
+  _src18.includes('settings.astaghRemSound !== false ? "dhikr-istighfar-v4"') && _src18.includes('settings.astaghRemSound !== false ? "istighfar.mp3"'), "channelId dhikr-istighfar-v4");
 check("Fix #18: the old channel IDs are gone from the JS schedule path (exact quoted ids)",
   !/"dhikr-durood"/.test(_src18) && !/"dhikr-istighfar"/.test(_src18), "no old ids in app.js");
-check("Fix #18: native creates the v3 channels with the raw sounds + HIGH importance",
-  _java18.includes('createChannel(nm, ctx, "dhikr-durood-v3"') && _java18.includes("IMPORTANCE_HIGH, R.raw.durood") &&
-  _java18.includes('createChannel(nm, ctx, "dhikr-istighfar-v3"') && _java18.includes("IMPORTANCE_HIGH, R.raw.istighfar"),
-  "native v3 channels");
+check("Fix #18: native creates the v4 channels with the raw sounds + HIGH importance",
+  _java18.includes('createChannel(nm, ctx, "dhikr-durood-v4"') && _java18.includes("IMPORTANCE_HIGH, R.raw.durood") &&
+  _java18.includes('createChannel(nm, ctx, "dhikr-istighfar-v4"') && _java18.includes("IMPORTANCE_HIGH, R.raw.istighfar"),
+  "native v4 channels");
 check("Fix #18: native deletes the old (possibly silent) dhikr channels",
   _java18.includes('deleteNotificationChannel("dhikr-durood")') && _java18.includes('deleteNotificationChannel("dhikr-istighfar")') &&
   _java18.includes('deleteNotificationChannel("dhikr-durood-v2")') && _java18.includes('deleteNotificationChannel("dhikr-istighfar-v2")'),
@@ -1194,18 +1196,18 @@ Object.assign(settings, _savedTz);
     check("Fix #33: sound defaults on in app.js (duroodRemSound / astaghRemSound)",
       src.includes("duroodRemSound:true") && src.includes("astaghRemSound:true"), "defaults on");
     check("Fix #33: native scheduler picks the sound or the silent channel by the switch",
-      src.includes('settings.duroodRemSound !== false ? "dhikr-durood-v3" : "dhikr-durood-v3-silent"') &&
-      src.includes('settings.astaghRemSound !== false ? "dhikr-istighfar-v3" : "dhikr-istighfar-v3-silent"'),
+      src.includes('settings.duroodRemSound !== false ? "dhikr-durood-v4" : "dhikr-durood-v4-silent"') &&
+      src.includes('settings.astaghRemSound !== false ? "dhikr-istighfar-v4" : "dhikr-istighfar-v4-silent"'),
       "channel pick");
     // Build #19, Fix #4: the JS createChannel calls are gone — the
     // native side is now the SOLE dhikr channel creator (no dual-creator
     // race), so the silent channels exist only in the native code.
     check("Fix #33: both silent channels are created natively (Build #19: native is the sole creator, no JS createChannel)",
-      !/createChannel\(\{ id: "dhikr-durood-v3"/.test(src) && !/createChannel\(\{ id: "dhikr-istighfar-v3"/.test(src) &&
-      _as33.includes('"dhikr-durood-v3-silent"') && _as33.includes('"dhikr-istighfar-v3-silent"'),
+      !/createChannel\(\{ id: "dhikr-durood-v4"/.test(src) && !/createChannel\(\{ id: "dhikr-istighfar-v4"/.test(src) &&
+      _as33.includes('"dhikr-durood-v4-silent"') && _as33.includes('"dhikr-istighfar-v4-silent"'),
       "silent channels");
     check("Fix #33: native silent channels are HIGH importance with no sound (they still pop up, silently)",
-      _as33.includes('createChannel(nm, ctx, "dhikr-durood-v3-silent"') &&
+      _as33.includes('createChannel(nm, ctx, "dhikr-durood-v4-silent"') &&
       _as33.includes('NotificationManager.IMPORTANCE_HIGH, -1)'),
       "silent, still pops up");
     check("Fix #33: foreground audio is gated on the switch (sound off = toast + notification only, no audio)",
@@ -1392,7 +1394,7 @@ Object.assign(settings, _savedTz);
       (() => { const before = (settings.permStepsAsked || {}).notifications; permMarkAsked("notifications"); const ok = permStepsAsked().notifications === true && settings.permStepsAsked.notifications === true; if (!before) delete settings.permStepsAsked.notifications; saveSettings(); return ok; })(),
       "persisted");
 
-    // Fix #4: v3 dhikr channels (native is the sole creator) — see also
+    // Fix #4: v4 dhikr channels (native is the sole creator) — see also
     // the updated Fix #18 / Fix #33 checks above.
     check("Build #19 Fix #4: no JS createChannel for dhikr (native is the sole creator)",
       !/LN\.createChannel\(\{ id: "dhikr-/.test(src), "one creator");
@@ -1511,11 +1513,11 @@ Object.assign(settings, _savedTz);
     check("Fix #40: every sync cancels the azan-family ids through LN (kills stale LN repeats)",
       src.includes("const azanFamily = [...AZAN_IDS, ...PREAZAN_IDS, ...PREAZAN5_IDS, TAHAJJUD_ID, SEHRI_ID, IFTAR_ID, ...FORB_IDS, DUHA_ID];"),
       "azan-family LN cancel");
-    check("Fix #40: native creates the v3 dhikr channels WITH their sounds (durood/istighfar) + silent twins without",
-      javaSched.includes('"dhikr-durood-v3"') && javaSched.includes("R.raw.durood") &&
-      javaSched.includes('"dhikr-istighfar-v3"') && javaSched.includes("R.raw.istighfar") &&
-      javaSched.includes('"dhikr-durood-v3-silent"') && javaSched.includes('"dhikr-istighfar-v3-silent"'),
-      "v3 sound channels");
+    check("Fix #40: native creates the v4 dhikr channels WITH their sounds (durood/istighfar) + silent twins without",
+      javaSched.includes('"dhikr-durood-v4"') && javaSched.includes("R.raw.durood") &&
+      javaSched.includes('"dhikr-istighfar-v4"') && javaSched.includes("R.raw.istighfar") &&
+      javaSched.includes('"dhikr-durood-v4-silent"') && javaSched.includes('"dhikr-istighfar-v4-silent"'),
+      "v4 sound channels");
     // Functional Fix #40 block: alarm list, sync paths, dhikr channels, foreground tick.
     {
       const _saved40 = JSON.parse(JSON.stringify({ alarmOn: settings.alarmOn, alarmSound: settings.alarmSound, offsets: settings.offsets,
@@ -1577,25 +1579,25 @@ Object.assign(settings, _savedTz);
           _lnSched40.length>0 && _lnSched40.every(a=>(a.notifications||[]).every(n=>!n.schedule || !n.schedule.repeats)),
           "fallback one-shot");
         delete globalThis.Capacitor;
-        // Durood reminder channels: sound on → v3 + sound; sound off → v3-silent, no sound.
+        // Durood reminder channels: sound on → v4 + sound; sound off → v4-silent, no sound.
         settings.duroodRemOn = true; settings.duroodRemMin = 10; settings.duroodRemSound = true;
         settings.astaghRemOn = true; settings.astaghRemMin = 2; settings.astaghRemSound = true;
         _lnSched40.length = 0;
         globalThis.Capacitor = { Plugins: { LocalNotifications: { cancel: async()=>({}), schedule: async(a)=>{ _lnSched40.push(a); return {}; } } } };
         await scheduleNativeDhikr();
         const _d40 = _lnSched40.flatMap(a=>a.notifications||[]);
-        check("Fix #40: durood reminders schedule on the v3 sound channel with durood.mp3 (sound on)",
-          _d40.filter(n=>n.channelId==="dhikr-durood-v3").length===24 && _d40.filter(n=>n.channelId==="dhikr-durood-v3").every(n=>n.sound==="durood.mp3"),
-          "durood v3 sound");
-        check("Fix #40: istighfar reminders schedule on the v3 sound channel with istighfar.mp3 (sound on)",
-          _d40.filter(n=>n.channelId==="dhikr-istighfar-v3").length===24 && _d40.filter(n=>n.channelId==="dhikr-istighfar-v3").every(n=>n.sound==="istighfar.mp3"),
-          "istighfar v3 sound");
+        check("Fix #40: durood reminders schedule on the v4 sound channel with durood.mp3 (sound on)",
+          _d40.filter(n=>n.channelId==="dhikr-durood-v4").length===24 && _d40.filter(n=>n.channelId==="dhikr-durood-v4").every(n=>n.sound==="durood.mp3"),
+          "durood v4 sound");
+        check("Fix #40: istighfar reminders schedule on the v4 sound channel with istighfar.mp3 (sound on)",
+          _d40.filter(n=>n.channelId==="dhikr-istighfar-v4").length===24 && _d40.filter(n=>n.channelId==="dhikr-istighfar-v4").every(n=>n.sound==="istighfar.mp3"),
+          "istighfar v4 sound");
         settings.duroodRemSound = false; settings.astaghRemSound = false;
         _lnSched40.length = 0;
         await scheduleNativeDhikr();
         const _d40s = _lnSched40.flatMap(a=>a.notifications||[]);
-        check("Fix #40: sound off schedules on the v3-silent channels with no sound",
-          _d40s.filter(n=>n.channelId==="dhikr-durood-v3-silent").length===24 && _d40s.filter(n=>n.channelId==="dhikr-istighfar-v3-silent").length===24 &&
+        check("Fix #40: sound off schedules on the v4-silent channels with no sound",
+          _d40s.filter(n=>n.channelId==="dhikr-durood-v4-silent").length===24 && _d40s.filter(n=>n.channelId==="dhikr-istighfar-v4-silent").length===24 &&
           _d40s.every(n=>!n.sound), "silent twins");
         delete globalThis.Capacitor;
         // Foreground tick: web (no native) speaks + plays once; native-armed stays quiet; silent stays silent.
@@ -1840,6 +1842,178 @@ Object.assign(settings, _savedTz);
         Object.assign(settings, _saved42);
         settings.permStepsAsked = _savedAsked42;
         globalThis.fetch = _realFetch42;
+        delete globalThis.Capacitor;
+      }
+    }
+
+    // ---- Fix #41 Step 3 (24 Nov 2026 night): durood reminder still
+    // never plays on his phone, istighfar plays. Builds 20/21/22 (clean
+    // installs, v3 code in them) did not fix it, and the JS schedule
+    // path was driven with a recording LN mock and proven correct and
+    // symmetric — so the schedule is not the bug. The break is the
+    // CHANNEL STATE on his phone: Android Auto Backup (manifest
+    // allowBackup="true") restores notification-channel settings
+    // across uninstall/reinstall, so a v3 channel once created silent
+    // (or muted) stays silent through every "clean" install, and
+    // Android never lets an app change an existing channel's sound.
+    // Same proven repair a third time: fresh v4 channel IDs, native
+    // deletes the v3 channels, JS schedules into v4. A v4 channel has
+    // never existed on his phone, so no backed-up silent state can
+    // attach to it. allowBackup itself is NOT changed (it also backs
+    // up his settings, prayer log and Quran progress).
+    {
+      const _saved43 = { duroodRemOn: settings.duroodRemOn, duroodRemMin: settings.duroodRemMin, duroodRemSound: settings.duroodRemSound,
+        astaghRemOn: settings.astaghRemOn, astaghRemMin: settings.astaghRemMin, astaghRemSound: settings.astaghRemSound, lang: settings.lang };
+      settings.lang = "bn";
+      try {
+        check("Fix #41 Step 3: native deletes the v3 dhikr channels (sound + silent twins)",
+          javaSched.includes('deleteNotificationChannel("dhikr-durood-v3")') && javaSched.includes('deleteNotificationChannel("dhikr-istighfar-v3")') &&
+          javaSched.includes('deleteNotificationChannel("dhikr-durood-v3-silent")') && javaSched.includes('deleteNotificationChannel("dhikr-istighfar-v3-silent")'),
+          "v3 deleted");
+        check("Fix #41 Step 3: native creates the v4 dhikr channels WITH their raw sounds + HIGH importance",
+          javaSched.includes('createChannel(nm, ctx, "dhikr-durood-v4"') && javaSched.includes("IMPORTANCE_HIGH, R.raw.durood") &&
+          javaSched.includes('createChannel(nm, ctx, "dhikr-istighfar-v4"') && javaSched.includes("IMPORTANCE_HIGH, R.raw.istighfar"),
+          "v4 sound channels");
+        check("Fix #41 Step 3: native v4 silent twins are HIGH importance with no sound",
+          javaSched.includes('createChannel(nm, ctx, "dhikr-durood-v4-silent"') &&
+          javaSched.includes('createChannel(nm, ctx, "dhikr-istighfar-v4-silent"') &&
+          javaSched.includes("IMPORTANCE_HIGH, -1)"),
+          "v4 silent twins");
+        check("Fix #41 Step 3: JS schedules into v4 (the old v3 channelId pick is gone)",
+          src.includes('settings.duroodRemSound !== false ? "dhikr-durood-v4" : "dhikr-durood-v4-silent"') &&
+          src.includes('settings.astaghRemSound !== false ? "dhikr-istighfar-v4" : "dhikr-istighfar-v4-silent"') &&
+          !src.includes('? "dhikr-durood-v3"') && !src.includes('? "dhikr-istighfar-v3"'),
+          "v4 pick");
+        // Functional: drive the real scheduler with a recording LN mock.
+        const _lnSched43 = [];
+        globalThis.Capacitor = { Plugins: { LocalNotifications: {
+          cancel: async()=>({}), schedule: async(a)=>{ _lnSched43.push(a); return {}; } } } };
+        settings.duroodRemOn = true; settings.duroodRemMin = 30; settings.duroodRemSound = true;
+        settings.astaghRemOn = true; settings.astaghRemMin = 30; settings.astaghRemSound = true;
+        const _t43 = Date.now();
+        await scheduleNativeDhikr();
+        const _n43 = _lnSched43.flatMap(a=>a.notifications||[]);
+        const _d43 = _n43.filter(n=>n.id>=401 && n.id<=424), _a43 = _n43.filter(n=>n.id>=501 && n.id<=524);
+        check("Fix #41 Step 3: schedule drives 24 durood (401-424) on v4 with durood.mp3 + 24 istighfar (501-524) on v4 with istighfar.mp3",
+          _d43.length===24 && _d43.every(n=>n.channelId==="dhikr-durood-v4" && n.sound==="durood.mp3") &&
+          _a43.length===24 && _a43.every(n=>n.channelId==="dhikr-istighfar-v4" && n.sound==="istighfar.mp3"),
+          "24+24 on v4");
+        const _off43 = n => Math.round((new Date(n.schedule.at).getTime() - _t43) / 60000);
+        check("Fix #41 Step 3: durood times run now+30m .. now+12h (one per interval, no gaps/duplicates)",
+          _d43.length===24 && _off43(_d43[0])===30 && _off43(_d43[23])===720 &&
+          new Set(_d43.map(_off43)).size===24,
+          "durood times");
+        check("Fix #41 Step 3: istighfar times run now+30m .. now+12h (same cadence as durood)",
+          _a43.length===24 && _off43(_a43[0])===30 && _off43(_a43[23])===720 &&
+          new Set(_a43.map(_off43)).size===24,
+          "istighfar times");
+        settings.duroodRemSound = false; settings.astaghRemSound = false;
+        _lnSched43.length = 0;
+        await scheduleNativeDhikr();
+        const _s43 = _lnSched43.flatMap(a=>a.notifications||[]);
+        check("Fix #41 Step 3: sound off schedules both kinds on the v4-silent twins with no sound",
+          _s43.filter(n=>n.channelId==="dhikr-durood-v4-silent").length===24 &&
+          _s43.filter(n=>n.channelId==="dhikr-istighfar-v4-silent").length===24 && _s43.every(n=>!n.sound),
+          "v4 silent twins");
+        delete globalThis.Capacitor;
+        // Fix #8 texts untouched by this step (verbatim, his exact words).
+        check("Fix #41 Step 3: PREAZAN_TEXTS verbatim and untouched (Fix #8)",
+          PREAZAN_TEXTS.Fajr === "ফজরের নামাজের সময় হয়েছে, ঘুম থেকে উঠে মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+          PREAZAN_TEXTS.Dhuhr === "যোহরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+          PREAZAN_TEXTS.Asr === "আসরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+          PREAZAN_TEXTS.Maghrib === "মাগরিবের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+          PREAZAN_TEXTS.Isha === "ইশার নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন",
+          "Fix #8 verbatim");
+      } finally {
+        Object.assign(settings, _saved43);
+        delete globalThis.Capacitor;
+      }
+    }
+
+    // ---- Fix #41 Step 4 (24 Nov 2026 night): the app logo must appear
+    // beside EVERY notification. The native AlarmReceiver path already
+    // sets both icons (Fix #14) and the web Notification path already
+    // passes icons/icon-192.png — but the Capacitor LocalNotifications
+    // path passed NO icon at all, so the plugin fell back to the
+    // generic android.R.drawable.ic_dialog_info ("i") small icon and
+    // NO large icon on every LN notification. Fix: every LN schedule
+    // call carries smallIcon + largeIcon, and capacitor.config.json
+    // sets the plugin's global smallIcon default. The large icon is
+    // ic_notification_large (the Fix #14 drawable logo — the plugin
+    // resolves largeIcon from drawables only, so ic_launcher, a
+    // mipmap resource, would decode to null and show no logo).
+    {
+      const _saved44 = { duroodRemOn: settings.duroodRemOn, duroodRemMin: settings.duroodRemMin, duroodRemSound: settings.duroodRemSound,
+        astaghRemOn: settings.astaghRemOn, astaghRemMin: settings.astaghRemMin, astaghRemSound: settings.astaghRemSound,
+        azan: settings.azan, lang: settings.lang };
+      settings.lang = "bn";
+      try {
+        const _cfg44 = JSON.parse(fs.readFileSync("/home/hatch/workspace/deen-day/capacitor.config.json", "utf8"));
+        check("Fix #41 Step 4: capacitor.config.json sets the LocalNotifications global smallIcon default to the logo",
+          _cfg44.plugins && _cfg44.plugins.LocalNotifications && _cfg44.plugins.LocalNotifications.smallIcon === "ic_notification",
+          "config default");
+        check("Fix #41 Step 4: app.js defines the shared logo icon constants (small = white silhouette, large = full logo)",
+          src.includes('const NOTIF_SMALL_ICON = "ic_notification", NOTIF_LARGE_ICON = "ic_notification_large";'),
+          "constants");
+        const _fn44 = (name, next) => src.slice(src.indexOf("async function " + name), next ? src.indexOf("async function " + next) : src.indexOf("async function " + name) + 4000);
+        const _daily44 = _fn44("scheduleNativeDaily", "scheduleNativeDhikr");
+        const _dhikr44 = _fn44("scheduleNativeDhikr", "scheduleNativeAzan");
+        const _azan44 = src.slice(src.indexOf("async function scheduleNativeAzan"));
+        const _iconPair44 = "smallIcon: NOTIF_SMALL_ICON, largeIcon: NOTIF_LARGE_ICON";
+        check("Fix #41 Step 4: daily hadith + verse notifications carry both logo icons (2 pushes)",
+          (_daily44.match(new RegExp(_iconPair44.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) || []).length === 2,
+          "daily icons");
+        check("Fix #41 Step 4: dhikr reminder notifications carry both logo icons",
+          _dhikr44.includes(_iconPair44), "dhikr icons");
+        check("Fix #41 Step 4: LN azan-fallback notifications carry both logo icons",
+          _azan44.includes(_iconPair44), "azan icons");
+        check("Fix #41 Step 4: the logo drawables exist (small silhouette + large logo)",
+          fs.existsSync("/home/hatch/workspace/deen-day/android/app/src/main/res/drawable/ic_notification_large.png") &&
+          ["mdpi","hdpi","xhdpi","xxhdpi","xxxhdpi"].every(d=>fs.existsSync(`/home/hatch/workspace/deen-day/android/app/src/main/res/drawable-${d}/ic_notification.png`)),
+          "drawables exist");
+        check("Fix #41 Step 4: native AlarmReceiver still sets both logo icons (Fix #14 intact)",
+          javaReceiver.includes("setSmallIcon(R.drawable.ic_notification)") &&
+          javaReceiver.includes("R.drawable.ic_notification_large") && javaReceiver.includes("setLargeIcon"),
+          "native icons intact");
+        // Functional: dhikr schedule via a recording LN mock.
+        const _lnSched44 = [];
+        globalThis.Capacitor = { Plugins: { LocalNotifications: {
+          cancel: async()=>({}), schedule: async(a)=>{ _lnSched44.push(a); return {}; } } } };
+        settings.duroodRemOn = true; settings.duroodRemMin = 30; settings.duroodRemSound = true;
+        settings.astaghRemOn = true; settings.astaghRemMin = 30; settings.astaghRemSound = true;
+        await scheduleNativeDhikr();
+        const _n44 = _lnSched44.flatMap(a=>a.notifications||[]);
+        check("Fix #41 Step 4: every scheduled dhikr reminder carries the logo small + large icons",
+          _n44.length===48 && _n44.every(n=>n.smallIcon==="ic_notification" && n.largeIcon==="ic_notification_large"),
+          "48 with logo");
+        delete globalThis.Capacitor;
+        // Functional: LN azan fallback via syncPrayerAlarms with the native plugin down.
+        __setTimings({Fajr:"05:42", Sunrise:"07:03", Dhuhr:"13:00", Asr:"16:24", Maghrib:"18:58", Isha:"20:10", Imsak:"05:32", Firstthird:"22:59", Lastthird:"03:01"});
+        settings.azan = true;
+        const _lnSched44b = [];
+        globalThis.Capacitor = { Plugins: {
+          PrayerAlarm: { scheduleAlarms: async()=>{ throw new Error("plugin down"); },
+            cancelAlarms: async()=>({cancelled:0}),
+            getStatus: async()=>({notificationsGranted:true, exactAlarmGranted:true, alarmsScheduled:0}) },
+          LocalNotifications: { cancel: async()=>({}), requestPermissions: async()=>({display:"granted"}),
+            createChannel: async()=>({}), schedule: async(a)=>{ _lnSched44b.push(a); return {}; } },
+        }};
+        await syncPrayerAlarms();
+        const _a44 = _lnSched44b.flatMap(a=>a.notifications||[]);
+        check("Fix #41 Step 4: every LN azan-fallback notification carries the logo small + large icons",
+          _a44.length>0 && _a44.every(n=>n.smallIcon==="ic_notification" && n.largeIcon==="ic_notification_large"),
+          _a44.length + " fallback notifs");
+        delete globalThis.Capacitor;
+        // Fix #8 texts untouched by this step (verbatim, his exact words).
+        check("Fix #41 Step 4: PREAZAN_TEXTS verbatim and untouched (Fix #8)",
+          PREAZAN_TEXTS.Fajr === "ফজরের নামাজের সময় হয়েছে, ঘুম থেকে উঠে মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+          PREAZAN_TEXTS.Dhuhr === "যোহরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+          PREAZAN_TEXTS.Asr === "আসরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+          PREAZAN_TEXTS.Maghrib === "মাগরিবের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+          PREAZAN_TEXTS.Isha === "ইশার নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন",
+          "Fix #8 verbatim");
+      } finally {
+        Object.assign(settings, _saved44);
         delete globalThis.Capacitor;
       }
     }

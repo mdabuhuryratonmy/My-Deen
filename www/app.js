@@ -4246,6 +4246,25 @@ async function maybeFireDailyWebNotif(){
 }
 const DAILY_HADITH_IDS = [301,302,303,304,305,306,307];
 const DAILY_VERSE_IDS  = [311,312,313,314,315,316,317];
+/* Fix #41 Step 4 (24 Nov 2026 night): the app logo must appear
+   beside EVERY notification. The native AlarmReceiver path already
+   sets both icons (Fix #14: smallIcon R.drawable.ic_notification,
+   largeIcon R.drawable.ic_notification_large) and the web
+   Notification path already passes icons/icon-192.png — but the
+   Capacitor LocalNotifications path passed NO icon at all, so the
+   plugin fell back to the generic android.R.drawable.ic_dialog_info
+   ("i") small icon and NO large icon on every LN notification
+   (dhikr reminders, daily hadith/verse, LN azan fallback). Fix: every
+   LN schedule call carries smallIcon + largeIcon. The plugin resolves
+   both from DRAWABLES only (resolveSmallIcon/resolveLargeIcon look
+   up "drawable"), so the large icon is ic_notification_large — the
+   Fix #14 drawable logo (full gold logo on emerald), the same artwork
+   as the launcher icon — NOT ic_launcher, which is a MIPMAP resource
+   the plugin cannot resolve (it would decode to null and show no
+   logo). capacitor.config.json also sets plugins.LocalNotifications
+   .smallIcon as the global default, so any future schedule call gets
+   the logo small icon even if it forgets the per-notification field. */
+const NOTIF_SMALL_ICON = "ic_notification", NOTIF_LARGE_ICON = "ic_notification_large";
 async function scheduleNativeDaily(){
   try {
     if (typeof window.Capacitor === "undefined" || !window.Capacitor.Plugins) return;
@@ -4265,11 +4284,13 @@ async function scheduleNativeDaily(){
       const h = list[dayOfYear(d) % list.length];
       notifs.push({ id: DAILY_HADITH_IDS[i], title: "My Deen — " + Lb("আজকের হাদিস", "Today's Hadith"),
         body: trunc(h.bn, 170) + " (" + h.ref + ")",
-        schedule: { at: d, allowWhileIdle: true }, channelId: "daily" });
+        schedule: { at: d, allowWhileIdle: true }, channelId: "daily",
+        smallIcon: NOTIF_SMALL_ICON, largeIcon: NOTIF_LARGE_ICON });
       const v = verseTextFor(d);
       if (v && v.bn) notifs.push({ id: DAILY_VERSE_IDS[i], title: "My Deen — " + Lb("আজকের আয়াত", "Today's Verse"),
         body: trunc(v.bn, 170) + " (" + v.ref + ")",
-        schedule: { at: new Date(d.getTime() + 60000), allowWhileIdle: true }, channelId: "daily" });
+        schedule: { at: new Date(d.getTime() + 60000), allowWhileIdle: true }, channelId: "daily",
+        smallIcon: NOTIF_SMALL_ICON, largeIcon: NOTIF_LARGE_ICON });
     }
     await LN.cancel({ notifications: all.map(id=>({id})) });
     if (notifs.length) await LN.schedule({ notifications: notifs });
@@ -4359,14 +4380,33 @@ async function scheduleNativeDhikr(){
     // the JS createChannel calls are gone entirely: one creator, one
     // sound, no race. The switch (Fix #33) keeps working exactly as
     // before, now picking the v3 sound channel or the v3 silent twin.
+    // Fix #41 Step 3 (24 Nov 2026 night): the v3 repair did NOT fix it
+    // on his phone — Builds 20/21/22 (clean installs, v3 code in them)
+    // still play istighfar but never durood. The JS schedule path was
+    // driven end to end with a recording LN mock and is provably
+    // correct and symmetric: 24 durood (ids 401-424, dhikr-durood-v3,
+    // durood.mp3, now+30m..now+12h) + 24 istighfar (501-524, v3,
+    // istighfar.mp3, same times); sound-off picks the silent twins
+    // for both. So the schedule is not the bug — the CHANNEL STATE on
+    // his phone is: Android Auto Backup (the manifest has
+    // android:allowBackup="true") restores notification-channel
+    // settings across uninstall/reinstall, so a v3 channel once
+    // created silent (or muted) stays silent through every "clean"
+    // install, and Android never lets an app change an existing
+    // channel's sound. The only repair that can possibly work is the
+    // same pattern a third time: fresh v4 channel IDs, the native side
+    // deletes the v3 channels, and the JS schedules into v4. A v4
+    // channel has never existed on his phone, so no backed-up silent
+    // state can attach to it. allowBackup itself is NOT changed — it
+    // also backs up his settings, prayer log and Quran progress.
     const jobs = [
       { on: settings.duroodRemOn, min: settings.duroodRemMin || 30, base: DUROOD_REM_BASE,
-        channelId: settings.duroodRemSound !== false ? "dhikr-durood-v3" : "dhikr-durood-v3-silent",
+        channelId: settings.duroodRemSound !== false ? "dhikr-durood-v4" : "dhikr-durood-v4-silent",
         sound: settings.duroodRemSound !== false ? "durood.mp3" : undefined,
         title: "My Deen — " + Lb("দরুদ শরিফ", "Durood Sharif"),
         body: DUROOD_AR + " — " + Lb("দরুদ পড়ুন", "Recite Durood upon the Prophet ﷺ") },
       { on: settings.astaghRemOn, min: settings.astaghRemMin || 30, base: ASTAGH_REM_BASE,
-        channelId: settings.astaghRemSound !== false ? "dhikr-istighfar-v3" : "dhikr-istighfar-v3-silent",
+        channelId: settings.astaghRemSound !== false ? "dhikr-istighfar-v4" : "dhikr-istighfar-v4-silent",
         sound: settings.astaghRemSound !== false ? "istighfar.mp3" : undefined,
         title: "My Deen — " + Lb("ইস্তিগফার", "Istighfar"),
         body: ASTAGH_AR + " — " + Lb("আস্তাগফিরুল্লাহ পড়ুন, আল্লাহর কাছে ক্ষমা চান", "Recite Astaghfirullah — seek Allah's forgiveness") }
@@ -4378,7 +4418,8 @@ async function scheduleNativeDhikr(){
       const now = Date.now(), list = [];
       for (let k = 1; k <= DHIKR_REM_COUNT; k++){
         list.push({ id: j.base + k - 1, title: j.title, body: j.body,
-          schedule: { at: new Date(now + k * j.min * 60000), allowWhileIdle: true }, channelId: j.channelId, sound: j.sound });
+          schedule: { at: new Date(now + k * j.min * 60000), allowWhileIdle: true }, channelId: j.channelId, sound: j.sound,
+          smallIcon: NOTIF_SMALL_ICON, largeIcon: NOTIF_LARGE_ICON });
       }
       if (list.length) await LN.schedule({ notifications: list });
     }
@@ -4798,7 +4839,8 @@ async function scheduleNativeAzan(){
        the native path re-arms daily. */
     const notifs = buildPrayerAlarmList().map(a=>{
       const n = { id: a.id, title: a.title, body: a.body,
-        schedule: { at: a.at, allowWhileIdle: true }, channelId: a.type };
+        schedule: { at: a.at, allowWhileIdle: true }, channelId: a.type,
+        smallIcon: NOTIF_SMALL_ICON, largeIcon: NOTIF_LARGE_ICON };
       const sf = soundFile(a.sound);
       if (sf) n.sound = sf;
       return n;

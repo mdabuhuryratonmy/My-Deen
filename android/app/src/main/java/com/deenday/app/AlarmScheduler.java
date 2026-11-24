@@ -182,25 +182,44 @@ public final class AlarmScheduler {
             // HIGH importance. The native side is now the SOLE creator
             // of the dhikr channels (the JS createChannel calls are
             // gone), so no second creator can ever make a silent one.
+            // Fix #41 Step 3 (24 Nov 2026 night): v3 did NOT fix it —
+            // Builds 20/21/22 (clean installs, v3 in them) still play
+            // istighfar but never durood, and the JS schedule path was
+            // driven with a recording LN mock and proven correct and
+            // symmetric (24 + 24 notifications, right channels,
+            // sounds, ids, times). The break is the CHANNEL STATE on
+            // his phone: Android Auto Backup (allowBackup="true" in
+            // the manifest) restores notification-channel settings
+            // across uninstall/reinstall, so a v3 channel once created
+            // silent (or muted) stays silent through every "clean"
+            // install — and Android never updates an existing
+            // channel's sound. Same repair a third time: delete v3,
+            // create v4 with the sound + HIGH importance. A v4 channel
+            // has never existed on his phone, so no backed-up silent
+            // state can attach to it.
             nm.deleteNotificationChannel("dhikr-durood");
             nm.deleteNotificationChannel("dhikr-istighfar");
             nm.deleteNotificationChannel("dhikr-durood-v2");
             nm.deleteNotificationChannel("dhikr-istighfar-v2");
             nm.deleteNotificationChannel("dhikr-durood-v2-silent");
             nm.deleteNotificationChannel("dhikr-istighfar-v2-silent");
-            createChannel(nm, ctx, "dhikr-durood-v3", "Durood reminders", "Durood Sharif reminders",
+            nm.deleteNotificationChannel("dhikr-durood-v3");
+            nm.deleteNotificationChannel("dhikr-istighfar-v3");
+            nm.deleteNotificationChannel("dhikr-durood-v3-silent");
+            nm.deleteNotificationChannel("dhikr-istighfar-v3-silent");
+            createChannel(nm, ctx, "dhikr-durood-v4", "Durood reminders", "Durood Sharif reminders",
                     NotificationManager.IMPORTANCE_HIGH, R.raw.durood);
-            createChannel(nm, ctx, "dhikr-istighfar-v3", "Istighfar reminders", "Astaghfirullah reminders",
+            createChannel(nm, ctx, "dhikr-istighfar-v4", "Istighfar reminders", "Astaghfirullah reminders",
                     NotificationManager.IMPORTANCE_HIGH, R.raw.istighfar);
             // Fix #33: silent variants of the dhikr channels — same HIGH
             // importance (the notification still pops up) but rawRes -1,
             // so no sound is set at all. The sound switch works by
-            // scheduling into the v3 channel (sound on) or the -silent
+            // scheduling into the v4 channel (sound on) or the -silent
             // channel (sound off), because Android never updates an
             // existing channel's sound.
-            createChannel(nm, ctx, "dhikr-durood-v3-silent", "Durood reminders (silent)", "Durood Sharif reminders without sound",
+            createChannel(nm, ctx, "dhikr-durood-v4-silent", "Durood reminders (silent)", "Durood Sharif reminders without sound",
                     NotificationManager.IMPORTANCE_HIGH, -1);
-            createChannel(nm, ctx, "dhikr-istighfar-v3-silent", "Istighfar reminders (silent)", "Astaghfirullah reminders without sound",
+            createChannel(nm, ctx, "dhikr-istighfar-v4-silent", "Istighfar reminders (silent)", "Astaghfirullah reminders without sound",
                     NotificationManager.IMPORTANCE_HIGH, -1);
         } catch (Exception ignored) {}
     }

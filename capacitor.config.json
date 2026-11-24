@@ -1,8 +1,13 @@
 {
-  "appId": "com.deenday.app",
-  "appName": "My Deen",
-  "webDir": "www",
   "android": {
     "allowMixedContent": false
-  }
+  },
+  "appId": "com.deenday.app",
+  "appName": "My Deen",
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_notification"
+    }
+  },
+  "webDir": "www"
 }
