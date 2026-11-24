@@ -66,6 +66,7 @@ globalThis.detailSoundExplain=detailSoundExplain; globalThis.renderDetailSounds=
 // permission-chain helpers
 globalThis.speakText=speakText; globalThis.checkPreAzanVoice=checkPreAzanVoice;
 globalThis.AZAN_SPEAK_TEXTS=AZAN_SPEAK_TEXTS; globalThis.nativeAzanArmed=nativeAzanArmed; globalThis.scheduleNativeDhikr=scheduleNativeDhikr;
+globalThis.openDuroodAutostart=openDuroodAutostart; globalThis.syncDuroodToggleNative=syncDuroodToggleNative;
 globalThis.villageNameOf=villageNameOf; globalThis.normalizeCityName=normalizeCityName;
 globalThis.permStepsAsked=permStepsAsked; globalThis.permMarkAsked=permMarkAsked; globalThis.permTimeout=permTimeout;
 globalThis.qiblaBearing=qiblaBearing; globalThis.updateNeedle=updateNeedle;
@@ -1626,6 +1627,107 @@ Object.assign(settings, _savedTz);
       } finally {
         Object.assign(settings, _saved40);
         settings.tzName = _tz40; globalThis.Date = _RealDate40;
+        delete globalThis.Capacitor;
+      }
+    }
+
+    // ---- Fix #41 Step 1 (24 Nov 2026 voice call): unlock durood never
+    // played on the user's Xiaomi. Root cause, verified in source: MIUI
+    // never delivers ACTION_USER_PRESENT to a dead app without Autostart
+    // permission, and the only autostart prompt was the one-shot
+    // first-launch chain step. The receiver, the audio file and the
+    // native-toggle sync were all correct. Fix: a one-tap button in the
+    // Durood settings row opens the MIUI autostart page directly
+    // (existing native requestStep("autostart") deep link); the native
+    // side now reports honestly whether the page opened. Nothing about
+    // the durood itself changes — still ONLY on unlock; astaghfirullah
+    // and the pre-azan texts are untouched.
+    {
+      const _saved41 = { duroodOnUnlock: settings.duroodOnUnlock, duroodAutostartOpened: settings.duroodAutostartOpened, lang: settings.lang };
+      settings.lang = "bn";
+      const _toastEl41 = document.getElementById("toast");
+      const _btn41 = document.getElementById("btn-durood-autostart");
+      const _row41 = document.getElementById("durood-autostart-row");
+      const _hint41 = document.getElementById("durood-autostart-hint");
+      try {
+        // Tapping the button calls the native autostart step, records
+        // that the page opened, and tells the user to flip the switch.
+        let _req41 = [];
+        globalThis.Capacitor = { Plugins: {
+          PrayerAlarm: { requestStep: async(a)=>{ _req41.push(a); return { opened: true }; } },
+        }};
+        settings.duroodAutostartOpened = false;
+        await openDuroodAutostart();
+        check("Fix #41 Step 1: tapping the autostart button calls native requestStep({step:'autostart'})",
+          _req41.length===1 && _req41[0] && _req41[0].step==="autostart", JSON.stringify(_req41));
+        check("Fix #41 Step 1: opening the page records settings.duroodAutostartOpened",
+          settings.duroodAutostartOpened===true, "flag set");
+        check("Fix #41 Step 1: success toast tells the user to flip the switch next to My Deen",
+          typeof _toastEl41.textContent==="string" && _toastEl41.textContent.includes("সুইচটি চালু করুন"), _toastEl41.textContent);
+        // When the page cannot be opened the flag stays false and the
+        // toast falls back to the manual path (no false "opened" claim).
+        _req41 = [];
+        globalThis.Capacitor = { Plugins: {
+          PrayerAlarm: { requestStep: async(a)=>{ _req41.push(a); return { opened: false }; } },
+        }};
+        settings.duroodAutostartOpened = false;
+        await openDuroodAutostart();
+        check("Fix #41 Step 1: a failed open does NOT record the page as opened",
+          settings.duroodAutostartOpened===false, "flag stays false");
+        check("Fix #41 Step 1: a failed open toasts the manual Settings path instead",
+          typeof _toastEl41.textContent==="string" && _toastEl41.textContent.includes("Settings → Apps"), _toastEl41.textContent);
+        // The row is native-only: hidden on web (no Capacitor), shown on
+        // native, and the button is wired by fillSettings().
+        delete globalThis.Capacitor;
+        fillSettings();
+        check("Fix #41 Step 1: autostart row is hidden on web (no unlock durood there)",
+          _row41.style.display==="none", "web hidden");
+        check("Fix #41 Step 1: hint explains Xiaomi kills the app without autostart",
+          typeof _hint41.textContent==="string" && _hint41.textContent.includes("অটোস্টার্ট"), _hint41.textContent);
+        globalThis.Capacitor = { Plugins: {
+          PrayerAlarm: { requestStep: async()=>({ opened: true }) },
+        }};
+        fillSettings();
+        check("Fix #41 Step 1: autostart row is shown on native Android and the button is wired",
+          _row41.style.display!=="none" && typeof _btn41.onclick==="function", "native shown + wired");
+        check("Fix #41 Step 1: button label is the one-tap autostart action",
+          typeof _btn41.textContent==="string" && _btn41.textContent.includes("অটোস্টার্ট চালু করুন"), _btn41.textContent);
+        // Toggle OFF still syncs disabled to the native receiver, and
+        // the default is still ON (the pref default is true either way).
+        let _du41 = [];
+        globalThis.Capacitor = { Plugins: {
+          DuroodUnlock: { setEnabled: (a)=>{ _du41.push(a); } },
+        }};
+        settings.duroodOnUnlock = false; syncDuroodToggleNative();
+        check("Fix #41 Step 1: durood OFF still syncs enabled:false to the native receiver",
+          _du41.length===1 && _du41[0].enabled===false, JSON.stringify(_du41));
+        settings.duroodOnUnlock = true; syncDuroodToggleNative();
+        check("Fix #41 Step 1: durood ON syncs enabled:true to the native receiver",
+          _du41.length===2 && _du41[1].enabled===true, JSON.stringify(_du41));
+        // Delivery chain pins (static): the receiver is manifest-registered
+        // exported with USER_PRESENT, and the clip is bundled in the APK.
+        const _man41 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/AndroidManifest.xml", "utf8");
+        check("Fix #41 Step 1: DuroodUnlockReceiver is manifest-registered exported with USER_PRESENT",
+          _man41.includes('android:name=".DuroodUnlockReceiver" android:exported="true"') && _man41.includes("android.intent.action.USER_PRESENT"), "manifest");
+        check("Fix #41 Step 1: res/raw/durood.mp3 is bundled (the clip the receiver plays)",
+          fs.existsSync("/home/hatch/workspace/deen-day/android/app/src/main/res/raw/durood.mp3"), "raw clip");
+        // Native honesty pin: requestStep("autostart") returns the real
+        // opened value, and the opener only reports success when an
+        // intent actually resolved.
+        const _pa41 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/PrayerAlarmPlugin.java", "utf8");
+        check("Fix #41 Step 1: native requestStep('autostart') returns the real opened value (no hardcoded true)",
+          _pa41.includes('ret.put("opened", openAutostartSettings())') && !_pa41.includes('ret.put("opened", true)'), "honest opened");
+        check("Fix #41 Step 1: native autostart opener guards each intent with resolveActivity and returns boolean",
+          _pa41.includes("private boolean openAutostartSettings()") && _pa41.includes("resolveActivity(getContext().getPackageManager()) != null") && _pa41.includes("com.miui.permcenter.autostart.AutoStartManagementActivity"), "guarded opener");
+        // Untouched pins: astaghfirullah reminder code and the Fix #8
+        // pre-azan texts are not modified by this step.
+        const _src41 = fs.readFileSync("/home/hatch/workspace/deen-day/www/app.js", "utf8");
+        check("Fix #41 Step 1: this step does not touch the astaghfirullah reminder (astaghRem keys intact)",
+          _src41.includes("astaghRemOn") && _src41.includes("astaghRemMin") && _src41.includes("astaghRemSound"), "astaghfirullah intact");
+      } finally {
+        settings.duroodOnUnlock = _saved41.duroodOnUnlock;
+        settings.duroodAutostartOpened = _saved41.duroodAutostartOpened;
+        settings.lang = _saved41.lang;
         delete globalThis.Capacitor;
       }
     }

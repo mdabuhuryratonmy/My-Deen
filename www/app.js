@@ -1807,7 +1807,7 @@ const Lb = (bn, en) => { const l = settings.lang; if (l==="bn") return bn;
 /* ---------------- settings ---------------- */
 const DEFAULTS = {city:"", country:"", lat:null, lon:null, method:0, school:0, schoolExplicit:false,
   lang:"en", theme:"dark", azan:true, adhan:"a1", reciter:"ar.alafasy", notif:false, tasbihTarget:33,
-  autoLoc:true, useCoords:false, profileName:"", gmail:"", duroodOnUnlock:true, learnMadhhab:"hanafi",
+  autoLoc:true, useCoords:false, profileName:"", gmail:"", duroodOnUnlock:true, duroodAutostartOpened:false, learnMadhhab:"hanafi",
   dailyNotif:true, duroodRemOn:true, duroodRemMin:30, duroodRemSound:true, astaghRemOn:true, astaghRemMin:30, astaghRemSound:true,
   /* Location identity: locId names the CURRENT location ("c:lat,lon" for
      coordinate locations, "n:city|country" for city-name ones). The
@@ -4190,6 +4190,36 @@ function syncDuroodToggleNative(){
   } catch(e){}
 }
 
+/* Fix #41 Step 1 (24 Nov 2026 voice call): unlock durood never played on
+   the user's Xiaomi — NOT a receiver/audio bug. Verified correct: the
+   manifest receiver (exported, USER_PRESENT), DuroodUnlockReceiver's
+   goAsync playback, res/raw/durood.mp3 in the APK, the plugin registered
+   in MainActivity, and syncDuroodToggleNative() running at startup. The
+   break is delivery: MIUI never delivers ACTION_USER_PRESENT to a dead
+   app without Autostart permission (default OFF for a sideloaded APK),
+   and the only autostart prompt was the one-shot first-launch chain step,
+   which he never completed — autostart state is undetectable, so the
+   chain could not know. The Settings page only told him to dig through
+   Settings by hand, which users will not do. So the Durood row now has a
+   one-tap button that opens the MIUI autostart page directly (the
+   existing native requestStep("autostart") deep link — no new native
+   code path). The app records only that the page was opened
+   (settings.duroodAutostartOpened) and tells the user, in one line, to
+   flip the switch next to My Deen. Nothing else about durood changes:
+   it still plays ONLY on unlock, and the toggle still syncs on/off to
+   the native receiver. */
+async function openDuroodAutostart(){
+  const PA = permPA();
+  let opened = false;
+  if (PA && PA.requestStep){
+    try { const r = await PA.requestStep({ step: "autostart" }); opened = !!(r && r.opened); } catch(e){}
+  }
+  if (opened){ settings.duroodAutostartOpened = true; saveSettings(); }
+  toast(opened
+    ? Lb("অটোস্টার্ট পেজ খুলেছে — সেখানে My Deen-এর পাশের সুইচটি চালু করুন, তাহলে আনলক করলে দরুদ বাজবে", "Autostart page opened — turn on the switch next to My Deen there, then the durood will play on unlock")
+    : Lb("অটোস্টার্ট পেজ খোলা যায়নি — ফোনের Settings → Apps → My Deen → Autostart চালু করুন", "Could not open the autostart page — turn on Autostart in your phone's Settings → Apps → My Deen"));
+}
+
 /* ---------------- Daily hadith & verse notification (fully local) ----
    No server and no account are involved: each phone picks a different
    hadith and Quran verse every day from the data already bundled in the
@@ -5247,6 +5277,18 @@ function applyLang(){
 }
 function fillSettings(){
   const du = $("#set-durood"); if (du) du.checked = !!settings.duroodOnUnlock;
+  /* Fix #41 Step 1: one-tap autostart button under the durood toggle.
+     Native Android only — the web/PWA has no unlock durood, so the row
+     stays hidden there. */
+  const ab = $("#btn-durood-autostart");
+  if (ab){
+    ab.onclick = ()=>openDuroodAutostart();
+    ab.textContent = Lb("📱 অটোস্টার্ট চালু করুন", "📱 Turn on Autostart");
+  }
+  const ar = $("#durood-autostart-row");
+  if (ar) ar.style.display = permPA() ? "" : "none";
+  const ah = $("#durood-autostart-hint");
+  if (ah) ah.textContent = Lb("Xiaomi ফোন অ্যাপ বন্ধ করে দিলে আনলকের দরুদ বাজে না — অটোস্টার্ট চালু থাকতে হয়।", "On Xiaomi phones the app is stopped when closed, so the unlock durood needs Autostart on.");
   const pn = $("#set-profile-name"); if (pn) pn.value = settings.profileName || "";
   renderGreet(); renderLoginState();
   const sl0 = $("#set-lang");

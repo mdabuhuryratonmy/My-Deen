@@ -409,7 +409,8 @@
           <label class="switch"><input type="checkbox" id="set-azan" checked><span class="slider"></span></label></div>
         <div class="switch-row"><span data-i18n="duroodLabel">📿 ফোন আনলক করলে দরুদ</span>
           <label class="switch"><input type="checkbox" id="set-durood" checked><span class="slider"></span></label></div>
-        <p class="muted small">আনলকে দরুদ না বাজলে: ফোনের Settings → Apps → My Deen → Autostart চালু করুন, আর Battery saver → No restrictions দিন। (Xiaomi ফোন অ্যাপ বন্ধ করে দিলে আনলকের দরুদ বাজে না।)</p>
+        <p class="muted small" id="durood-autostart-hint">Xiaomi ফোন অ্যাপ বন্ধ করে দিলে আনলকের দরুদ বাজে না — অটোস্টার্ট চালু থাকতে হয়।</p>
+        <div class="row mt" id="durood-autostart-row"><button class="btn block" id="btn-durood-autostart">📱 অটোস্টার্ট চালু করুন</button></div>
         <div id="reminder-settings"></div>
         <label data-i18n="adhanLabel">আজানের সুর</label>
         <select id="set-adhan"></select>

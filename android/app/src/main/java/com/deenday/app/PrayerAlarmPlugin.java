@@ -187,9 +187,8 @@ public class PrayerAlarmPlugin extends Plugin {
             return;
         }
         if ("autostart".equals(step)) {
-            openAutostartSettings();
             JSObject ret = new JSObject();
-            ret.put("opened", true);
+            ret.put("opened", openAutostartSettings());
             call.resolve(ret);
             return;
         }
@@ -214,23 +213,33 @@ public class PrayerAlarmPlugin extends Plugin {
 
     /** MIUI autostart page (Xiaomi/HyperOS); falls back to the app's
         Settings page on other phones. Autostart cannot be detected
-        programmatically, so the app asks the user to confirm. */
-    private void openAutostartSettings() {
+        programmatically, so the app asks the user to confirm.
+        Fix #41 Step 1: returns whether a page actually opened — the old
+        version always reported success even when both intents failed, so
+        the app told the user the page had opened when nothing happened.
+        Each intent is only started when the system can resolve it. */
+    private boolean openAutostartSettings() {
         try {
             Intent intent = new Intent();
             intent.setComponent(new android.content.ComponentName(
                     "com.miui.securitycenter",
                     "com.miui.permcenter.autostart.AutoStartManagementActivity"));
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            getContext().startActivity(intent);
-            return;
+            if (intent.resolveActivity(getContext().getPackageManager()) != null) {
+                getContext().startActivity(intent);
+                return true;
+            }
         } catch (Exception ignored) {}
         try {
             Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
             intent.setData(Uri.parse("package:" + getContext().getPackageName()));
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            getContext().startActivity(intent);
+            if (intent.resolveActivity(getContext().getPackageManager()) != null) {
+                getContext().startActivity(intent);
+                return true;
+            }
         } catch (Exception ignored) {}
+        return false;
     }
 
     @PluginMethod
