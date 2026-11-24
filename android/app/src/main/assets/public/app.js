@@ -4150,7 +4150,7 @@ function renderCalendarPage(){
       <div class="cal-line"><span>${Lb("সাহরি","Sehri")}</span><b>${fmtTime(t.Imsak)}</b></div>
       <div class="cal-line"><span>${Lb("ইফতার","Iftar")}</span><b>${fmtTime(t.Maghrib)}</b></div>`;
     const sr = toMin(t.Sunrise), dh = toMin(t.Dhuhr), mg = toMin(t.Maghrib);
-    const forb = `<div class="cal-forb">${Lb("সালাতের নিষিদ্ধ সময়", "Forbidden prayer times")}: ${fmtTime(t.Sunrise)} – ${fmtTime(minsToHHMM(sr+15))} • ${fmtTime(minsToHHMM(dh-10))} – ${fmtTime(t.Dhuhr)} • ${fmtTime(minsToHHMM(mg-25))} – ${fmtTime(t.Maghrib)}</div>`;
+    const forb = `<div class="cal-forb">${Lb("সালাতের নিষিদ্ধ সময়", "Forbidden prayer times")}: ${fmtTime(t.Sunrise)} – ${fmtTime(minsToHHMM(sr+15))} • ${fmtTime(minsToHHMM(dh-4))} – ${fmtTime(minsToHHMM(dh+2))} • ${fmtTime(minsToHHMM(mg-15))} – ${fmtTime(t.Maghrib)}</div>`;
     /* Build #19, Fix #2: the share button on every calendar day card
        is gone — the card head is just the date now. */
     html += `<div class="card cal-card"><div class="cal-head"><span>${head}</span></div>

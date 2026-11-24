@@ -1462,6 +1462,18 @@ Object.assign(settings, _savedTz);
       "no stray Chepor");
     check("Build #19 Fix #7: the gazetteer knows Chepor's coordinates as Chemor",
       src.includes('"chepor": [4.72, 101.12]'), "gazetteer");
+
+    // Post-Build #19 decisions (24 Nov 2026, user delegated "sob tumi koro"):
+    // version bump + calendar forbidden windows aligned to forbiddenWindows().
+    const gradle = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/build.gradle", "utf8");
+    check("Post-#19 version: versionName is 2.0 (matches aboutLine1 'My Deen v2.0'), versionCode untouched at 1",
+      gradle.includes('versionName "2.0"') && gradle.includes("versionCode 1") && src.includes('aboutLine1:"My Deen v2.0'),
+      "gradle 2.0 / code 1");
+    check("Post-#19 calendar: forbidden line uses forbiddenWindows() values (dh-4→dh+2, mg-15→mg), old dh-10/mg-25 gone",
+      src.includes("start:dhuhr-4, end:dhuhr+2") && src.includes("start:magh-15, end:magh") &&
+      src.includes("minsToHHMM(dh-4)") && src.includes("minsToHHMM(dh+2)") && src.includes("minsToHHMM(mg-15)") &&
+      !src.includes("dh-10") && !src.includes("mg-25"),
+      "aligned");
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);
