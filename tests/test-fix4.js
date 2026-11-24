@@ -69,6 +69,8 @@ globalThis.AZAN_SPEAK_TEXTS=AZAN_SPEAK_TEXTS; globalThis.nativeAzanArmed=nativeA
 globalThis.openDuroodAutostart=openDuroodAutostart; globalThis.syncDuroodToggleNative=syncDuroodToggleNative;
 globalThis.villageNameOf=villageNameOf; globalThis.normalizeCityName=normalizeCityName;
 globalThis.permStepsAsked=permStepsAsked; globalThis.permMarkAsked=permMarkAsked; globalThis.permTimeout=permTimeout;
+globalThis.detectLocation=detectLocation; globalThis.locPermStatus=locPermStatus; globalThis.saveSettingsFromUI=saveSettingsFromUI;
+globalThis.runPermChain=runPermChain; globalThis.permRequestStep=permRequestStep; globalThis.permStatus=permStatus;
 globalThis.qiblaBearing=qiblaBearing; globalThis.updateNeedle=updateNeedle;
 globalThis.__setQiblaDeg=v=>{ qiblaDeg=v; }; globalThis.__setHeading=v=>{ heading=v; };
 globalThis.fetchQibla=fetchQibla; globalThis.__getQiblaDeg=()=>qiblaDeg;
@@ -676,8 +678,10 @@ Object.assign(settings, _savedTz);
     // ---- Fix #19: azan never rang at Maghrib on the fresh install ----
     // The exact-alarm permission was missing, so every alarm was
     // silently skipped and the app never said so. Now the sync result
-    // is recorded, the status is shown (banner + Alarm page), and
-    // alarms re-sync on foreground.
+    // is recorded and shown on the Alarm page, and alarms re-sync on
+    // foreground. Fix #41 Step 2: the Home warning banner is GONE by
+    // the user's order — permissions are asked once at first launch
+    // instead; the tests below assert no banner ever appears.
     const _mockPA = (sched, status) => {
       globalThis.Capacitor = { Plugins: {
         PrayerAlarm: {
@@ -692,9 +696,10 @@ Object.assign(settings, _savedTz);
     const _tz19 = settings.tzName; settings.tzName = "";
     _mockPA({scheduled:0, skipped:5}, {notificationsGranted:false, exactAlarmGranted:false, alarmsScheduled:0});
     await syncPrayerAlarms(); await refreshAlarmStatus();
-    check("Fix #19: skipped alarms are recorded and the Home warning banner shows",
-      __getAlarmStatus().skipped === 5 && els["#alarm-warn"].hidden === false && els["#alarm-warn"].innerHTML.includes("আজানের অ্যালার্ম সেট হয়নি"),
-      els["#alarm-warn"].innerHTML.slice(0, 80));
+    check("Fix #41 Step 2: no Home warning banner ever appears, even when alarms are skipped — the Alarm page points to Settings instead",
+      __getAlarmStatus().skipped === 5 && (!els["#alarm-warn"] || els["#alarm-warn"].innerHTML === "") &&
+      els["#alarm-status"].innerHTML.includes("আজানের অ্যালার্ম সেট হয়নি") && els["#alarm-status"].innerHTML.includes("Settings"),
+      els["#alarm-status"].innerHTML.slice(0, 100));
     _mockPA({scheduled:35, skipped:0}, {notificationsGranted:true, exactAlarmGranted:true, alarmsScheduled:35});
     const t19 = new Date(); t19.setHours(17,0,0,0);
     globalThis.Date = class extends RealDate19 {
@@ -702,8 +707,8 @@ Object.assign(settings, _savedTz);
       static now(){ return t19.getTime(); }
     };
     await syncPrayerAlarms(); await refreshAlarmStatus();
-    check("Fix #19: when all alarms are armed the banner hides and the status shows the next azan (Maghrib)",
-      __getAlarmStatus().skipped === 0 && els["#alarm-warn"].hidden === true && els["#alarm-status"].innerHTML.includes("মাগরিব"),
+    check("Fix #19: when all alarms are armed the status shows the next azan (Maghrib) and there is still no Home banner",
+      __getAlarmStatus().skipped === 0 && (!els["#alarm-warn"] || els["#alarm-warn"].innerHTML === "") && els["#alarm-status"].innerHTML.includes("মাগরিব"),
       els["#alarm-status"].innerHTML.slice(0, 100));
     globalThis.Date = RealDate19; settings.tzName = _tz19;
     delete globalThis.Capacitor;
@@ -922,9 +927,9 @@ Object.assign(settings, _savedTz);
       !src.includes("openPermOnboard") && !src.includes("ONBOARD_STEPS") && !src.includes("renderOnboard") &&
       !src.includes("skipOnboard") && !_css.includes("perm-dot"),
       "modal removed");
-    check("Fix #32: PERM_STEPS has the same 4 permissions, in order, as a plain list",
-      src.includes('const PERM_STEPS = ["notifications", "exact", "battery", "autostart"]'),
-      "4 steps");
+    check("Fix #32: PERM_STEPS has the same 5 permissions, in order, as a plain list (location first — Fix #41 Step 2)",
+      src.includes('const PERM_STEPS = ["location", "notifications", "exact", "battery", "autostart"]'),
+      "5 steps");
     check("Fix #25: plugin has requestStep with all 4 step branches",
       _pa.includes("public void requestStep") && _pa.includes('"notifications"') &&
       _pa.includes('"exact"') && _pa.includes('"battery"') && _pa.includes('"autostart"'), "4 branches");
@@ -1122,9 +1127,10 @@ Object.assign(settings, _savedTz);
       html.includes('id="btn-loc-allow"') && html.includes('id="loc-setup"') &&
       html.includes("GPS দিয়ে অটো সেট করুন"),
       "pill → modal → GPS");
-    check("Fix #29: autoLoc still defaults on and still gates auto-detect on launch",
-      settings.autoLoc === true && src.includes("if (settings.autoLoc && !settings.locManual) detectLocation(true)"),
-      "behaviour kept");
+    check("Fix #29: autoLoc still defaults on; saving settings never re-detects location (Fix #41 Step 2)",
+      settings.autoLoc === true &&
+      !src.slice(src.indexOf("async function saveSettingsFromUI"), src.indexOf("async function initPrayers")).includes("detectLocation"),
+      "save never asks");
 
     // ---- Fix #30: bottom nav has ONLY Home + Settings ----
     // The user (21:33, screenshot): Quran / Tasbih / Duas / Qibla / Fasting
@@ -1728,6 +1734,112 @@ Object.assign(settings, _savedTz);
         settings.duroodOnUnlock = _saved41.duroodOnUnlock;
         settings.duroodAutostartOpened = _saved41.duroodAutostartOpened;
         settings.lang = _saved41.lang;
+        delete globalThis.Capacitor;
+      }
+    }
+
+    // ---- Fix #41 Step 2 (24 Nov 2026 voice call ~22:47, NEW DIRECTION) ----
+    // The Home alarm warning is REMOVED entirely — no banner, no dead
+    // button. Instead a fresh install asks for ALL permissions at once
+    // in the first-run chain (location first), once, and never again.
+    // And saving settings must never re-ask for location.
+    {
+      const _saved42 = {...settings};
+      const _savedAsked42 = {...(settings.permStepsAsked || {})};
+      const _realFetch42 = globalThis.fetch;
+      globalThis.fetch = async()=>{ throw new Error("network down"); };
+      settings.lang = "bn";
+      try {
+        // Static: the warning is gone from the shipped app.
+        check("Fix #41 Step 2: no Home warning banner in the shipped HTML (div removed)",
+          !html.includes('id="alarm-warn"') && !html.includes("alarm-warn"), "div gone");
+        check("Fix #41 Step 2: no dead allow button or its handler left in the shipped JS",
+          !src.includes("alarm-warn-btn") && !src.includes("function requestAllPermissions"), "button gone");
+        check("Fix #41 Step 2: the old nag text is gone from the shipped JS",
+          !src.includes("অনুমতি দিন, নইলে আজান বাজবে না") && !src.includes("ওপরে অনুমতি দিন"), "nag gone");
+        check("Fix #41 Step 2: location is the FIRST step of the first-run chain",
+          src.includes('const PERM_STEPS = ["location", "notifications", "exact", "battery", "autostart"]'), "location first");
+        check("Fix #41 Step 2: permStatus reports the location grant and permRequestStep asks it via detectLocation(false)",
+          src.includes("location: locGranted") && src.includes('if (id === "location")') && src.includes("await detectLocation(false)"), "chain wiring");
+        check("Fix #41 Step 2: detectLocation checks the real status first and never prompts from an automatic path",
+          src.includes("await locPermStatus()") && src.includes('if (auto && st !== "granted") return false'), "status gate");
+        check("Fix #41 Step 2: native exact-alarm opener is guarded and reports honestly",
+          javaPlugin.includes("private boolean openExactAlarmSettingsIfNeeded()") &&
+          javaPlugin.includes("Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM") &&
+          javaPlugin.includes('ret.put("opened", opened)') && javaPlugin.includes('ret.put("granted", exactAlarmGranted())'),
+          "honest exact");
+
+        // ---- location gate: a controllable Geolocation stub ----
+        const _geoCalls = { n: 0 };
+        let _geoStatus = "prompt";
+        const _mockGeo = () => {
+          globalThis.Capacitor = { Plugins: {
+            Geolocation: {
+              checkPermissions: async()=>({location: _geoStatus}),
+              getCurrentPosition: async()=>{ _geoCalls.n++; return {coords:{latitude:4.72, longitude:101.12, accuracy:10}}; },
+            },
+          }};
+        };
+        _mockGeo();
+        settings.locManual = false; settings.locPermGranted = false;
+        _geoStatus = "denied"; _geoCalls.n = 0;
+        check("Fix #41 Step 2: auto detect with location DENIED never asks (0 GPS calls, silent false)",
+          (await detectLocation(true)) === false && _geoCalls.n === 0, "denied+auto");
+        _geoStatus = "prompt"; _geoCalls.n = 0;
+        check("Fix #41 Step 2: auto detect with status PROMPT never asks (0 GPS calls, silent false)",
+          (await detectLocation(true)) === false && _geoCalls.n === 0, "prompt+auto");
+        _geoStatus = "granted"; _geoCalls.n = 0;
+        check("Fix #41 Step 2: auto detect with location GRANTED runs once and remembers the grant",
+          (await detectLocation(true)) === true && _geoCalls.n === 1 && settings.locPermGranted === true, "granted+auto");
+        _geoStatus = "prompt"; _geoCalls.n = 0;
+        check("Fix #41 Step 2: an explicit GPS tap with status PROMPT may ask once",
+          (await detectLocation(false)) === true && _geoCalls.n === 1, "prompt+tap");
+        _geoStatus = "denied"; _geoCalls.n = 0;
+        check("Fix #41 Step 2: an explicit GPS tap with location DENIED never re-prompts (0 GPS calls, manual path toasted)",
+          (await detectLocation(false)) === false && _geoCalls.n === 0 && els["#toast"].textContent.includes("সেটিংস"),
+          "denied+tap");
+
+        // ---- saving settings never touches GPS ----
+        _geoStatus = "prompt"; _geoCalls.n = 0;
+        settings.city = "Chemor"; settings.country = "Malaysia"; settings.lat = 4.72; settings.lon = 101.12;
+        settings.useCoords = true; settings.locManual = false; settings.autoLoc = true;
+        await saveSettingsFromUI();
+        check("Fix #41 Step 2: saving settings with location already set triggers NO permission request (0 GPS calls)",
+          _geoCalls.n === 0, "save never asks");
+
+        // ---- first-run chain: all permissions once, then never again ----
+        const _stepCalls = [];
+        globalThis.Capacitor = { Plugins: {
+          Geolocation: {
+            checkPermissions: async()=>({location: _geoStatus}),
+            getCurrentPosition: async()=>{ _geoCalls.n++; return {coords:{latitude:4.72, longitude:101.12, accuracy:10}}; },
+          },
+          PrayerAlarm: {
+            scheduleAlarms: async()=>({scheduled:0, skipped:0}),
+            getStatus: async()=>({notificationsGranted:false, exactAlarmGranted:false, alarmsScheduled:0, batteryExempt:true}),
+            requestStep: async(a)=>{ _stepCalls.push(a.step); return a.step === "exact" ? {opened:false, granted:false} : {opened:true, granted:true}; },
+          },
+          LocalNotifications: { cancel: async()=>({}), requestPermissions: async()=>({display:"granted"}), schedule: async()=>({}) },
+        }};
+        _geoStatus = "prompt"; _geoCalls.n = 0; _stepCalls.length = 0;
+        settings.permStepsAsked = {}; settings.onboarded = false; settings.locPermGranted = false;
+        settings.locManual = false; settings.autoLoc = true;
+        await runPermChain(false);
+        check("Fix #41 Step 2: first run asks location (via GPS, once) + notifications + exact + autostart (via requestStep, once each)",
+          _geoCalls.n === 1 && ["notifications","exact","autostart"].every(s=>_stepCalls.filter(x=>x===s).length === 1),
+          "location via GPS x1; " + _stepCalls.join(","));
+        check("Fix #41 Step 2: a failed exact-alarm open toasts the manual Settings path instead of stalling",
+          els["#toast"].textContent.includes("Alarms & reminders"), "manual path");
+        check("Fix #41 Step 2: the first run finishes and marks onboarded (never asks again)",
+          settings.onboarded === true, "onboarded");
+        const _callsAfterFirst = _stepCalls.length;
+        await runPermChain(false);
+        check("Fix #41 Step 2: a second run asks nothing again (ask-once)",
+          _stepCalls.length === _callsAfterFirst && _geoCalls.n === 1, "asked once");
+      } finally {
+        Object.assign(settings, _saved42);
+        settings.permStepsAsked = _savedAsked42;
+        globalThis.fetch = _realFetch42;
         delete globalThis.Capacitor;
       }
     }

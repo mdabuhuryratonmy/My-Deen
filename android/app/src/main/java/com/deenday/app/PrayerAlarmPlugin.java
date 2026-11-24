@@ -166,9 +166,14 @@ public class PrayerAlarmPlugin extends Plugin {
             return;
         }
         if ("exact".equals(step)) {
-            openExactAlarmSettingsIfNeeded();
+            // Fix #41 Step 2: report honestly whether a page opened —
+            // the old code reported opened:true whenever the alarm was
+            // still ungranted, even when the intent failed to resolve.
+            boolean opened = false;
+            if (!exactAlarmGranted()) opened = openExactAlarmSettingsIfNeeded();
             JSObject ret = new JSObject();
-            ret.put("opened", !exactAlarmGranted());
+            ret.put("opened", opened);
+            ret.put("granted", exactAlarmGranted());
             call.resolve(ret);
             return;
         }
@@ -272,16 +277,36 @@ public class PrayerAlarmPlugin extends Plugin {
     }
 
     /** Exact alarms (Android 12+) are granted on a Settings page, not by
-        a runtime prompt — open it so the user can switch it on. */
-    private void openExactAlarmSettingsIfNeeded() {
+        a runtime prompt — open it so the user can switch it on. Returns
+        whether a page actually opened. Fix #41 Step 2: the old version
+        fired the intent blind and swallowed failure — on Xiaomi the
+        exact-alarm intent often does not resolve, so the app claimed the
+        page had opened when nothing happened (the dead "অনুমতি দিন"
+        button). Now the intent is only started when the system can
+        resolve it, and the app's own Settings page is the fallback. */
+    private boolean openExactAlarmSettingsIfNeeded() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !exactAlarmGranted()) {
             try {
                 Intent intent = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);
                 intent.setData(Uri.parse("package:" + getContext().getPackageName()));
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                getContext().startActivity(intent);
+                if (intent.resolveActivity(getContext().getPackageManager()) != null) {
+                    getContext().startActivity(intent);
+                    return true;
+                }
             } catch (Exception ignored) {}
+            try {
+                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                intent.setData(Uri.parse("package:" + getContext().getPackageName()));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                if (intent.resolveActivity(getContext().getPackageManager()) != null) {
+                    getContext().startActivity(intent);
+                    return true;
+                }
+            } catch (Exception ignored) {}
+            return false;
         }
+        return false;
     }
 
     private void resolvePermissionStatus(PluginCall call) {

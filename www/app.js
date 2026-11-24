@@ -1816,7 +1816,7 @@ const DEFAULTS = {city:"", country:"", lat:null, lon:null, method:0, school:0, s
      data from a previous location can never be served for a new one.
      locManual marks a location the user typed themselves — automatic
      GPS detection must never override it. */
-  locId:"", coordsLoc:"", tzName:"", tzLoc:"", locManual:false,
+  locId:"", coordsLoc:"", tzName:"", tzLoc:"", locManual:false, locPermGranted:false,
   offsets:{Fajr:0, Dhuhr:0, Asr:0, Maghrib:0, Isha:0, Duha:0, Tahajjud:0, ForbMorning:0, ForbNoon:0, ForbEvening:0, Sehri:0, Iftar:0},
   /* Per-item alarm switches (Fix #4 §8): each fard prayer, the two nafl
      prayers, the three forbidden windows, and Sehri/Iftar can be toggled
@@ -4753,27 +4753,23 @@ function nextAzanInfo(){
     return `${Lb("পরের আজান", "Next azan")}: ${pname(next.prayerId)} ${fmtTime(timings[next.prayerId] || "")}`;
   } catch(e){ return ""; }
 }
+/* Fix #41 Step 2 (user 24 Nov 22:47): the Home alarm warning is GONE —
+   no "আজানের অ্যালার্ম সেট হয়নি" banner or nag ever appears on Home.
+   Permissions are asked once at first launch (runPermChain, location
+   first); if the user declines, the fallback is the Settings "সব অনুমতি
+   দিন" button. The Alarm page keeps a neutral status line: the positive
+   state when alarms are on, and a pointer to Settings when they are not
+   (the old text pointed at the removed Home banner). */
 function renderAlarmStatus(){
-  const w = $("#alarm-warn");
-  if (w){
-    const bad = alarmStatus.checked && (!alarmStatus.notifications || !alarmStatus.exact || alarmStatus.skipped > 0);
-    w.hidden = !bad;
-    if (bad){
-      const missing = [];
-      if (!alarmStatus.notifications) missing.push(Lb("নোটিফিকেশন", "notifications"));
-      if (!alarmStatus.exact) missing.push(Lb("সঠিক সময়ের অ্যালার্ম", "exact alarms"));
-      w.innerHTML = `<b>⚠ ${Lb("আজানের অ্যালার্ম সেট হয়নি", "Azan alarms are not set")}</b><span>${Lb("অনুমতি দিন, নইলে আজান বাজবে না", "Grant the permission or the azan will not ring")}${missing.length ? " — " + missing.join(", ") : ""}</span><button class="btn small" id="alarm-warn-btn">${Lb("অনুমতি দিন", "Grant permission")}</button>`;
-      const b = $("#alarm-warn-btn"); if (b) b.onclick = ()=>requestAllPermissions();
-    }
-  }
   const s = $("#alarm-status");
-  if (s && alarmStatus.checked){
-    if (!alarmStatus.notifications || !alarmStatus.exact || alarmStatus.skipped > 0){
-      s.innerHTML = `⚠ ${Lb("আজানের অ্যালার্ম সেট হয়নি — ওপরে অনুমতি দিন", "Azan alarms are not set — grant the permission above")}`;
-    } else {
-      const next = nextAzanInfo();
-      s.innerHTML = `✓ ${Lb("আজানের অ্যালার্ম চালু আছে", "Azan alarms are on")} (${num(alarmStatus.scheduled)})${next ? " — " + next : ""}`;
-    }
+  if (!s) return;
+  if (alarmStatus.checked && alarmStatus.notifications && alarmStatus.exact && !(alarmStatus.skipped > 0)){
+    const next = nextAzanInfo();
+    s.innerHTML = `✓ ${Lb("আজানের অ্যালার্ম চালু আছে", "Azan alarms are on")} (${num(alarmStatus.scheduled)})${next ? " — " + next : ""}`;
+  } else if (alarmStatus.checked){
+    s.innerHTML = `⚠ ${Lb("আজানের অ্যালার্ম সেট হয়নি", "Azan alarms are not set")} — ${Lb("Settings থেকে “সব অনুমতি দিন” চাপুন", "Tap “Grant all permissions” in Settings")}`;
+  } else {
+    s.innerHTML = "";
   }
 }
 async function scheduleNativeAzan(){
@@ -4838,6 +4834,40 @@ function renderHomeLocation(){
    name is resolved with the free OpenStreetMap Nominatim service, only to
    display it. Nothing is stored on any server. ---------------------------- */
 const NOMINATIM = "https://nominatim.openstreetmap.org/reverse";
+/* Fix #41 Step 2: the location permission must be asked ONCE, never again
+   from an automatic path. Before this fix, saveSettingsFromUI called
+   detectLocation(true) on EVERY settings save, and detectLocation called
+   getCurrentPosition blindly — on Xiaomi (MIUI "ask every time" / one-time
+   grants / a fresh install after a reinstall) the OS reports the permission
+   as not-granted, so the plugin re-requested it on every save. Now:
+   - locPermStatus() reads the real status first (Capacitor plugin; then the
+     browser Permissions API; then the persisted flag from the last result).
+     checkPermissions() itself never prompts — it only reads.
+   - Automatic paths (auto=true: launch) NEVER prompt: they run only when
+     the status is already "granted" and otherwise skip silently.
+   - Explicit taps (auto=false: a GPS button, the first-run chain's
+     location step) may ask once when the status is "prompt"; when it is
+     "denied" the system dialog would not appear anyway, so the tap gets
+     the manual path instead of a useless re-prompt.
+   - The granted state is persisted (settings.locPermGranted) so the app
+     remembers a grant across restarts. */
+async function locPermStatus(){
+  try {
+    if (typeof window.Capacitor !== "undefined" && window.Capacitor.Plugins && window.Capacitor.Plugins.Geolocation && window.Capacitor.Plugins.Geolocation.checkPermissions){
+      const r = await window.Capacitor.Plugins.Geolocation.checkPermissions();
+      const st = (r && (r.location || r.coarseLocation)) || "prompt";
+      if (st === "granted"){ settings.locPermGranted = true; saveSettings(); }
+      return st;
+    }
+  } catch(e){}
+  try {
+    if (navigator.permissions && navigator.permissions.query){
+      const r = await navigator.permissions.query({name:"geolocation"});
+      if (r && r.state) return r.state;
+    }
+  } catch(e){}
+  return settings.locPermGranted ? "granted" : "prompt";
+}
 async function detectLocation(auto){
   /* A location the user typed manually is their choice: automatic
      detection NEVER overrides it. Only an explicit tap on a GPS button
@@ -4869,10 +4899,19 @@ async function detectLocation(auto){
     } else bad(new Error("no gps"));
   });
   try {
+    /* Fix #41 Step 2: never prompt from an automatic path — check the
+       real status first. A "denied" status throws code 1 so the existing
+       catch below shows the manual path (explicit tap) or stays silent
+       (automatic path); a non-granted status on an automatic path skips
+       silently instead of re-requesting. */
+    const st = await locPermStatus();
+    if (st === "denied"){ settings.locPermGranted = false; saveSettings(); throw {code:1}; }
+    if (auto && st !== "granted") return false;
     const pos = await getPos();
     settings.lat = +pos.lat.toFixed(4); settings.lon = +pos.lon.toFixed(4);
     settings.useCoords = true;
     settings.locManual = false;
+    settings.locPermGranted = true; // Fix #41 Step 2: remember the grant
     settings.locId = coordsKeyOf(); settings.coordsLoc = settings.locId;
     try {
       /* zoom=18 resolves down to village / hamlet level — zoom=10 only
@@ -5134,20 +5173,6 @@ function showView(v){
    screen), notifications, and exact alarms (Android 12+: a Settings
    page the user switches on once). Runs once on first launch; the
    Settings button re-runs it any time. */
-async function requestAllPermissions(){
-  try {
-    const PA = (typeof window.Capacitor !== "undefined" && window.Capacitor.Plugins)
-      ? window.Capacitor.Plugins.PrayerAlarm : null;
-    if (PA && PA.requestPermissions){
-      toast(Lb("সঠিক সময়ে আজান বাজাতে অনুমতিগুলো দিন 🤍", "Please grant the permissions so the azan rings on time 🤍"));
-      await PA.requestPermissions();
-    } else if ("Notification" in window && Notification.permission !== "granted"){
-      await Notification.requestPermission();
-    }
-    settings.permAsked = true; saveSettings();
-    syncPrayerAlarms();
-  } catch(e){}
-}
 function maybeAskPermissions(){
   if (settings.onboarded) return;
   // First launch (Fix #32): ask for the permissions directly, the way
@@ -5161,14 +5186,16 @@ function maybeAskPermissions(){
 // The user (21:59) does not want the 4-step onboarding modal (ধাপ 1/4,
 // dots, "এড়িয়ে যান / পরে করব", explanations). When the app opens it
 // just asks for each permission the way normal apps do: the phone's own
-// dialog for notifications and battery, the phone's own Settings page
-// for exact alarms and autostart (Android allows those two ONLY as a
-// toggle on a system page — no app can grant them from inside itself).
-// The chain runs ONCE (first launch) and then marks onboarded even if
-// the user declines something — a decline is never re-asked on every
-// launch; the Fix #19 home banner stays as the fallback, and the
-// Settings "সব অনুমতি দিন" button re-runs the chain for what is missing.
-const PERM_STEPS = ["notifications", "exact", "battery", "autostart"];
+// dialog for location, notifications and battery, the phone's own
+// Settings page for exact alarms and autostart (Android allows those two
+// ONLY as a toggle on a system page — no app can grant them from inside
+// itself). The chain runs ONCE (first launch) and then marks onboarded
+// even if the user declines something — a decline is never re-asked on
+// every launch. Fix #41 Step 2 (user 24 Nov 22:47): the Fix #19 home
+// banner is GONE — it is no longer the fallback; the Settings "সব
+// অনুমতি দিন" button re-runs the chain for what is missing. Location
+// is the first step, so a fresh install asks for everything at once.
+const PERM_STEPS = ["location", "notifications", "exact", "battery", "autostart"];
 /* Build #19, Fix #3 — why the chain re-prompted / stalled, and the repair:
    (a) The chain only marked onboarded at the very END. Any interruption
        — the app killed while the user is on a Settings page (Xiaomi
@@ -5202,15 +5229,24 @@ function permTimeout(promise, ms){
 function permPA(){ return (typeof window.Capacitor !== "undefined" && window.Capacitor.Plugins) ? window.Capacitor.Plugins.PrayerAlarm : null; }
 async function permStatus(){
   const PA = permPA();
+  const locGranted = (await locPermStatus()) === "granted"; // Fix #41 Step 2: location is a first-run step too
   if (PA && PA.getStatus){ try { const s = await PA.getStatus();
-    return { notifications: !!s.notificationsGranted, exact: !!s.exactAlarmGranted, battery: !!s.batteryExempt, autostart: false /* undetectable */ };
+    return { location: locGranted, notifications: !!s.notificationsGranted, exact: !!s.exactAlarmGranted, battery: !!s.batteryExempt, autostart: false /* undetectable */ };
   } catch(e){} }
-  return { notifications: (typeof Notification !== "undefined" && Notification.permission === "granted"), exact: true, battery: true, autostart: true }; // web: only notifications exist
+  return { location: locGranted, notifications: (typeof Notification !== "undefined" && Notification.permission === "granted"), exact: true, battery: true, autostart: true }; // web: only notifications exist
 }
 async function permRequestStep(id){
+  /* Fix #41 Step 2: location is the first first-run step. An explicit
+     tap (auto=false): it may ask once when the status is "prompt" and
+     never when "denied" (detectLocation handles both). */
+  if (id === "location"){
+    const ok = await detectLocation(false);
+    return {opened:false, granted:!!ok, skipped:false};
+  }
   const PA = permPA();
-  if (PA && PA.requestStep){ try { await PA.requestStep({ step: id }); } catch(e){} return; }
+  if (PA && PA.requestStep){ try { return await PA.requestStep({ step: id }); } catch(e){} return null; }
   if (id === "notifications" && typeof Notification !== "undefined" && Notification.requestPermission){ try { await Notification.requestPermission(); } catch(e){} }
+  return null;
 }
 async function runPermChain(force){
   if (permChainRunning) return;
@@ -5227,13 +5263,21 @@ async function permChainFrom(idx, force){
     // while the user is on the Settings page (or the promise never
     // settles), the next launch does not re-open this page.
     permMarkAsked(id);
-    await permTimeout(permRequestStep(id), id === "notifications" ? 90000 : 30000);
+    const res = await permTimeout(permRequestStep(id), id === "notifications" ? 90000 : 30000);
     if (id === "exact" || id === "autostart"){
       // A system page opened — the user is away from the app. Pause the
       // chain here; the foreground handler resumes it when they return.
       // Autostart is last, so pausing there just ends the chain on return.
       if (id === "autostart"){ finishPermChain(); return; }
-      permChainWaiting = true; permChainIdx = i + 1; return;
+      /* Fix #41 Step 2: if the exact-alarm page could NOT be opened
+         (Xiaomi does not always resolve the intent), do NOT pause for a
+         return that never happens — tell the user the manual path once
+         and carry on with the next step. */
+      if (res && res !== "timeout" && res.opened === false && !res.granted){
+        toast(Lb("অ্যালার্মের পেজ খোলা যায়নি — ফোনের Settings → Apps → My Deen → 'Alarms & reminders' চালু করুন, তাহলে সঠিক সময়ে আজান বাজবে", "Could not open the alarm page — turn on 'Alarms & reminders' for My Deen in your phone's Settings → Apps → My Deen, then the azan will ring on time"));
+      } else {
+        permChainWaiting = true; permChainIdx = i + 1; return;
+      }
     }
     if (id === "battery"){
       // The battery dialog resolves immediately after opening — wait for
@@ -5319,10 +5363,13 @@ async function saveSettingsFromUI(){
   syncDuroodToggleNative();
   applyTheme();
   saveSettings(); toast(t("saved"));
-  /* Saving unrelated settings must not let auto-GPS replace a location
-     the user set manually — only refresh the times for it. */
-  if (settings.autoLoc && !settings.locManual) detectLocation(true);
-  else initPrayers();
+  /* Fix #41 Step 2: saving settings must never re-ask for location.
+     The old code re-ran GPS detection on every save, and the plugin
+     re-requested the permission whenever the OS reported it as
+     not-granted — on Xiaomi that was every save. Times now refresh from
+     the saved location; GPS is only re-run from the explicit GPS button
+     or the first-run permission flow. */
+  initPrayers();
 }
 async function initPrayers(){
   const ok = await fetchTimings();

@@ -397,9 +397,6 @@ hr.sep{border:none; border-top:1px solid var(--line); margin:14px 0}
 .ring-name{font-size:22px; font-weight:700; color:#fff}
 .ring-name.forbid-msg{font-size:17px; line-height:1.55; font-weight:600}
 /* Fix #19: azan alarm status — warning banner on Home + status line on the Alarm page */
-.alarm-warn{display:flex; flex-direction:column; gap:6px; background:#fff3cd; border:1px solid #e6c200; color:#6d4c00; border-radius:12px; padding:10px 12px; margin:0 0 10px; font-size:14px}
-.alarm-warn[hidden]{display:none}
-.alarm-warn .btn{align-self:flex-start}
 .alarm-status{font-size:13px; color:#666; margin-top:8px}
 .ring-count{font-size:34px; font-weight:700; letter-spacing:1px; margin:2px 0}
 .ring-sub{font-size:13px; opacity:.92}
