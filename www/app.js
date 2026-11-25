@@ -4541,8 +4541,8 @@ function checkAzan(){
          — the tick must not play a second azan. A "silent" prayer stays
          silent here too (Fix #38): the foreground path never honoured
          silent before. Otherwise play the azan and speak the
-         announcement — "[Waqt] নামাজের সময় হয়েছে, নামাজ পড়ে নাও" —
-         with the Bengali voice. */
+         announcement — "[Waqt] নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে
+         নামাজের প্রস্তুতি নিন" — with the Bengali voice. */
       const silent = normalizeSounds(settings.alarmSound[p]).includes("silent");
       if (!nativeAzanArmed() && !silent){
         playAzan();
@@ -4626,18 +4626,20 @@ const PREAZAN_TEXTS = {
   Maghrib: "মাগরিবের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন",
   Isha: "ইশার নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন"
 };
-/* Azan-time announcement (Fix #40, user 24 Nov 2026 voice call): at
-   prayer time the notification SPEAKS the waqt name — "[Waqt] নামাজের
-   সময় হয়েছে, নামাজ পড়ে নাও". Spoken by the native AlarmReceiver
-   (speakText on the azan entry) and by the foreground checkAzan when
-   the app is open. Tahajjud gets none (no azan). These are NEW texts —
-   the Fix #8 pre-azan texts above stay verbatim and untouched. */
+/* Azan-time announcement (Fix #40 added the speech; Fix #41 Step 2,
+   user 25 Nov 2026, his own written words): at prayer time the
+   notification SPEAKS the same preparation sentence as the pre-azan
+   reminders — "[Waqt] নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের
+   প্রস্তুতি নিন" (Fajr adds "ঘুম থেকে উঠে"). Spoken by the native
+   AlarmReceiver (speakText on the azan entry) and by the foreground
+   checkAzan when the app is open. Tahajjud gets none (no azan). The
+   Fix #8 pre-azan texts above stay verbatim and untouched. */
 const AZAN_SPEAK_TEXTS = {
-  Fajr: "ফজরের নামাজের সময় হয়েছে, নামাজ পড়ে নাও",
-  Dhuhr: "যোহরের নামাজের সময় হয়েছে, নামাজ পড়ে নাও",
-  Asr: "আসরের নামাজের সময় হয়েছে, নামাজ পড়ে নাও",
-  Maghrib: "মাগরিবের নামাজের সময় হয়েছে, নামাজ পড়ে নাও",
-  Isha: "ইশার নামাজের সময় হয়েছে, নামাজ পড়ে নাও"
+  Fajr: "ফজরের নামাজের সময় হয়েছে, ঘুম থেকে উঠে মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন",
+  Dhuhr: "যোহরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন",
+  Asr: "আসরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন",
+  Maghrib: "মাগরিবের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন",
+  Isha: "ইশার নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন"
 };
 const TAHAJJUD_TEXT = "তাহাজ্জুদের সময় হয়েছে, উঠে নামাজের প্রস্তুতি নিন";
 const PREAZAN_IDS = [31,32,33,34,35];
@@ -4697,7 +4699,8 @@ function buildPrayerAlarmList(){
        selection (including the "name" default) still plays the azan. */
     const snd = soundFor(id);
     /* Fix #40: the azan itself SPEAKS — the announcement "[Waqt]
-       নামাজের সময় হয়েছে, নামাজ পড়ে নাও" is read aloud with the
+       নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন"
+       (Fajr adds "ঘুম থেকে উঠে") is read aloud with the
        phone's Bengali voice (native AlarmReceiver TTS; the foreground
        path in checkAzan speaks it when the app is open). A "silent"
        prayer does not speak. The Fix #8 pre-azan texts are untouched. */

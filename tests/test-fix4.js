@@ -1491,12 +1491,12 @@ Object.assign(settings, _savedTz);
 
     // ---- Fix #40 (24 Nov 2026 voice call): azan speaks the waqt name,
     // durood reminder sound verified end to end, azan never rings twice.
-    check("Fix #40: azan announcement texts are exact ('[Waqt] নামাজের সময় হয়েছে, নামাজ পড়ে নাও', all 5 prayers)",
-      AZAN_SPEAK_TEXTS.Fajr === "ফজরের নামাজের সময় হয়েছে, নামাজ পড়ে নাও" &&
-      AZAN_SPEAK_TEXTS.Dhuhr === "যোহরের নামাজের সময় হয়েছে, নামাজ পড়ে নাও" &&
-      AZAN_SPEAK_TEXTS.Asr === "আসরের নামাজের সময় হয়েছে, নামাজ পড়ে নাও" &&
-      AZAN_SPEAK_TEXTS.Maghrib === "মাগরিবের নামাজের সময় হয়েছে, নামাজ পড়ে নাও" &&
-      AZAN_SPEAK_TEXTS.Isha === "ইশার নামাজের সময় হয়েছে, নামাজ পড়ে নাও",
+    check("Fix #41 Step 2: azan announcement texts are the pre-azan preparation sentences, exact (all 5 prayers)",
+      AZAN_SPEAK_TEXTS.Fajr === "ফজরের নামাজের সময় হয়েছে, ঘুম থেকে উঠে মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+      AZAN_SPEAK_TEXTS.Dhuhr === "যোহরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+      AZAN_SPEAK_TEXTS.Asr === "আসরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+      AZAN_SPEAK_TEXTS.Maghrib === "মাগরিবের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+      AZAN_SPEAK_TEXTS.Isha === "ইশার নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন",
       "announcement texts");
     check("Fix #40: Fix #8 pre-azan texts are still verbatim (md5 unchanged)",
       (()=>{ const crypto = require("crypto"); const m = src.match(/const PREAZAN_TEXTS = \{[\s\S]*?\};/); return !!m && crypto.createHash("md5").update(m[0] + "\n").digest("hex") === "e0895852d481badfb2f41c441bd82a83"; })(),
