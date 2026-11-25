@@ -5311,14 +5311,19 @@ async function permChainFrom(idx, force){
       // chain here; the foreground handler resumes it when they return.
       // Autostart is last, so pausing there just ends the chain on return.
       if (id === "autostart"){ finishPermChain(); return; }
-      /* Fix #41 Step 2: if the exact-alarm page could NOT be opened
-         (Xiaomi does not always resolve the intent), do NOT pause for a
-         return that never happens — tell the user the manual path once
-         and carry on with the next step. */
-      if (res && res !== "timeout" && res.opened === false && !res.granted){
-        toast(Lb("অ্যালার্মের পেজ খোলা যায়নি — ফোনের Settings → Apps → My Deen → 'Alarms & reminders' চালু করুন, তাহলে সঠিক সময়ে আজান বাজবে", "Could not open the alarm page — turn on 'Alarms & reminders' for My Deen in your phone's Settings → Apps → My Deen, then the azan will ring on time"));
-      } else {
+      /* Fix #41 Step 1 hole (24 Nov 2026 night): pause ONLY when a
+         system page actually opened. The old else-branch also paused
+         when the plugin threw (res null), when the 30 s stall guard
+         fired ("timeout"), or when the page did not open but the grant
+         was already true — in all three cases no return ever comes, so
+         the chain stalled silently until the next foreground event and
+         a tap looked dead. Now: no page opened → tell the user the
+         manual path once (unless already granted) and carry on. */
+      if (res && res !== "timeout" && res.opened === true){
         permChainWaiting = true; permChainIdx = i + 1; return;
+      }
+      if (!res || res === "timeout" || !res.granted){
+        toast(Lb("অ্যালার্মের পেজ খোলা যায়নি — ফোনের Settings → Apps → My Deen → 'Alarms & reminders' চালু করুন, তাহলে সঠিক সময়ে আজান বাজবে", "Could not open the alarm page — turn on 'Alarms & reminders' for My Deen in your phone's Settings → Apps → My Deen, then the azan will ring on time"));
       }
     }
     if (id === "battery"){

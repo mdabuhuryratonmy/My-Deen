@@ -70,7 +70,8 @@ globalThis.openDuroodAutostart=openDuroodAutostart; globalThis.syncDuroodToggleN
 globalThis.villageNameOf=villageNameOf; globalThis.normalizeCityName=normalizeCityName;
 globalThis.permStepsAsked=permStepsAsked; globalThis.permMarkAsked=permMarkAsked; globalThis.permTimeout=permTimeout;
 globalThis.detectLocation=detectLocation; globalThis.locPermStatus=locPermStatus; globalThis.saveSettingsFromUI=saveSettingsFromUI;
-globalThis.runPermChain=runPermChain; globalThis.permRequestStep=permRequestStep; globalThis.permStatus=permStatus;
+globalThis.runPermChain=runPermChain; globalThis.permRequestStep=permRequestStep; globalThis.permStatus=permStatus; globalThis.resumePermChain=resumePermChain;
+globalThis.__permChainState=()=>({running:permChainRunning, waiting:permChainWaiting, idx:permChainIdx}); // Fix #41 Step 1 hole: the chain flags are let-bindings, invisible to the test scope — read them through this hook
 globalThis.qiblaBearing=qiblaBearing; globalThis.updateNeedle=updateNeedle;
 globalThis.__setQiblaDeg=v=>{ qiblaDeg=v; }; globalThis.__setHeading=v=>{ heading=v; };
 globalThis.fetchQibla=fetchQibla; globalThis.__getQiblaDeg=()=>qiblaDeg;
@@ -1842,6 +1843,89 @@ Object.assign(settings, _savedTz);
         Object.assign(settings, _saved42);
         settings.permStepsAsked = _savedAsked42;
         globalThis.fetch = _realFetch42;
+        delete globalThis.Capacitor;
+      }
+    }
+
+    // ---- Fix #41 Step 1 hole (24 Nov 2026 night): the exact-alarm
+    // step paused the chain whenever the page did NOT open with
+    // granted=false — including when the plugin threw (res null), when
+    // the 30 s stall guard fired ("timeout"), or when the page did not
+    // open but the grant was already true. No return ever comes in
+    // those cases, so the chain stalled silently until the next
+    // foreground event and a tap looked dead. Now the chain pauses
+    // ONLY when a system page actually opened.
+    {
+      const _saved41h = {...settings};
+      const _savedAsked41h = {...(settings.permStepsAsked || {})};
+      const _realFetch41h = globalThis.fetch;
+      globalThis.fetch = async()=>{ throw new Error("network down"); };
+      settings.lang = "bn";
+      check("Fix #41 Step 1 hole: permChainFrom pauses ONLY when the exact-alarm page actually opened (res.opened === true)",
+        (() => { const fn = src.slice(src.indexOf("async function permChainFrom"), src.indexOf("function resumePermChain"));
+          return fn.includes('res && res !== "timeout" && res.opened === true') && fn.includes("permChainWaiting = true") &&
+            !fn.includes("res.opened === false && !res.granted"); })(),
+        "pause on open only");
+      // Functional: drive the chain with a stubbed plugin, one exact-step
+      // outcome at a time. Location granted + notifications granted +
+      // battery exempt, so only the exact step is exercised.
+      let _geoStatus41h = "granted";
+      let _exactRes41h = {opened:false, granted:false};
+      let _exactThrow41h = false;
+      const _setup41h = () => {
+        globalThis.Capacitor = { Plugins: {
+          Geolocation: {
+            checkPermissions: async()=>({location: _geoStatus41h}),
+            getCurrentPosition: async()=>({coords:{latitude:4.72, longitude:101.12, accuracy:10}}),
+          },
+          PrayerAlarm: {
+            scheduleAlarms: async()=>({scheduled:0, skipped:0}),
+            getStatus: async()=>({notificationsGranted:true, exactAlarmGranted:false, alarmsScheduled:0, batteryExempt:true}),
+            requestStep: async(a)=>{ if (a.step === "exact"){ if (_exactThrow41h) throw new Error("plugin threw"); return _exactRes41h; } return {opened:true, granted:true}; },
+          },
+          LocalNotifications: { cancel: async()=>({}), requestPermissions: async()=>({display:"granted"}), schedule: async()=>({}) },
+        }};
+        settings.permStepsAsked = {}; settings.onboarded = false; settings.locPermGranted = false;
+        settings.locManual = false; settings.autoLoc = true;
+        els["#toast"].textContent = "";
+      };
+      try {
+        // (1) plugin throws → res null → chain continues, manual path toasted, onboarded.
+        _exactThrow41h = true; _exactRes41h = {opened:false, granted:false}; _setup41h();
+        await runPermChain(false);
+        check("Fix #41 Step 1 hole: plugin throws at the exact step (res null) → chain continues instead of stalling",
+          settings.onboarded === true && __permChainState().waiting === false, "onboarded");
+        check("Fix #41 Step 1 hole: plugin throws at the exact step → manual Settings path toasted once",
+          els["#toast"].textContent.includes("Alarms & reminders"), "manual path");
+        // (2) stall guard fires → res "timeout" → chain continues.
+        _exactThrow41h = false;
+        const _realPermTimeout41h = permTimeout;
+        permTimeout = (p, ms) => ms === 30000 ? Promise.resolve("timeout") : _realPermTimeout41h(p, ms);
+        try {
+          _setup41h();
+          await runPermChain(false);
+          check("Fix #41 Step 1 hole: 30 s stall guard fires at the exact step (res 'timeout') → chain continues instead of stalling",
+            settings.onboarded === true && __permChainState().waiting === false, "onboarded");
+        } finally { permTimeout = _realPermTimeout41h; }
+        // (3) page did not open but already granted → chain continues, NO toast.
+        _setup41h(); _exactRes41h = {opened:false, granted:true};
+        await runPermChain(false);
+        check("Fix #41 Step 1 hole: exact page did not open but grant is already true → chain continues silently (no manual-path toast)",
+          settings.onboarded === true && __permChainState().waiting === false && !els["#toast"].textContent.includes("Alarms & reminders"), "silent continue");
+        // (4) page really opened → chain pauses for the return, then resumes on foreground.
+        _setup41h(); _exactRes41h = {opened:true, granted:false};
+        await runPermChain(false);
+        check("Fix #41 Step 1 hole: exact page really opened → chain pauses and waits for the return (not onboarded yet)",
+          __permChainState().waiting === true && settings.onboarded === false, "paused");
+        resumePermChain();
+        await new Promise(r=>setTimeout(r, 50)); // resumePermChain runs the rest async
+        check("Fix #41 Step 1 hole: foreground return resumes the chain and it finishes (onboarded)",
+          settings.onboarded === true && __permChainState().waiting === false, "resumed");
+      } finally {
+        Object.assign(settings, _saved41h);
+        settings.permStepsAsked = _savedAsked41h;
+        globalThis.fetch = _realFetch41h;
+        if (__permChainState().waiting){ resumePermChain(); await new Promise(r=>setTimeout(r, 50)); }
         delete globalThis.Capacitor;
       }
     }
