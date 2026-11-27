@@ -26,10 +26,9 @@ import org.json.JSONObject;
  * in parallel with the notification. The body is the exact Fix #8
  * Bengali text, verbatim. Speaking is best-effort: if TTS is missing
  * or has no Bengali voice, the notification still posts and nothing
- * breaks. Pre-azan entries speak their body; azan entries ALSO speak —
- * the announcement (speakText, Fix #40: "[Waqt] নামাজের সময় হয়েছে,
- * নামাজ পড়ে নাও") — as well as playing the azan through their
- * channel. Tahajjud stays a silent notification.
+ * breaks. Pre-azan entries speak their speakText (same sentence as the
+ * body, set explicitly since Fix #43); azan entries speak their
+ * speakText announcement. Tahajjud stays a silent notification.
  *
  * Fix #42 (27 Nov 2026): the azan NO LONGER plays as the notification
  * channel sound. Android plays only one notification sound at a time,
@@ -37,9 +36,11 @@ import org.json.JSONObject;
  * azan (type "azan-v2") is now played as real media by
  * AzanPlaybackService (foreground service + MediaPlayer with
  * AUDIOFOCUS_GAIN), and the visual notification posts on the silent
- * channel (azan-v2-silent) so the azan never plays twice. If the
- * service cannot start, the notification posts on the sounding azan-v2
- * channel instead — the old behaviour, degraded but never silent.
+ * channel (azan-v2-silent) so the azan never plays twice.
+ * Fix #43 (27 Nov 2026): the visual is ALWAYS silent for a sounding
+ * azan — the service is the only sounding azan path, and there is no
+ * channel fallback any more (a channel sound is cut dead by the next
+ * notification). If the service cannot start, the azan is visual-only.
  * Silent azans (type "azan-v2-silent") are unchanged: notification
  * only, no service. Pre-azan reminders (type "preazan-v2") are also
  * unchanged apart from the BigTextStyle below, which shows the full
@@ -61,12 +62,15 @@ public class AlarmReceiver extends BroadcastReceiver {
             String body = intent.getStringExtra("body");
             // Fix #42: a sounding azan plays as real media, not as the
             // channel sound — start the playback service and post the
-            // visual notification silently (no double azan). If the
-            // service cannot start, fall back to the sounding channel.
+            // visual notification silently (no double azan).
+            // Fix #43: the visual is ALWAYS silent for a sounding azan
+            // — the service is the only sounding azan path; if it
+            // cannot start, the azan is visual-only (never the sounding
+            // channel, whose sound the next notification would cut dead).
             String visualChannel = type;
             if ("azan-v2".equals(type)) {
-                boolean serviceStarted = startAzanService(context, id, title, body);
-                visualChannel = serviceStarted ? "azan-v2-silent" : "azan-v2";
+                startAzanService(context, id, title, body);
+                visualChannel = "azan-v2-silent";
             }
             NotificationCompat.Builder builder = new NotificationCompat.Builder(context, visualChannel)
                     // Fix #14: was android.R.drawable.ic_dialog_info (the
@@ -91,11 +95,18 @@ public class AlarmReceiver extends BroadcastReceiver {
             // own thread with goAsync so the broadcast stays alive
             // while TTS finishes (or the 25 s safety net fires).
             // Fix #40: an azan entry carries speakText (the announcement
-            // "[Waqt] নামাজের সময় হয়েছে, নামাজ পড়ে নাও"); pre-azan
-            // entries have no speakText and speak the body (exact Fix #8
-            // text). Silent entries never carry speak=true.
+            // "[Waqt] নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের
+            // প্রস্তুতি নিন"); pre-azan entries carry speakText too
+            // (Fix #43 — the same Fix #8 sentence as their body).
+            // Silent entries never carry speak=true.
             String speakText = intent.getStringExtra("speakText");
             String toSpeak = (speakText != null && !speakText.isEmpty()) ? speakText : body;
+            // Fix #43: a sounding azan speaks ONLY its speakText (the
+            // waqt-name announcement). The azan entry's body ("মিসওয়াক
+            // ও অজু করে নামাজের জন্য প্রস্তুত হোন") has no waqt name —
+            // speaking it would announce the prayer without naming it.
+            // A stale alarm with an empty speakText stays silent instead.
+            if ("azan-v2".equals(type) && (speakText == null || speakText.isEmpty())) toSpeak = null;
             if (intent.getBooleanExtra("speak", false) && toSpeak != null && !toSpeak.isEmpty()) {
                 final String text = toSpeak;
                 final Context appCtx = context.getApplicationContext();
@@ -134,9 +145,9 @@ public class AlarmReceiver extends BroadcastReceiver {
         notification was already posted, so nothing is lost. */
     /**
      * Fix #42: start the azan media-playback service for a sounding
-     * azan. Returns true when the service was started (the visual
-     * notification then posts silently); false when it could not be
-     * started (the caller falls back to the sounding azan-v2 channel).
+     * azan. Returns true when the service was started; false when it
+     * could not be started (Fix #43: the caller no longer falls back
+     * to the sounding channel — the azan is visual-only then).
      */
     private static boolean startAzanService(Context context, int id, String title, String body) {
         try {

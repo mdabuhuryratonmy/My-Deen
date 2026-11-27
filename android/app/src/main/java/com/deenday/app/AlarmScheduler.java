@@ -145,13 +145,16 @@ public final class AlarmScheduler {
         try {
             NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm == null) return;
-            // Fix #42: the azan-v2 channel sound (azan.mp3) is now only
-            // the FALLBACK — the live azan plays as media from
-            // AzanPlaybackService, and its visual notification posts on
-            // azan-v2-silent. The channel is kept so the fallback still
-            // rings when the service cannot start.
-            createChannel(nm, ctx, "azan-v2", "Azan", "Prayer time azan alerts",
-                    NotificationManager.IMPORTANCE_HIGH, R.raw.azan);
+            // Fix #42: the azan-v2 channel sound is GONE — the live azan
+            // plays as media from AzanPlaybackService, and its visual
+            // notification posts on azan-v2-silent.
+            // Fix #43: the sounding azan-v2 channel is DELETED outright
+            // (never created) — the service is the only sounding azan
+            // path. Any code that still posts on azan-v2 (stale build,
+            // stale alarm) now posts to a deleted channel and stays
+            // silent instead of ringing a channel sound that the next
+            // notification would cut dead.
+            nm.deleteNotificationChannel("azan-v2");
             // Fix #38: silent azan channel — a "নিঃশব্দ" alarm posts here,
             // so no sound plays (before this it still rang on azan-v2).
             createChannel(nm, ctx, "azan-v2-silent", "Azan (silent)", "Prayer time alerts without sound",

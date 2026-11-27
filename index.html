@@ -406,9 +406,13 @@
           <label class="switch"><input type="checkbox" id="set-dark" checked><span class="slider"></span></label></div>
         <div class="switch-row"><span data-i18n="azanLabel">নামাজের সময় আজান</span>
           <label class="switch"><input type="checkbox" id="set-azan" checked><span class="slider"></span></label></div>
-        <div class="switch-row"><span data-i18n="duroodLabel">📿 ফোন আনলক করলে দরুদ</span>
+        <div class="switch-row"><span data-i18n="duroodLabel">📿 ফোন আনলক করলে দরুদের রিমাইন্ডার</span>
           <label class="switch"><input type="checkbox" id="set-durood" checked><span class="slider"></span></label></div>
-        <p class="muted small" id="durood-appsettings-hint">আনলক করলে দরুদ বাজানোর জন্য অ্যাপটি নিজে থেকেই চালু থাকে — নিচের বোতামে অ্যাপের সেটিংস খুলতে পারবেন।</p>
+        <p class="muted small" id="durood-appsettings-hint">আনলক করলে দরুদের রিমাইন্ডার আসবে — ✅ চাপলে দরুদ বাজবে। অ্যাপটি নিজে থেকেই চালু থাকে — নিচের বোতামে অ্যাপের সেটিংস খুলতে পারবেন।</p>
+        <!-- Fix #44: reminder sound choice + durood count (native Android only; hidden on the web) -->
+        <div class="row mt" id="durood-sound-row"><label>🔔 রিমাইন্ডারের শব্দ</label>
+          <select id="set-durood-sound"></select></div>
+        <p class="muted small" id="durood-count" style="display:none"></p>
         <div class="row mt" id="durood-appsettings-row"><button class="btn block" id="btn-durood-appsettings">⚙️ অ্যাপের সেটিংস খুলুন</button></div>
         <div id="reminder-settings"></div>
         <label data-i18n="adhanLabel">আজানের সুর</label>

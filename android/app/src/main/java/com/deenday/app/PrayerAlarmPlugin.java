@@ -33,7 +33,9 @@ import org.json.JSONObject;
  *       list on every sync) and arms each with
  *       AlarmManager.setExactAndAllowWhileIdle. Resolves
  *       {scheduled, skipped} (skipped = exact alarms not permitted on
- *       Android 12+, or a bad time).
+ *       Android 12+, or a bad time). A skipped alarm's old PendingIntent
+ *       is cancelled too (Fix #43), so it cannot keep firing with stale
+ *       wording after the exact-alarm permission is revoked.
  *   cancelAlarms({ ids: [int] }) → {cancelled}
  *   requestPermissions() → {notifications, exactAlarm} — asks for
  *     POST_NOTIFICATIONS (Android 13+) and opens the exact-alarm
@@ -84,7 +86,18 @@ public class PrayerAlarmPlugin extends Plugin {
                 // alarm was skipped (exact alarms not permitted), so
                 // getStatus().alarmsScheduled lied about the real state.
                 if (AlarmScheduler.schedule(getContext(), a)) { scheduled++; next.put(a); }
-                else skipped++;
+                else {
+                    skipped++;
+                    // Fix #43: an alarm in the new list that could not be
+                    // armed (exact alarms not permitted) must not keep
+                    // its OLD armed PendingIntent — it would keep firing
+                    // with stale wording. Cancel it; the Alarm page
+                    // status already reports the skipped count.
+                    try {
+                        int skipId = a.optInt("id", -1);
+                        if (skipId >= 0) AlarmScheduler.cancel(getContext(), skipId);
+                    } catch (Exception ignored) {}
+                }
             }
         } catch (Exception e) {
             call.reject("bad alarm payload");

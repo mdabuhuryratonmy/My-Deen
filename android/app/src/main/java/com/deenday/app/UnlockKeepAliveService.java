@@ -14,22 +14,25 @@ import androidx.core.app.NotificationCompat;
 
 /**
  * Fix #42 (27 Nov 2026): keep-alive foreground service for the unlock
- * durood. The user confirmed he already gave ALL settings on his Realme
- * (Autostart ON + Battery "No restrictions") and the unlock durood STILL
- * does not play — the settings explanation is ruled out. The failure is
- * the app being killed in the background: on aggressive OEMs (Realme /
- * ColorOS and others) the system never delivers ACTION_USER_PRESENT to a
- * dead app, so DuroodUnlockReceiver never runs even though the receiver,
- * the audio file and the toggle are all correct. The only reliable fix
- * in code is to keep the app process alive — a lightweight foreground
- * service does exactly that. While this service runs, the process is
- * alive, so the manifest-registered DuroodUnlockReceiver fires on every
- * unlock and plays the durood.
+ * durood reminder. The user confirmed he already gave ALL settings on
+ * his Realme (Autostart ON + Battery "No restrictions") and the unlock
+ * durood STILL did not play — the settings explanation is ruled out.
+ * The failure is the app being killed in the background: on aggressive
+ * OEMs (Realme / ColorOS and others) the system never delivers
+ * ACTION_USER_PRESENT to a dead app, so DuroodUnlockReceiver never runs
+ * even though the receiver, the audio file and the toggle are all
+ * correct. The only reliable fix in code is to keep the app process
+ * alive — a lightweight foreground service does exactly that. While
+ * this service runs, the process is alive, so the manifest-registered
+ * DuroodUnlockReceiver fires on every unlock and shows the reminder
+ * (Fix #44: the reminder notification; the durood itself plays only
+ * from the ✅ button).
  *
  * This service plays NO audio and registers NO receiver itself — the
- * manifest DuroodUnlockReceiver stays the ONLY durood player, so the
- * durood can never play twice. Its only job is to hold the process
- * alive with a persistent notification.
+ * manifest DuroodUnlockReceiver only posts the reminder, and the
+ * durood itself plays only from the ✅ button (DuroodPlayReceiver), so
+ * the durood can never play twice or by itself. Its only job is to
+ * hold the process alive with a persistent notification.
  *
  * Started when the app opens (MainActivity), on boot (BootReceiver),
  * and when the durood toggle is switched on (DuroodUnlockPlugin) — and
@@ -117,7 +120,7 @@ public class UnlockKeepAliveService extends Service {
             if (nm == null || nm.getNotificationChannel(CHANNEL_ID) != null) return;
             NotificationChannel ch = new NotificationChannel(CHANNEL_ID,
                     "My Deen চালু আছে", NotificationManager.IMPORTANCE_LOW);
-            ch.setDescription("আনলক করলে দরুদ বাজানোর জন্য অ্যাপটি চালু রাখে");
+            ch.setDescription("আনলক করলে দরুদের রিমাইন্ডার দেখানোর জন্য অ্যাপটি চালু রাখে");
             ch.enableVibration(false);
             ch.setSound(null, null);
             ch.setShowBadge(false);
@@ -133,7 +136,7 @@ public class UnlockKeepAliveService extends Service {
         NotificationCompat.Builder b = new NotificationCompat.Builder(ctx, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle("My Deen চালু আছে")
-                .setContentText("আনলক করলে দরুদ বাজবে • সঠিক সময়ে আজান বাজবে")
+                .setContentText("আনলক করলে দরুদের রিমাইন্ডার আসবে • সঠিক সময়ে আজান বাজবে")
                 .setContentIntent(pi)
                 .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)

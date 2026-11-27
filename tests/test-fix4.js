@@ -66,7 +66,10 @@ globalThis.detailSoundExplain=detailSoundExplain; globalThis.renderDetailSounds=
 // permission-chain helpers
 globalThis.speakText=speakText; globalThis.checkPreAzanVoice=checkPreAzanVoice;
 globalThis.AZAN_SPEAK_TEXTS=AZAN_SPEAK_TEXTS; globalThis.nativeAzanArmed=nativeAzanArmed; globalThis.scheduleNativeDhikr=scheduleNativeDhikr;
+globalThis.scheduleNativeAzan=scheduleNativeAzan; // Fix #43: the LN fallback under test — it must never schedule a sounding azan
 globalThis.openDuroodAppSettings=openDuroodAppSettings; globalThis.syncDuroodToggleNative=syncDuroodToggleNative;
+globalThis.renderDuroodSoundSelect=renderDuroodSoundSelect; globalThis.refreshDuroodStats=refreshDuroodStats;
+globalThis.DUROOD_REMIND_SOUNDS=DUROOD_REMIND_SOUNDS; globalThis.duroodRemindSoundName=duroodRemindSoundName;
 globalThis.preazanText=preazanText; globalThis.JUMUAH_PREAZAN_TEXT=JUMUAH_PREAZAN_TEXT;
 globalThis.villageNameOf=villageNameOf; globalThis.normalizeCityName=normalizeCityName;
 globalThis.permStepsAsked=permStepsAsked; globalThis.permMarkAsked=permMarkAsked; globalThis.permTimeout=permTimeout;
@@ -474,12 +477,12 @@ check("tahajjud is a single silent notification, no azan",
 check("old daily check/hurry repeats are cancelled on sync (Fix #39: native every time + LN once)",
   src.includes("cancelLegacyCheckReminders") && src.includes("legacy_check_cancelled"));
 
-// ---- Fix #10: multi-select alarm sound (name permanent + one extra, max 2) ----
-check("normalizeSounds keeps old choice next to permanent name",
+// ---- Fix #10 (UPDATED Fix #43): multi-select alarm sound (name permanent + up to TWO extras, max 2 sounds — name does not count) ----
+check("normalizeSounds keeps old choice next to permanent name (UPDATED Fix #43: name + 2 extras fit)",
   JSON.stringify(normalizeSounds("notification"))===JSON.stringify(["name","notification"]) &&
   JSON.stringify(normalizeSounds("azan"))===JSON.stringify(["name","azan"]) &&
   JSON.stringify(normalizeSounds("silent"))===JSON.stringify(["silent"]) &&
-  JSON.stringify(normalizeSounds(["azan","notification"]))===JSON.stringify(["name","azan"]) &&
+  JSON.stringify(normalizeSounds(["azan","notification"]))===JSON.stringify(["name","azan","notification"]) &&
   JSON.stringify(normalizeSounds("name"))===JSON.stringify(["name"]));
 settings.alarmSound.Sehri = "notification"; // simulate an older saved value
 migrateAlarmSounds();
@@ -492,14 +495,17 @@ toggleDetailSound("azan");
 check("adding azan gives name + azan",
   JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["name","azan"]));
 toggleDetailSound("notification");
+check("adding a second extra gives name + azan + notification (UPDATED Fix #43: name does not count)",
+  JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["name","azan","notification"]));
+toggleDetailSound("beep");
 check("a third sound is refused (max 2 together)",
-  JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["name","azan"]));
+  JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["name","azan","notification"]));
 toggleDetailSound("azan");
 check("tapping a selected extra removes it, name stays",
-  JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["name"]));
+  JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["name","notification"]));
 toggleDetailSound("name");
 check("name cannot be turned off (permanent default)",
-  JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["name"]));
+  JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["name","notification"]));
 toggleDetailSound("silent");
 check("silent stands alone",
   JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["silent"]));
@@ -903,14 +909,14 @@ Object.assign(settings, _savedTz);
     const _ar = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AlarmReceiver.java", "utf8");
     check("Fix #24: azan alarm entries post on channel azan-v2",
       buildPrayerAlarmList().filter(a=>a.type==="azan-v2").length===5, "5 v2 azan entries");
-    check("Fix #24: JS creates the azan-v2 channel with the azan sound",
-      src.includes('createChannel({ id: "azan-v2"') && src.includes('sound: "azan.mp3"'), "v2 channel");
+    check("Fix #24 (UPDATED Fix #43): the sounding azan-v2 channel is GONE from the JS LN path — the MediaPlayer service is the only sounding azan path; no createChannel for azan-v2 anywhere in the shipped JS",
+      !src.includes('createChannel({ id: "azan-v2"'), "no v2 channel");
     check("Fix #24: no azan entry still uses the old channel",
       !src.includes('type: "azan"') && !src.includes('createChannel({ id: "azan",'), "old channel gone");
     check("Fix #24: next-azan status reads the v2 entries (incl. the Fix #38 silent channel)",
       src.includes('a.type.startsWith("azan-v2")'), "nextAzanInfo v2");
-    check("Fix #24: native ensureChannels creates azan-v2 with R.raw.azan and deletes the old azan channel",
-      _as.includes('createChannel(nm, ctx, "azan-v2"') && _as.includes("R.raw.azan") && _as.includes('deleteNotificationChannel("azan")'), "native v2");
+    check("Fix #24 (UPDATED Fix #43): native DELETES the sounding azan-v2 channel and never creates it (the old azan channel is still deleted too)",
+      !_as.includes('createChannel(nm, ctx, "azan-v2"') && _as.includes('deleteNotificationChannel("azan-v2")') && _as.includes('deleteNotificationChannel("azan")'), "native deletes v2");
     check("Fix #24: AlarmReceiver maps a stale stored 'azan' type to azan-v2",
       _ar.includes('if (type.equals("azan")) type = "azan-v2"'), "stale mapping");
 
@@ -1240,9 +1246,9 @@ Object.assign(settings, _savedTz);
       src.includes('document.addEventListener("visibilitychange", ()=>{ if (!document.hidden){ resyncCountdown(); syncPrayerAlarms();'),
       "listeners clean");
     const _dur = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodUnlockReceiver.java", "utf8");
-    check("Fix #35: the native unlock receiver fires ONLY on the real USER_PRESENT unlock broadcast",
+    check("Fix #35 (UPDATED Fix #44): the native unlock receiver fires ONLY on the real USER_PRESENT unlock broadcast — and posts the reminder, never audio",
       _dur.includes('Intent.ACTION_USER_PRESENT.equals(intent.getAction())') &&
-      _dur.includes("goAsync()") && _dur.includes("R.raw.durood"),
+      _dur.includes("postReminder(context)") && !_dur.includes("R.raw.durood"),
       "unlock only");
     check("Fix #35: the durood REMINDER still plays its audio at its set time (only the open-hook is gone)",
       src.includes("function playDurood(force)") &&
@@ -1457,11 +1463,14 @@ Object.assign(settings, _savedTz);
 
     // Fix #6: durood on unlock — receiver hardened; manifest still
     // registers it and the JS still syncs the native toggle at init.
-    check("Build #19 Fix #6: unlock receiver uses explicit notification audio attributes + full volume",
-      javaUnlock.includes("AudioAttributes.USAGE_NOTIFICATION") && javaUnlock.includes("CONTENT_TYPE_SONIFICATION") &&
-      javaUnlock.includes("setVolume(1.0f, 1.0f)") && javaUnlock.includes("createPlayer"), "explicit audio");
-    check("Build #19 Fix #6: unlock receiver keeps the create() fallback if the explicit build fails",
-      javaUnlock.includes("MediaPlayer.create(context, R.raw.durood)"), "fallback");
+    // (UPDATED Fix #44: the explicit player moved to DuroodPlayReceiver —
+    // the ✅ button is the only player now; the unlock receiver has none.)
+    const _playB19 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodPlayReceiver.java", "utf8");
+    check("Build #19 Fix #6 (UPDATED Fix #44): the ✅-press player uses explicit notification audio attributes + full volume",
+      _playB19.includes("AudioAttributes.USAGE_NOTIFICATION") && _playB19.includes("CONTENT_TYPE_SONIFICATION") &&
+      _playB19.includes("setVolume(1.0f, 1.0f)") && _playB19.includes("createPlayer"), "explicit audio");
+    check("Build #19 Fix #6 (UPDATED Fix #44): the ✅-press player keeps the create() fallback if the explicit build fails",
+      _playB19.includes("MediaPlayer.create(context, R.raw.durood)"), "fallback");
     check("Build #19 Fix #6: receiver is still registered for USER_PRESENT and the JS still syncs the toggle at init",
       javaManifest.includes("DuroodUnlockReceiver") && javaManifest.includes("android.intent.action.USER_PRESENT") &&
       src.includes("syncDuroodToggleNative()"), "wiring intact");
@@ -1577,9 +1586,10 @@ Object.assign(settings, _savedTz);
         _lnCancel40.length = 0; _lnSched40.length = 0;
         _mock40(async()=>{ throw new Error("plugin down"); }, {notificationsGranted:true, exactAlarmGranted:true, alarmsScheduled:0});
         await syncPrayerAlarms();
-        check("Fix #40: LN fallback schedules one-shot azans only (no repeats flag on any notification)",
-          _lnSched40.length>0 && _lnSched40.every(a=>(a.notifications||[]).every(n=>!n.schedule || !n.schedule.repeats)),
-          "fallback one-shot");
+        check("Fix #40 (UPDATED Fix #43): the LN fallback schedules one-shot entries only and NEVER a sounding azan (no azan channel, no azan.mp3 sound)",
+          _lnSched40.length>0 && _lnSched40.every(a=>(a.notifications||[]).every(n=>!n.schedule || !n.schedule.repeats)) &&
+          _lnSched40.every(a=>(a.notifications||[]).every(n=>n.channelId!=="azan-v2" && n.sound!=="azan.mp3")),
+          "fallback never azan");
         delete globalThis.Capacitor;
         // Durood reminder channels: sound on → v4 + sound; sound off → v4-silent, no sound.
         settings.duroodRemOn = true; settings.duroodRemMin = 10; settings.duroodRemSound = true;
@@ -2131,13 +2141,13 @@ Object.assign(settings, _savedTz);
         _javaAzan42.includes("R.raw.azan") && _javaAzan42.includes("MediaPlayer") && _javaAzan42.includes("AUDIOFOCUS_GAIN"), "media + focus");
       check("Fix #42: azan service goes foreground on the silent channel and keeps the notification when done",
         _javaAzan42.includes("startForeground(id, n)") && _javaAzan42.includes('"azan-v2-silent"') && _javaAzan42.includes("stopForeground(false)"), "silent visual");
-      check("Fix #42: azan service falls back to the sounding azan-v2 channel when playback fails",
-        _javaAzan42.includes("fallbackToChannelSound") && _javaAzan42.includes('"azan-v2"'), "fallback");
+      check("Fix #42 (UPDATED Fix #43): the azan service has NO channel-sound fallback at all — no fallbackToChannelSound and no sounding-channel literal anywhere in the service",
+        !_javaAzan42.includes("fallbackToChannelSound") && !_javaAzan42.includes('"azan-v2"'), "no fallback");
       check("Fix #42: azan service never ducks for a notification ding (keeps playing at full volume)",
         _javaAzan42.includes("AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK") && _javaAzan42.includes("setWillPauseWhenDucked(false)"), "no duck");
       // Receiver routing pins.
-      check("Fix #42: AlarmReceiver routes a sounding azan through the service and posts the visual silently",
-        _javaRecv42.includes('if ("azan-v2".equals(type))') && _javaRecv42.includes("startAzanService(context, id, title, body)") && _javaRecv42.includes('visualChannel = serviceStarted ? "azan-v2-silent" : "azan-v2"'), "routing");
+      check("Fix #42 (UPDATED Fix #43): AlarmReceiver posts the visual for a sounding azan ALWAYS silently — no sounding-channel branch anywhere in the routing",
+        _javaRecv42.includes('visualChannel = "azan-v2-silent"') && !_javaRecv42.includes(': "azan-v2"'), "always silent");
       check("Fix #42: AlarmReceiver shows the full text (BigTextStyle) so the waqt name is always visible",
         _javaRecv42.includes("BigTextStyle"), "big text");
       check("Fix #42: AlarmReceiver still speaks the body with Bengali TTS (announcement unchanged)",
@@ -2209,6 +2219,261 @@ Object.assign(settings, _savedTz);
         PREAZAN_TEXTS.Maghrib === "মাগরিবের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
         PREAZAN_TEXTS.Isha === "ইশার নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
         AZAN_SPEAK_TEXTS.Dhuhr === PREAZAN_TEXTS.Dhuhr, "verbatim");
+    }
+
+    // ---- Fix #43 (27 Nov 2026, Build 26 scope items 1-3): the azan is
+    // NEVER a notification sound any more (the MediaPlayer service is the
+    // only sounding azan path); Alarm Sound takes 2 sounds ("name" does
+    // not consume a slot); the pre-waqt audio always speaks the waqt name
+    // (stale native alarms die on every sync, speakText is explicit). ----
+    {
+      const _javaAzan43 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AzanPlaybackService.java", "utf8");
+      const _javaRecv43 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AlarmReceiver.java", "utf8");
+      const _javaSched43 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AlarmScheduler.java", "utf8");
+      const _javaPlug43 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/PrayerAlarmPlugin.java", "utf8");
+      // (1) No sounding azan through LocalNotifications, anywhere.
+      const _schedAzanFn43 = src.slice(src.indexOf("async function scheduleNativeAzan()"), src.indexOf("/* ---------------- home location card ---------------- */"));
+      check("Fix #43: scheduleNativeAzan creates no sounding azan-v2 channel (the silent channel stays)",
+        !_schedAzanFn43.includes('id: "azan-v2"') && _schedAzanFn43.includes('id: "azan-v2-silent"'), "no v2 create");
+      check("Fix #43: scheduleNativeAzan filters sounding-azan entries out of the LN schedule (sound 'azan' never scheduled)",
+        _schedAzanFn43.includes('.filter(a=>a.sound!=="azan")'), "azan filtered");
+      check("Fix #43: the native side deletes the sounding azan-v2 channel and never creates it",
+        _javaSched43.includes('deleteNotificationChannel("azan-v2")') && !_javaSched43.includes('createChannel(nm, ctx, "azan-v2"'), "native deletes v2");
+      check("Fix #43: the azan service has no channel fallback (no fallbackToChannelSound, no sounding-channel literal)",
+        !_javaAzan43.includes("fallbackToChannelSound") && !_javaAzan43.includes('"azan-v2"'), "no fallback");
+      check("Fix #43: the receiver posts the sounding-azan visual ALWAYS silently (no sounding-channel branch)",
+        _javaRecv43.includes('visualChannel = "azan-v2-silent"') && !_javaRecv43.includes(': "azan-v2"'), "always silent");
+      // Service hardening pins.
+      check("Fix #43: the service retries audio focus (FOCUS_ATTEMPTS) and then plays without focus instead of staying silent",
+        _javaAzan43.includes("FOCUS_ATTEMPTS") && _javaAzan43.includes("FOCUS_RETRY_WAIT_MS") && _javaAzan43.includes("without focus"), "focus retry");
+      check("Fix #43: the service resumes after a transient focus loss (pause on LOSS_TRANSIENT, resume on GAIN)",
+        _javaAzan43.includes("AUDIOFOCUS_LOSS_TRANSIENT") && _javaAzan43.includes("pausedForTransientLoss") && _javaAzan43.includes("player.start()"), "resume");
+      check("Fix #43: the service keeps USAGE_NOTIFICATION (same volume knob as the old channel sound — deliberate, see spec)",
+        _javaAzan43.includes("USAGE_NOTIFICATION") && _javaAzan43.includes("CONTENT_TYPE_SONIFICATION"), "usage kept");
+      check("Fix #43: playback starts on a background thread with a generation guard (a stale thread never starts a player)",
+        _javaAzan43.includes("new Thread(") && _javaAzan43.includes("playbackGeneration"), "background start");
+      // (2) Multi-select: "name" does not consume a slot.
+      check("Fix #43: normalizeSounds keeps name + up to 2 visible sounds (Notification + Azan fit together)",
+        JSON.stringify(normalizeSounds(["name","notification","azan"]))===JSON.stringify(["name","notification","azan"]), "name+2");
+      check("Fix #43: normalizeSounds still caps the visible sounds at 2 (a third extra is dropped)",
+        JSON.stringify(normalizeSounds(["name","notification","azan","beep"]))===JSON.stringify(["name","notification","azan"]), "cap 2");
+      check("Fix #43: normalizeSounds keeps the old behaviour for silent and single sounds",
+        JSON.stringify(normalizeSounds(["silent"]))===JSON.stringify(["silent"]) &&
+        JSON.stringify(normalizeSounds(["azan"]))===JSON.stringify(["name","azan"]) &&
+        JSON.stringify(normalizeSounds("notification"))===JSON.stringify(["name","notification"]), "old cases");
+      // (3) The waqt name is always spoken; stale wording exists nowhere.
+      check("Fix #43: the receiver speaks a sounding azan ONLY from its speakText (never the waqt-less body)",
+        _javaRecv43.includes('if ("azan-v2".equals(type) && (speakText == null || speakText.isEmpty())) toSpeak = null;'), "speakText only");
+      check("Fix #43: the plugin cancels an in-list alarm it could not arm (a revoked exact-alarm grant cannot leave a stale alarm firing)",
+        _javaPlug43.includes("AlarmScheduler.cancel(getContext(), skipId)"), "skipped cancelled");
+      check("Fix #43: the old no-waqt-name sentence exists nowhere in the shipped JS or the touched Java (no stale wording left to speak)",
+        !src.includes("নামাজ পড়ে নাও") && !_javaRecv43.includes("নামাজ পড়ে নাও") && !_javaAzan43.includes("নামাজ পড়ে নাও") && !_javaSched43.includes("নামাজ পড়ে নাও") && !_javaPlug43.includes("নামাজ পড়ে নাও"), "no old wording");
+      check("Fix #43: PREAZAN_TEXTS verbatim and AZAN_SPEAK_TEXTS == PREAZAN_TEXTS (unchanged by this fix)",
+        PREAZAN_TEXTS.Fajr === "ফজরের নামাজের সময় হয়েছে, ঘুম থেকে উঠে মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+        PREAZAN_TEXTS.Dhuhr === "যোহরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+        PREAZAN_TEXTS.Asr === "আসরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+        PREAZAN_TEXTS.Maghrib === "মাগরিবের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+        PREAZAN_TEXTS.Isha === "ইশার নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+        AZAN_SPEAK_TEXTS.Fajr === PREAZAN_TEXTS.Fajr && AZAN_SPEAK_TEXTS.Isha === PREAZAN_TEXTS.Isha, "verbatim");
+      // Functional: multi-select, spoken texts, and the real sync with
+      // recording mocks (same pattern as the Fix #40 mock block).
+      const _saved43 = JSON.parse(JSON.stringify({ alarmOn: settings.alarmOn, alarmSound: settings.alarmSound, offsets: settings.offsets,
+        azan: settings.azan, lang: settings.lang }));
+      const _tz43 = settings.tzName; settings.tzName = "";
+      settings.lang = "bn";
+      settings.azan = true;
+      settings.alarmOn = {Fajr:true, Dhuhr:true, Asr:true, Maghrib:true, Isha:true, Duha:false, Tahajjud:false, ForbMorning:false, ForbNoon:false, ForbEvening:false, Sehri:false, Iftar:false};
+      settings.offsets = {Fajr:0, Dhuhr:0, Asr:0, Maghrib:0, Isha:0, Duha:0, Tahajjud:0, ForbMorning:0, ForbNoon:0, ForbEvening:0, Sehri:0, Iftar:0};
+      __setTimings({Fajr:"05:42", Sunrise:"07:03", Dhuhr:"13:01", Asr:"16:24", Maghrib:"18:58", Isha:"20:11", Imsak:"05:32", Sunset:"18:00", Lastthird:"03:01"});
+      try {
+        // Multi-select, driven through the real detail page.
+        settings.alarmSound = {Fajr:["name","notification"], Dhuhr:["name"], Asr:["name"], Maghrib:["name"], Isha:["name"], Duha:["name"], Tahajjud:["name"], ForbMorning:["name"], ForbNoon:["name"], ForbEvening:["name"], Sehri:["name"], Iftar:["name"]};
+        openPrayerDetail("Fajr");
+        check("Fix #43: detail draft starts with Notification checked (name is invisible, one slot free)",
+          JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["name","notification"]), "draft start");
+        toggleDetailSound("azan");
+        check("Fix #43: tapping Azan ADDS it next to Notification (both stay checked — the reported bug)",
+          JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["name","notification","azan"]), "both selected");
+        const _before43 = JSON.stringify(getDetailDraft().sounds);
+        toggleDetailSound("beep");
+        check("Fix #43: a third sound is refused with the max-2 toast and the selection is unchanged",
+          JSON.stringify(getDetailDraft().sounds)===_before43 && __$("#toast").textContent.includes("সর্বোচ্চ ২টা"), "third refused");
+        check("Fix #43: the explainer for Notification + Azan says the azan plays AND the notification shows the waqt name",
+          detailSoundExplain(["name","notification","azan"]) === "ওয়াক্তের সময় আজান বাজবে, আর নোটিফিকেশনে ওয়াক্তের নাম দেখাবে।", "explainer both");
+        // Spoken texts, from the real alarm list.
+        settings.alarmSound = {Fajr:["name","notification","azan"], Dhuhr:["name","notification","azan"], Asr:["name","notification","azan"], Maghrib:["name","notification","azan"], Isha:["name","notification","azan"], Duha:["name"], Tahajjud:["name"], ForbMorning:["name"], ForbNoon:["name"], ForbEvening:["name"], Sehri:["name"], Iftar:["name"]};
+        const _al43 = buildPrayerAlarmList();
+        const _fajrAzan43 = _al43.find(a=>a.type==="azan-v2" && a.prayerId==="Fajr");
+        check("Fix #43: Notification + Azan selected → the azan entry still plays the azan (sound 'azan')",
+          _fajrAzan43 && _fajrAzan43.sound==="azan", "azan wins");
+        const _pres43 = _al43.filter(a=>a.type==="preazan-v2");
+        check("Fix #43: every pre-azan entry (T-5 and T-2, all 5 prayers) carries speakText equal to its body — the waqt-name sentence",
+          _pres43.length===10 && _pres43.every(a=>a.speak===true && typeof a.speakText==="string" && a.speakText.length>0 && a.speakText===a.body),
+          "speakText explicit");
+        check("Fix #43: every pre-azan speakText is its prayer's Fix #8 sentence (Friday Dhuhr: the Jumu'ah sentence)",
+          ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>{
+            const pres = _pres43.filter(a=>a.prayerId===pid);
+            return pres.length===2 && pres.every(a=>a.speakText===PREAZAN_TEXTS[pid] || a.speakText===JUMUAH_PREAZAN_TEXT);
+          }), "waqt named");
+        check("Fix #43: every sounding azan entry carries speakText === its waqt-name announcement",
+          ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>{
+            const a = _al43.find(x=>x.type==="azan-v2" && x.prayerId===pid);
+            return a && a.speak===true && a.speakText===AZAN_SPEAK_TEXTS[pid];
+          }), "azan speakText");
+        // The real sync with recording mocks: retry, fallback cancel, LN filter.
+        const _lnSched43 = [], _lnCancel43 = [], _paCancel43 = [];
+        let _paCalls43 = 0;
+        const _mock43 = (paSched) => {
+          _paCalls43 = 0;
+          globalThis.Capacitor = { Plugins: {
+            PrayerAlarm: { scheduleAlarms: async(a)=>{ _paCalls43++; return paSched(a); },
+              cancelAlarms: async(a)=>{ _paCancel43.push(a); return {cancelled:0}; },
+              getStatus: async()=>({notificationsGranted:true, exactAlarmGranted:true, alarmsScheduled:0}) },
+            LocalNotifications: { cancel: async(a)=>{ _lnCancel43.push(a); return {}; },
+              requestPermissions: async()=>({display:"granted"}), createChannel: async()=>({}),
+              schedule: async(a)=>{ _lnSched43.push(a); return {}; } },
+          }};
+        };
+        // (a) scheduleAlarms throws once, then succeeds: the retry saves the native path.
+        _lnSched43.length = 0; _paCancel43.length = 0;
+        let _failOnce43 = true;
+        _mock43(async()=>{ if (_failOnce43){ _failOnce43 = false; throw new Error("transient"); } return {scheduled:15, skipped:0}; });
+        await syncPrayerAlarms(); await refreshAlarmStatus();
+        check("Fix #43: a transient plugin failure is retried — the native path still wins (schedule called twice, no LN schedule at all)",
+          _paCalls43===2 && _lnSched43.length===0, "retry saves native");
+        // (b) scheduleAlarms throws always: the fallback cancels stale native alarms AND schedules no sounding azan.
+        // All five prayers silent here, so the fallback's silent azan visuals exist to count (a sounding azan
+        // selection would be filtered out of the LN schedule entirely — that is the fix).
+        settings.alarmSound = {Fajr:["silent"], Dhuhr:["silent"], Asr:["silent"], Maghrib:["silent"], Isha:["silent"], Duha:["name"], Tahajjud:["name"], ForbMorning:["name"], ForbNoon:["name"], ForbEvening:["name"], Sehri:["name"], Iftar:["name"]};
+        _lnSched43.length = 0; _lnCancel43.length = 0; _paCancel43.length = 0;
+        _mock43(async()=>{ throw new Error("plugin down"); });
+        await syncPrayerAlarms();
+        const _all43 = _lnSched43.flatMap(a=>a.notifications||[]);
+        check("Fix #43: when the native plugin is down, the LN fallback schedules NO sounding azan (no azan-v2 channel, no azan.mp3)",
+          _all43.length>0 && _all43.every(n=>n.channelId!=="azan-v2" && n.sound!=="azan.mp3"), "fallback never azan");
+        check("Fix #43: ... but pre-azan reminders and silent azan visuals still schedule (the fallback is not dead)",
+          _all43.filter(n=>n.channelId==="preazan-v2").length===10 &&
+          _all43.filter(n=>n.channelId==="azan-v2-silent").length===5, "fallback alive");
+        check("Fix #43: the fallback cancels the stale native azan-family alarms through the plugin (old wording can never fire again)",
+          _paCancel43.some(a=>{ const ids=(a.ids||[]); return [1,2,3,4,5,31,32,33,34,35,51,52,53,54,55,36,37,38,41,42,43,44].every(id=>ids.includes(id)); }),
+          "stale native cancelled");
+        // (c) The LN fallback itself, driven directly: no sounding azan even with the azan on.
+        _lnSched43.length = 0;
+        await scheduleNativeAzan();
+        const _direct43 = _lnSched43.flatMap(a=>a.notifications||[]);
+        check("Fix #43: scheduleNativeAzan on its own never schedules a sounding azan (direct drive)",
+          _direct43.length>0 && _direct43.every(n=>n.channelId!=="azan-v2" && n.sound!=="azan.mp3"), "direct never azan");
+        delete globalThis.Capacitor;
+      } finally {
+        Object.assign(settings, _saved43);
+        settings.tzName = _tz43;
+        delete globalThis.Capacitor;
+      }
+    }
+
+    // ---- Fix #44 (27 Nov 2026, Build 26 scope item 4): Al-Shafie-style
+    // unlock durood reminder — a notification on unlock (never auto-play),
+    // ✅ button plays the durood + counts it, sound choice, on/off toggle,
+    // count in Settings. Clean-room: our own code, our own audio, our own
+    // design. The keep-alive service and BootReceiver still deliver the
+    // unlock. ----
+    {
+      const _javaUnlock44 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodUnlockReceiver.java", "utf8");
+      const _javaPlay44 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodPlayReceiver.java", "utf8");
+      const _javaPlug44 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodUnlockPlugin.java", "utf8");
+      const _javaKeep44 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/UnlockKeepAliveService.java", "utf8");
+      const _manifest44 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/AndroidManifest.xml", "utf8");
+      const _main44 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/MainActivity.java", "utf8");
+      const _html44 = fs.readFileSync("/home/hatch/workspace/deen-day/index.html", "utf8");
+      // Unlock never plays audio any more (the word "MediaPlayer" appears
+      // only in the file's doc comment — the check is on real usage).
+      check("Fix #44: the unlock receiver contains NO MediaPlayer — it cannot auto-play anything",
+        !_javaUnlock44.includes("new MediaPlayer") && !_javaUnlock44.includes("import android.media.MediaPlayer") && !_javaUnlock44.includes("MediaPlayer.create"), "no player on unlock");
+      check("Fix #44: on unlock the receiver posts the reminder notification (USER_PRESENT → postReminder)",
+        _javaUnlock44.includes("Intent.ACTION_USER_PRESENT") && _javaUnlock44.includes("postReminder(context)"), "unlock notifies");
+      check("Fix #44: the reminder is off when the toggle is off (receiver returns before posting)",
+        _javaUnlock44.includes('if (!prefs.getBoolean(KEY_DUROOD_ON, true)) return;'), "toggle off");
+      check("Fix #44: the reminder stays in the notification list (setAutoCancel(false)) and is re-posted on every unlock (same id)",
+        _javaUnlock44.includes(".setAutoCancel(false)") && _javaUnlock44.includes("REMINDER_NOTIF_ID = 9001"), "stays listed");
+      check("Fix #44: the reminder has the ✅ action button (check icon + PLAY_DUROOD action)",
+        _javaUnlock44.includes("addAction(R.drawable.ic_check") && _javaUnlock44.includes('"✅ দরুদ শুনুন"') && _javaUnlock44.includes("DuroodPlayReceiver.ACTION_PLAY_DUROOD"), "button present");
+      check("Fix #44: the reminder text shows today's durood count",
+        _javaUnlock44.includes("getTodayCount(ctx)") && _javaUnlock44.includes('আজ " + today + " বার দরুদ পড়া হয়েছে'), "count in text");
+      // Three reminder-sound channels, our own audio only.
+      check("Fix #44: one channel per reminder sound — reminder.mp3, istighfar.mp3, silent (no other sound)",
+        _javaUnlock44.includes('CHANNEL_REMINDER = "durood-unlock-reminder"') &&
+        _javaUnlock44.includes("R.raw.reminder") && _javaUnlock44.includes("R.raw.istighfar") &&
+        _javaUnlock44.includes('CHANNEL_SILENT = "durood-unlock-silent"') && !_javaUnlock44.includes("R.raw.azan"), "3 channels");
+      check("Fix #44: the receiver picks the channel from the stored sound choice (default reminder)",
+        _javaUnlock44.includes('getString(KEY_REMIND_SOUND, "reminder")') && _javaUnlock44.includes("channelForSound"), "sound choice");
+      // The ✅ button is the only player.
+      check("Fix #44: the play receiver fires ONLY on the ✅ action (explicit PendingIntent, no intent-filter)",
+        _javaPlay44.includes('ACTION_PLAY_DUROOD = "com.deenday.app.PLAY_DUROOD"') && _javaPlay44.includes("goAsync()"), "button only");
+      check("Fix #44: pressing ✅ plays our durood clip (R.raw.durood) with the proven explicit player",
+        _javaPlay44.includes("R.raw.durood") && _javaPlay44.includes("USAGE_NOTIFICATION"), "plays durood");
+      check("Fix #44: pressing ✅ counts the durood and refreshes the reminder with the new count",
+        _javaPlay44.includes("incrementCount(context)") && _javaPlay44.includes("postReminder(context)"), "counts");
+      check("Fix #44: the count is today + total, rolling over by calendar date",
+        _javaUnlock44.includes('KEY_COUNT_TOTAL = "durood_count_total"') && _javaUnlock44.includes('KEY_COUNT_TODAY = "durood_count_today"') &&
+        _javaUnlock44.includes('KEY_COUNT_DATE = "durood_count_date"') && _javaUnlock44.includes("yyyy-MM-dd"), "count keys");
+      // Plugin + wiring.
+      check("Fix #44: the plugin stores the reminder sound (validated to the three choices) and reports the count",
+        _javaPlug44.includes("setReminderSound") && _javaPlug44.includes("KEY_REMIND_SOUND") &&
+        _javaPlug44.includes("getDuroodStats") && _javaPlug44.includes("getTotalCount") && _javaPlug44.includes("getTodayCount"), "plugin methods");
+      check("Fix #44: the plugin still starts/stops the keep-alive with the toggle",
+        _javaPlug44.includes("UnlockKeepAliveService.start(getContext())") && _javaPlug44.includes("UnlockKeepAliveService.stop(getContext())"), "keep-alive kept");
+      check("Fix #44: the play receiver is registered NOT exported; the reminder channels are created at startup too",
+        _manifest44.includes('<receiver android:name=".DuroodPlayReceiver" android:exported="false"') &&
+        _main44.includes("DuroodUnlockReceiver.ensureChannels(this)"), "registered");
+      check("Fix #44: the check icon exists (our own vector) and the keep-alive no longer claims the durood auto-plays",
+        fs.existsSync("/home/hatch/workspace/deen-day/android/app/src/main/res/drawable/ic_check.xml") &&
+        !_javaKeep44.includes("আনলক করলে দরুদ বাজবে") && _javaKeep44.includes("আনলক করলে দরুদের রিমাইন্ডার আসবে"), "icon + wording");
+      check("Fix #44: the settings page has the sound select and the count line",
+        _html44.includes('id="set-durood-sound"') && _html44.includes('id="durood-count"') && _html44.includes('id="durood-sound-row"'), "settings html");
+      check("Fix #44: PREAZAN_TEXTS verbatim and AZAN_SPEAK_TEXTS == PREAZAN_TEXTS (unchanged by this fix)",
+        PREAZAN_TEXTS.Fajr === "ফজরের নামাজের সময় হয়েছে, ঘুম থেকে উঠে মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+        PREAZAN_TEXTS.Isha === "ইশার নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+        AZAN_SPEAK_TEXTS.Fajr === PREAZAN_TEXTS.Fajr && AZAN_SPEAK_TEXTS.Isha === PREAZAN_TEXTS.Isha, "verbatim");
+      // Functional JS: the default, the select, the sync, the count.
+      check("Fix #44: the reminder sound defaults to the reminder tone (DEFAULTS)",
+        src.includes('duroodRemindSound:"reminder"'), "default reminder");
+      check("Fix #44: the sound names resolve in Bengali and there are exactly three choices",
+        duroodRemindSoundName("reminder") === "রিমাইন্ডার টোন" && duroodRemindSoundName("istighfar") === "ইস্তিগফার" && duroodRemindSoundName("silent") === "নিঃশব্দ" &&
+        DUROOD_REMIND_SOUNDS.length === 3, "names");
+      const _saved44 = JSON.parse(JSON.stringify({ duroodOnUnlock: settings.duroodOnUnlock, duroodRemindSound: settings.duroodRemindSound, lang: settings.lang }));
+      settings.lang = "bn";
+      settings.duroodOnUnlock = true;
+      settings.duroodRemindSound = "reminder";
+      try {
+        renderDuroodSoundSelect();
+        check("Fix #44: the sound select lists all three choices with the current one selected",
+          __$("#set-durood-sound").innerHTML.includes('value="reminder"') &&
+          __$("#set-durood-sound").innerHTML.includes('value="istighfar"') &&
+          __$("#set-durood-sound").innerHTML.includes('value="silent"') &&
+          __$("#set-durood-sound").value === "reminder", "3 choices");
+        const _rec44 = [];
+        globalThis.Capacitor = { Plugins: { DuroodUnlock: {
+          setEnabled: async(a)=>{ _rec44.push(["setEnabled", a]); return {}; },
+          setReminderSound: async(a)=>{ _rec44.push(["setReminderSound", a]); return {}; },
+          getDuroodStats: async()=>({ total: 12, today: 3 }),
+        }}};
+        __$("#set-durood-sound").value = "istighfar";
+        __$("#set-durood-sound").onchange({ target: __$("#set-durood-sound") });
+        check("Fix #44: picking a sound saves it and syncs it to native (setReminderSound)",
+          settings.duroodRemindSound === "istighfar" &&
+          _rec44.some(r=>r[0]==="setReminderSound" && r[1].sound==="istighfar"), "choice syncs");
+        syncDuroodToggleNative();
+        check("Fix #44: the toggle sync sends both the on/off state and the sound choice",
+          _rec44.some(r=>r[0]==="setEnabled" && r[1].enabled===true) &&
+          _rec44.some(r=>r[0]==="setReminderSound" && r[1].sound==="istighfar"), "sync both");
+        await refreshDuroodStats();
+        check("Fix #44: the count line shows today + total from the plugin",
+          __$("#durood-count").textContent.includes("আজ 3 বার") && __$("#durood-count").textContent.includes("মোট 12 বার"), "count shown");
+        delete globalThis.Capacitor;
+      } finally {
+        Object.assign(settings, _saved44);
+        delete globalThis.Capacitor;
+      }
     }
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);

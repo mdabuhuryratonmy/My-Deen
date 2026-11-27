@@ -14,7 +14,6 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.IBinder;
 import androidx.core.app.NotificationCompat;
-import androidx.core.app.NotificationManagerCompat;
 
 /**
  * Fix #42 (27 Nov 2026): play the azan as real media, not as a
@@ -28,22 +27,37 @@ import androidx.core.app.NotificationManagerCompat;
  * notification is posted on the silent channel (azan-v2-silent) by
  * AlarmReceiver, so the azan never plays twice.
  *
- * Started only by AlarmReceiver for a sounding azan (type "azan-v2").
+ * Started only by AlarmReceiver for a sounding azan (type azan-v2).
  * Silent azans (type "azan-v2-silent") never start it. The spoken
  * announcement (AlarmReceiver TTS, speakText) runs in parallel, as
  * before. When playback ends the service stops and leaves the
  * notification in place (stopForeground(false)); the user dismisses it.
- * If the player or audio focus fails, the service falls back to posting
- * the same notification on the sounding azan-v2 channel, so the prayer
- * still rings the old way — degraded, but never silent.
+ *
+ * Fix #43 (27 Nov 2026): there is NO channel-sound fallback any more —
+ * the service is the ONLY sounding azan path on Android. Build 25 fell
+ * back to posting the notification on the sounding azan-v2 channel
+ * whenever the service could not start or audio focus was denied, and
+ * that channel sound is cut dead by the next notification/message —
+ * exactly the bug the user reported. So: audio focus is retried, and if
+ * it is still denied the azan plays WITHOUT focus (an alarm must ring)
+ * rather than staying silent; if the player itself cannot be created,
+ * the notification simply stays silent (visual only). The sounding
+ * azan-v2 channel no longer exists (AlarmScheduler deletes it).
  *
  * Audio focus: AUDIOFOCUS_GAIN. A transient duck request (an incoming
  * notification ding) is deliberately NOT ducked — the user asked for
  * the azan to keep playing. A transient loss (e.g. a phone call) pauses
  * and resumes on gain. A permanent loss (another app took focus)
- * stops the azan. The audio usage is USAGE_NOTIFICATION, the same as
- * the old channel sound and the unlock durood, so the volume knob that
- * controlled the azan before still controls it.
+ * stops the azan. The audio usage is USAGE_NOTIFICATION — a deliberate
+ * choice (Fix #43): it is the same volume knob that controlled the old
+ * channel sound, so the azan is exactly as loud as before on the user's
+ * phone (he hears the azan start today — that knob is up). USAGE_MEDIA
+ * would use the media knob instead (silent if his media volume is 0)
+ * and would bypass Do Not Disturb, a behaviour change; USAGE_ALARM
+ * was not chosen for the same reason (different knob, DND bypass).
+ * Playback runs on a background thread so the focus-retry wait never
+ * blocks the main thread; a generation counter stops a stale thread
+ * from starting a player after a newer azan (or a destroy) replaced it.
  */
 public class AzanPlaybackService extends Service {
     private MediaPlayer player;
@@ -52,9 +66,13 @@ public class AzanPlaybackService extends Service {
     private AudioFocusRequest focusRequest;
     private boolean pausedForTransientLoss = false;
     private boolean focusHeld = false;
-    private int notifId = 0;
-    private String notifTitle;
-    private String notifBody;
+    // Fix #43: how many times audio focus is requested before the azan
+    // plays without it; and the generation of the playback this service
+    // is currently running (a stale background thread must never start
+    // a player after a newer azan or a destroy replaced it).
+    private static final int FOCUS_ATTEMPTS = 2;
+    private static final long FOCUS_RETRY_WAIT_MS = 500;
+    private volatile int playbackGeneration = 0;
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -72,9 +90,6 @@ public class AzanPlaybackService extends Service {
         String body = intent.getStringExtra("body");
         // A second azan while one is playing: restart with the new one.
         stopPlayback();
-        notifId = id;
-        notifTitle = title;
-        notifBody = body;
         AlarmScheduler.ensureChannels(this);
         // Foreground FIRST (required within seconds of
         // startForegroundService), on the silent channel — the sound
@@ -83,28 +98,37 @@ public class AzanPlaybackService extends Service {
         try {
             startForeground(id, n);
         } catch (Exception e) {
-            fallbackToChannelSound(id, title, body);
+            // Fix #43: no channel-sound fallback — stop quietly. The
+            // receiver already posts the silent visual notification,
+            // so the user still sees the prayer time.
             stopSelf();
             return START_NOT_STICKY;
         }
-        if (!startAzan()) {
-            // Player or audio focus failed — same fallback.
-            stopForeground(true);
-            fallbackToChannelSound(id, title, body);
-            stopSelf();
-            return START_NOT_STICKY;
-        }
+        // Fix #43: playback runs on a background thread — the focus
+        // retry waits below must never block the main thread.
+        final int gen = ++playbackGeneration;
+        new Thread(() -> {
+            try { startAzan(gen); } catch (Exception ignored) {}
+        }).start();
         return START_NOT_STICKY;
     }
 
     @Override
     public void onDestroy() {
+        playbackGeneration++;
         stopPlayback();
         super.onDestroy();
     }
 
-    /** Request audio focus and start the azan MediaPlayer. */
-    private boolean startAzan() {
+    /** Request audio focus and start the azan MediaPlayer. Runs on a
+        background thread (see onStartCommand). Focus is requested up to
+        FOCUS_ATTEMPTS times; if it is still denied, the azan plays
+        WITHOUT focus rather than staying silent — an alarm must ring,
+        and a notification-channel sound is not an option any more (the
+        next message would cut it). When focus WAS granted, the listener
+        below handles transient loss (pause, resume on gain) and
+        permanent loss (stop). */
+    private void startAzan(int gen) {
         try {
             audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
             focusListener = focusChange -> {
@@ -144,32 +168,63 @@ public class AzanPlaybackService extends Service {
                     .setUsage(AudioAttributes.USAGE_NOTIFICATION)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build();
-            int res;
+            // Fix #43: retry focus (a transient holder may release it);
+            // then play WITHOUT focus rather than staying silent.
+            boolean granted = false;
+            for (int attempt = 0; attempt < FOCUS_ATTEMPTS && !granted; attempt++) {
+                if (attempt > 0) {
+                    try { Thread.sleep(FOCUS_RETRY_WAIT_MS); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+                    if (gen != playbackGeneration) return; // superseded: a newer azan (or destroy) replaced this one
+                }
+                granted = requestFocus(attrs);
+            }
+            // Fix #43: focus denied twice — play without focus. focusHeld
+            // stays false, so stopPlayback() abandons nothing, and the
+            // listener above is never registered (there is no focus to
+            // lose). The azan still plays; it is never a channel sound.
+            if (gen != playbackGeneration) return;
+            player = createPlayer(attrs);
+            if (player == null) { finishPlayback(); return; }
+            final MediaPlayer mp = player;
+            mp.setOnCompletionListener(m -> finishPlayback());
+            mp.setOnErrorListener((m, what, extra) -> {
+                // Player error mid-azan: stop silently (the visual
+                // notification stays). A restart would replay the azan
+                // from the start; a channel sound is never an option.
+                finishPlayback();
+                return true;
+            });
+            try { mp.start(); } catch (Exception ignored) { finishPlayback(); }
+        } catch (Exception e) {
+            finishPlayback();
+        }
+    }
+
+    /** One audio-focus request. Returns true when granted (and records
+        it, so stopPlayback() abandons it); false otherwise. */
+    private boolean requestFocus(AudioAttributes attrs) {
+        try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 focusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
                         .setAudioAttributes(attrs)
                         .setOnAudioFocusChangeListener(focusListener)
                         .setWillPauseWhenDucked(false)
                         .build();
-                res = audioManager.requestAudioFocus(focusRequest);
+                if (audioManager.requestAudioFocus(focusRequest) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                    focusHeld = true;
+                    return true;
+                }
+                focusRequest = null;
+                return false;
             } else {
-                res = audioManager.requestAudioFocus(focusListener,
-                        AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
+                if (audioManager.requestAudioFocus(focusListener,
+                        AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
+                        == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                    focusHeld = true;
+                    return true;
+                }
+                return false;
             }
-            if (res != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) return false;
-            focusHeld = true;
-            player = createPlayer(attrs);
-            if (player == null) return false;
-            final MediaPlayer mp = player;
-            mp.setOnCompletionListener(m -> finishPlayback());
-            mp.setOnErrorListener((m, what, extra) -> {
-                // Player error mid-azan: fall back to the channel sound.
-                fallbackToChannelSound(notifId, notifTitle, notifBody);
-                finishPlayback();
-                return true;
-            });
-            mp.start();
-            return true;
         } catch (Exception e) {
             return false;
         }
@@ -196,18 +251,6 @@ public class AzanPlaybackService extends Service {
                 return null;
             }
         }
-    }
-
-    /** Post the same notification on the sounding azan-v2 channel, so
-        the azan still rings the old way when media playback fails.
-        Same id: it replaces the silent visual notification. */
-    private void fallbackToChannelSound(int id, String title, String body) {
-        try {
-            Notification n = buildNotification(id,
-                    title != null ? title : "My Deen",
-                    body != null ? body : "", "azan-v2");
-            NotificationManagerCompat.from(this).notify(id, n);
-        } catch (Exception ignored) {}
     }
 
     /** Azan finished (or focus lost permanently): stop the player,

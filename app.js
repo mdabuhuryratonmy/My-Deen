@@ -144,7 +144,7 @@ const STR = {  en: {
     langLabel:"Language",
     themeLabel:"Dark theme (sky theme)",
     azanLabel:"Azan at prayer time",
-    duroodLabel:"📿 Durood on phone unlock",
+    duroodLabel:"📿 Durood reminder on phone unlock",
     duroodDesc:"When on, Durood Sharif audio plays when you unlock your phone (or open the app). It will not play when off.",
     adhanLabel:"Azan voice",
     reciterLabel:"Quran reciter",
@@ -369,7 +369,7 @@ const STR = {  en: {
     langLabel:"ভাষা",
     themeLabel:"ডার্ক থিম (আকাশ থিম)",
     azanLabel:"নামাজের সময় আজান",
-    duroodLabel:"📿 ফোন আনলক করলে দরুদ",
+    duroodLabel:"📿 ফোন আনলক করলে দরুদের রিমাইন্ডার",
     duroodDesc:"চালু থাকলে ফোন আনলক করলে (বা অ্যাপ খুললে) দরুদ শরিফের অডিও বাজবে। বন্ধ করলে বাজবে না।",
     adhanLabel:"আজানের সুর",
     reciterLabel:"তিলাওয়াতের কারি",
@@ -1807,7 +1807,7 @@ const Lb = (bn, en) => { const l = settings.lang; if (l==="bn") return bn;
 /* ---------------- settings ---------------- */
 const DEFAULTS = {city:"", country:"", lat:null, lon:null, method:0, school:0, schoolExplicit:false,
   lang:"en", theme:"dark", azan:true, adhan:"a1", reciter:"ar.alafasy", notif:false, tasbihTarget:33,
-  autoLoc:true, useCoords:false, profileName:"", gmail:"", duroodOnUnlock:true, duroodAppSettingsOpened:false, learnMadhhab:"hanafi",
+  autoLoc:true, useCoords:false, profileName:"", gmail:"", duroodOnUnlock:true, duroodRemindSound:"reminder", duroodAppSettingsOpened:false, learnMadhhab:"hanafi",
   dailyNotif:true, duroodRemOn:true, duroodRemMin:30, duroodRemSound:true, astaghRemOn:true, astaghRemMin:30, astaghRemSound:true,
   /* Location identity: locId names the CURRENT location ("c:lat,lon" for
      coordinate locations, "n:city|country" for city-name ones). The
@@ -1842,8 +1842,9 @@ settings.offsets = {...DEFAULTS.offsets, ...(settings.offsets||{})};
 settings.alarmOn = {...DEFAULTS.alarmOn, ...(settings.alarmOn||{})};
 settings.permStepsAsked = {...DEFAULTS.permStepsAsked, ...(settings.permStepsAsked||{})};
 settings.alarmSound = {...DEFAULTS.alarmSound, ...(settings.alarmSound||{})};
-/* Fix #10: alarm sound is now a multi-select ARRAY (max 2, "name" always
-   included unless the choice is silent alone). Older saved values were
+/* Fix #10: alarm sound is now a multi-select ARRAY (max 2 SOUNDS, plus
+   the permanent "name" default — "name" is the waqt-name display, not a
+   sound, so it never consumes a slot; Fix #43). Older saved values were
    single strings — normalize them, keeping the old choice as the extra
    sound next to the permanent "name" default. */
 const VALID_SOUNDS = ["silent","beep","ring","name","notification","azan"];
@@ -1852,7 +1853,13 @@ function normalizeSounds(v){
   if (arr.includes("silent")) return ["silent"];
   arr = arr.filter(s=>VALID_SOUNDS.includes(s));
   if (!arr.includes("name")) arr.unshift("name");
-  return arr.slice(0, 2);
+  // Fix #43: the cap counts VISIBLE sounds only — "name" first, then up
+  // to 2. Before this the cap was 2 entries TOTAL, so ["name",
+  // "notification"] was already "full" and tapping Azan only showed the
+  // max-2 toast while the UI showed just 1 checked row (the user could
+  // never select Notification + Azan together).
+  const extras = arr.filter(s=>s!=="name").slice(0, 2);
+  return ["name", ...extras];
 }
 function migrateAlarmSounds(){
   Object.keys(settings.alarmSound||{}).forEach(k=>{ settings.alarmSound[k]=normalizeSounds(settings.alarmSound[k]); });
@@ -3995,8 +4002,9 @@ function updateDetailTime(){
   if (dt) dt.textContent = `${Lb("সেট করা সময়", "Set time")}: ${set}`;
 }
 /* Multi-select (Fix #10): "name" is the permanent default in the DATA
-   MODEL and cannot be turned off (normalizeSounds always keeps it); one
-   extra sound may be added (max 2 together). "silent" stands alone.
+   MODEL and cannot be turned off (normalizeSounds always keeps it); up
+   to TWO extra sounds may be added (max 2 sounds together — "name" does
+   not count, Fix #43). "silent" stands alone.
    Fix #42 (27 Nov 2026): the "ওয়াক্তের নাম (ডিফল্ট)" ROW is gone from
    the UI — the user asked for it removed (it could never be deselected,
    tapping it only showed a toast). The model is untouched: "name" stays
@@ -4014,7 +4022,9 @@ function toggleDetailSound(sid){
     if (!detailDraft.sounds.length) detailDraft.sounds = ["name"];
   } else {
     if (cur.includes("silent")) cur = ["name"];
-    if (cur.length>=2){ toast(Lb("একসাথে সর্বোচ্চ ২টা সাউন্ড সিলেক্ট করা যায়", "You can select up to 2 sounds together")); return; }
+    // Fix #43: the max-2 rule counts VISIBLE sounds only — "name" is the
+    // permanent default and never consumes a slot.
+    if (cur.filter(s=>s!=="name").length>=2){ toast(Lb("একসাথে সর্বোচ্চ ২টা সাউন্ড সিলেক্ট করা যায়", "You can select up to 2 sounds together")); return; }
     detailDraft.sounds = [...cur, sid];
   }
   renderDetailSounds();
@@ -4043,6 +4053,9 @@ function renderDetailSounds(){
 function detailSoundExplain(sounds){
   const ss = normalizeSounds(sounds);
   if (ss.includes("silent")) return Lb("নিঃশব্দ — ওয়াক্তের সময় কোনো সাউন্ড বাজবে না; শুধু নোটিফিকেশন আসবে।", "Silent — no sound plays at prayer time; only the notification arrives.");
+  // Fix #43: Notification + Azan together — the azan plays AND the
+  // notification shows the waqt name (the combination the user asked for).
+  if (ss.includes("azan") && ss.includes("notification")) return Lb("ওয়াক্তের সময় আজান বাজবে, আর নোটিফিকেশনে ওয়াক্তের নাম দেখাবে।", "The azan will play at prayer time, and the notification shows the prayer name.");
   if (ss.includes("azan")) return Lb("ওয়াক্তের সময় আজান বাজবে।", "The azan will play at prayer time.");
   return Lb("ওয়াক্তের সময় আজান বাজবে, আর নোটিফিকেশনে ওয়াক্তের নাম দেখাবে।", "The azan will play at prayer time, and the notification shows the prayer name.");
 }
@@ -4162,20 +4175,16 @@ function renderCalendarPage(){
 }
 
 /* ---------------- Durood on phone unlock ----------------
-   Fix #35 (user 22:13): durood plays ONLY when the phone is unlocked,
-   exactly once — opening the app has NOTHING to do with it. The web
-   layer used to play durood when the app opened or came back to the
-   foreground ("best-effort unlock", at most once per 5 min) — that hook
-   is fully removed (maybePlayDuroodOnForeground is gone, with its init
-   call and its visibilitychange/focus listeners). The ONLY unlock durood
-   is the native APK's BroadcastReceiver for the real ACTION_USER_PRESENT
-   event (see android/app/src/main/java/com/deenday/app/
-   DuroodUnlockReceiver.java — goAsync, one 3.72 s clip, exactly once
-   per unlock), whose on/off state is synced from this toggle via the
-   DuroodUnlock Capacitor plugin. The PWA cannot detect phone unlock at
-   all, so on the web there is no unlock durood — only the durood
-   REMINDER (its own switch + interval, Fix #33) still plays audio at
-   its set time, through playDurood(true) in fireDhikrReminder. -------- */
+   Fix #44 (27 Nov 2026, user order): Al-Shafie-style unlock durood
+   REMINDER — on unlock a notification appears, it does NOT auto-play;
+   the ✅ button on the notification plays the durood (native
+   DuroodPlayReceiver) and counts it. The old behaviour (Fix #35)
+   auto-played the durood on every unlock — that is gone from the
+   native receiver; the web layer never played on unlock either (the
+   Fix #35 foreground hook was already removed). The PWA cannot detect
+   phone unlock at all, so on the web there is no unlock durood — only
+   the durood REMINDER (its own switch + interval, Fix #33) still plays
+   audio at its set time, through playDurood(true) in fireDhikrReminder. -------- */
 let lastDuroodAt = 0;
 function playDurood(force){
   const now = Date.now();
@@ -4189,7 +4198,60 @@ function syncDuroodToggleNative(){
     const P = (typeof window.Capacitor !== "undefined" && window.Capacitor.Plugins)
       ? window.Capacitor.Plugins.DuroodUnlock : null;
     if (P && P.setEnabled) P.setEnabled({ enabled: !!settings.duroodOnUnlock });
+    // Fix #44: also sync the reminder sound choice (guarded — older
+    // plugin versions only have setEnabled).
+    if (P && P.setReminderSound) P.setReminderSound({ sound: settings.duroodRemindSound || "reminder" });
   } catch(e){}
+}
+
+/* Fix #44: the reminder sounds the user can pick in Settings. The
+   notification itself never plays the durood; the ✅ button on the
+   notification plays it (native DuroodPlayReceiver) and counts it.
+   Sounds are our own bundled files: reminder.mp3 (2.2 s tone),
+   istighfar.mp3 (6.2 s), or silent. */
+const DUROOD_REMIND_SOUNDS = [
+  {id:"reminder", bn:"রিমাইন্ডার টোন", en:"Reminder tone"},
+  {id:"istighfar", bn:"ইস্তিগফার", en:"Istighfar"},
+  {id:"silent", bn:"নিঃশব্দ", en:"Silent"},
+];
+function duroodRemindSoundName(id){
+  const s = DUROOD_REMIND_SOUNDS.find(x=>x.id===id);
+  return s ? (settings.lang==="en" ? s.en : s.bn) : "";
+}
+
+/* Fix #44: fill the reminder-sound <select> in Settings and wire its
+   change (save + sync to native). Native Android only — the web/PWA
+   has no unlock durood, so the row stays hidden there. */
+function renderDuroodSoundSelect(){
+  const sel = $("#set-durood-sound");
+  if (!sel) return;
+  const cur = settings.duroodRemindSound || "reminder";
+  sel.innerHTML = DUROOD_REMIND_SOUNDS.map(s=>`<option value="${s.id}" ${s.id===cur?"selected":""}>${settings.lang==="en"?s.en:s.bn}</option>`).join("");
+  sel.value = cur;
+  sel.onchange = e=>{
+    settings.duroodRemindSound = e.target.value;
+    saveSettings(); syncDuroodToggleNative();
+    toast(Lb("রিমাইন্ডারের শব্দ বদলানো হয়েছে", "Reminder sound changed"));
+  };
+  const row = $("#durood-sound-row");
+  if (row) row.style.display = permPA() ? "" : "none";
+}
+
+/* Fix #44: show the durood count in Settings ("আজ X বার • মোট Y বার"),
+   read from the native plugin. On the web there is no count — the row
+   stays hidden. */
+async function refreshDuroodStats(){
+  const row = $("#durood-count");
+  try {
+    const P = (typeof window.Capacitor !== "undefined" && window.Capacitor.Plugins)
+      ? window.Capacitor.Plugins.DuroodUnlock : null;
+    if (!P || !P.getDuroodStats || !row) { if (row) row.style.display = "none"; return; }
+    const r = await P.getDuroodStats();
+    const today = (r && typeof r.today === "number") ? r.today : 0;
+    const total = (r && typeof r.total === "number") ? r.total : 0;
+    row.textContent = Lb("আজ " + today + " বার • মোট " + total + " বার", "Today " + today + " • Total " + total);
+    row.style.display = "";
+  } catch(e){ if (row) row.style.display = "none"; }
 }
 
 /* Fix #42 (27 Nov 2026 voice call): brand-neutral replacement for the
@@ -4198,7 +4260,7 @@ function syncDuroodToggleNative(){
    non-Xiaomi phone), and the removal promised in the 25 Nov voice call
    never happened. The failure itself is NOT a receiver/audio bug:
    the manifest receiver (exported, USER_PRESENT), DuroodUnlockReceiver's
-   goAsync playback, res/raw/durood.mp3 in the APK, the plugin registered
+   reminder notification, res/raw/durood.mp3 in the APK, the plugin registered
    in MainActivity, and syncDuroodToggleNative() running at startup are
    all verified correct. The break is delivery: the system never delivers
    ACTION_USER_PRESENT to a dead app. The user confirmed 27 Nov he
@@ -4211,9 +4273,11 @@ function syncDuroodToggleNative(){
    My Deen (the native requestStep("appsettings") step — no
    brand-specific page on any phone). The app records only that the
    page was opened (settings.duroodAppSettingsOpened). Nothing else
-   about durood changes: it still plays ONLY on unlock, and the toggle
-   still syncs on/off to the native receiver — and switching the toggle
-   now also starts/stops the keep-alive service. */
+   about durood changes: the reminder still appears ONLY on unlock, and
+   the toggle still syncs on/off to the native receiver — and switching
+   the toggle now also starts/stops the keep-alive service. (Fix #44:
+   the reminder is a notification now; the durood itself plays only
+   from its ✅ button.) */
 async function openDuroodAppSettings(){
   const PA = permPA();
   let opened = false;
@@ -4566,10 +4630,13 @@ function checkAzan(){
      1. pre-azan reminder — the user's exact Bengali text (Fix #8), the
         SAME text twice: 5 minutes before (ids 51-55) and 2 minutes
         before (ids 31-35), no sound.
-     2. azan (ids 1-5) at prayer time + user offset, channel "azan-v2" with
-        the bundled azan.mp3 as the notification sound. The sound is
-        played by the system as the notification sound, so dismissing /
-        swiping the notification away stops the azan audio.
+     2. azan (ids 1-5) at prayer time + user offset — armed ONLY by the
+        native exact-alarm plugin and played ONLY as real media by
+        AzanPlaybackService (foreground service + MediaPlayer). Fix #43:
+        the LN fallback below NEVER schedules a sounding azan (a channel
+        sound is cut dead by the next notification/message — the Build 25
+        bug), and the sounding azan-v2 channel no longer exists anywhere.
+        The visual notification posts on the silent channel.
    Tahajjud (id 36): notification ONLY, never an azan — and only when
    its alarm is set.
    There is NO post-prayer check / hurry flow any more (Fix #8 removed
@@ -4713,7 +4780,12 @@ function buildPrayerAlarmList(){
          the exact Fix #8 sentence (Friday Dhuhr: the Jumu'ah sentence
          via preazanText) and the native receiver speaks it. */
       list.push({ id: (j===0 ? PREAZAN5_IDS : PREAZAN_IDS)[i], at: preAt, type: "preazan-v2",
-        title: "My Deen — " + name, body: preazanText(id, locNow(preAt)), sound: "none", prayerId: id, speak: true });
+        title: "My Deen — " + name, body: preazanText(id, locNow(preAt)), sound: "none", prayerId: id, speak: true,
+        /* Fix #43: speakText is set EXPLICITLY (the same sentence as the
+           body) — the native receiver speaks speakText, so the waqt name
+           is always spoken even if the body is ever stale or empty. The
+           sentence itself is unchanged (Fix #8, verbatim). */
+        speakText: preazanText(id, locNow(preAt)) });
     });
     if (!settings.alarmOn[id]) return;
     /* Fix #38: "silent" must actually silence — before this every azan
@@ -4777,18 +4849,34 @@ async function syncPrayerAlarms(){
   const PA = (typeof window.Capacitor !== "undefined" && window.Capacitor.Plugins)
     ? window.Capacitor.Plugins.PrayerAlarm : null;
   if (PA && PA.scheduleAlarms){
-    try {
-      // Fix #19: the schedule result used to be ignored — on a fresh
-      // install, with the exact-alarm permission still missing, EVERY
-      // alarm was silently skipped and the user only found out when the
-      // azan never rang. Now the skipped count is recorded and shown.
-      const r = await PA.scheduleAlarms({ alarms: list.map(a=>({ id:a.id, at:a.at.getTime(), type:a.type, title:a.title, body:a.body, sound:a.sound, prayerId:a.prayerId, speak: !!a.speak, speakText: a.speakText || "" })) });
-      alarmStatus.checked = true;
-      alarmStatus.scheduled = (r && typeof r.scheduled === "number") ? r.scheduled : list.length;
-      alarmStatus.skipped = (r && typeof r.skipped === "number") ? r.skipped : 0;
-      refreshAlarmStatus();
-      return;
-    } catch(e){ /* fall through to the LN path */ }
+    // Fix #43: one retry — a transient bridge hiccup must not drop the
+    // whole native schedule onto the LN fallback (a sounding azan via LN
+    // is cut dead by the next notification, and a failed sync leaves
+    // stale native alarms with old wording armed).
+    for (let attempt = 0; attempt < 2; attempt++){
+      try {
+        // Fix #19: the schedule result used to be ignored — on a fresh
+        // install, with the exact-alarm permission still missing, EVERY
+        // alarm was silently skipped and the user only found out when the
+        // azan never rang. Now the skipped count is recorded and shown.
+        const r = await PA.scheduleAlarms({ alarms: list.map(a=>({ id:a.id, at:a.at.getTime(), type:a.type, title:a.title, body:a.body, sound:a.sound, prayerId:a.prayerId, speak: !!a.speak, speakText: a.speakText || "" })) });
+        alarmStatus.checked = true;
+        alarmStatus.scheduled = (r && typeof r.scheduled === "number") ? r.scheduled : list.length;
+        alarmStatus.skipped = (r && typeof r.skipped === "number") ? r.skipped : 0;
+        refreshAlarmStatus();
+        return;
+      } catch(e){ if (attempt === 1){ /* fall through to the LN path */ } }
+    }
+  }
+  // Fix #43: the LN fallback must never leave a stale NATIVE alarm armed
+  // with old wording — a stale stored alarm re-arms itself every day via
+  // rescheduleNextDay, so the old no-waqt-name audio would never stop.
+  // Cancel the whole azan family through the plugin before the LN
+  // fallback schedules its visuals; the next successful native sync
+  // re-arms fresh ones. (When the plugin is entirely missing there is
+  // nothing to cancel from JS — see the honest limit in the spec.)
+  if (PA && PA.cancelAlarms){
+    try { await PA.cancelAlarms({ ids: [...AZAN_IDS, ...PREAZAN_IDS, ...PREAZAN5_IDS, TAHAJJUD_ID, SEHRI_ID, IFTAR_ID, ...FORB_IDS, DUHA_ID] }); } catch(e){}
   }
   await scheduleNativeAzan();
   alarmStatus.checked = true; alarmStatus.scheduled = list.length; alarmStatus.skipped = 0;
@@ -4847,8 +4935,12 @@ async function scheduleNativeAzan(){
     if (!LN || !timings || !settings.azan) return;
     const perm = await LN.requestPermissions();
     if (perm && perm.display && perm.display !== "granted") return;
-    // Channels: Android 8+ plays the CHANNEL sound, so each sound gets its own channel.
-    await LN.createChannel({ id: "azan-v2", name: "Azan", description: "Prayer time azan alerts", sound: "azan.mp3", importance: 5, vibration: true });
+    // Fix #43: the sounding azan-v2 channel is GONE from the LN path —
+    // the MediaPlayer service (AzanPlaybackService) is the ONLY sounding
+    // azan path on Android. A notification sound is cut dead by the next
+    // message, so no azan entry is ever scheduled through
+    // LocalNotifications (see the filter below). The silent channel stays
+    // for the visual notification, which can never sound through it.
     // Fix #38: silent azan channel — "নিঃশব্দ" posts here, so no sound plays.
     await LN.createChannel({ id: "azan-v2-silent", name: "Azan (silent)", description: "Prayer time alerts without sound", importance: 5, vibration: true });
     // Fix #42: pre-azan reminders post on preazan-v2 — HIGH importance
@@ -4868,7 +4960,16 @@ async function scheduleNativeAzan(){
        30 min (the user's second azan). One-shot for the next
        occurrence only; the app re-syncs on every open/foreground, and
        the native path re-arms daily. */
-    const notifs = buildPrayerAlarmList().map(a=>{
+    /* Fix #43: NEVER schedule a sounding azan through LocalNotifications
+       on Android — the azan entries (sound "azan") are filtered out
+       here. The native exact-alarm path + AzanPlaybackService
+       (MediaPlayer) is the only sounding azan path; an LN channel sound
+       is cut dead by the next notification/message, which is exactly the
+       bug the user reported on Build 25. Every other entry (pre-azan
+       reminders, Tahajjud, Sehri, Iftar, forbidden, Duha — including the
+       silent azan visuals on azan-v2-silent) stays: none of them can
+       sound an azan. */
+    const notifs = buildPrayerAlarmList().filter(a=>a.sound!=="azan").map(a=>{
       const n = { id: a.id, title: a.title, body: a.body,
         schedule: { at: a.at, allowWhileIdle: true }, channelId: a.type,
         smallIcon: NOTIF_SMALL_ICON, largeIcon: NOTIF_LARGE_ICON };
@@ -5414,7 +5515,9 @@ function fillSettings(){
   const ar = $("#durood-appsettings-row");
   if (ar) ar.style.display = permPA() ? "" : "none";
   const ah = $("#durood-appsettings-hint");
-  if (ah) ah.textContent = Lb("আনলক করলে দরুদ বাজানোর জন্য অ্যাপটি নিজে থেকেই চালু থাকে — নিচের বোতামে অ্যাপের সেটিংস খুলতে পারবেন।", "The app keeps itself running so the durood plays on unlock — the button below opens the app settings.");
+  if (ah) ah.textContent = Lb("আনলক করলে দরুদের রিমাইন্ডার আসবে — ✅ চাপলে দরুদ বাজবে। অ্যাপটি নিজে থেকেই চালু থাকে — নিচের বোতামে অ্যাপের সেটিংস খুলতে পারবেন।", "On unlock a durood reminder appears — press ✅ to play the durood. The app keeps itself running — the button below opens the app settings.");
+  renderDuroodSoundSelect();
+  refreshDuroodStats();
   const pn = $("#set-profile-name"); if (pn) pn.value = settings.profileName || "";
   renderGreet(); renderLoginState();
   const sl0 = $("#set-lang");
