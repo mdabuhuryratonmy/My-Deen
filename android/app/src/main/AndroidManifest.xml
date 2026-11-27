@@ -10,6 +10,10 @@
     <!-- Fix #25: ask the system battery-exemption dialog from the onboarding -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Fix #42: foreground services — azan media playback + unlock keep-alive -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <application
         android:allowBackup="true"
@@ -53,6 +57,19 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+
+        <!-- Fix #42: azan plays as real media (foreground service +
+             MediaPlayer with audio focus) so an incoming notification
+             cannot cut it; and the unlock keep-alive service, which
+             holds the app alive so USER_PRESENT is delivered on
+             aggressive OEMs. Both are NOT exported. -->
+        <service android:name=".AzanPlaybackService" android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+        <service android:name=".UnlockKeepAliveService" android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps My Deen alive so the unlock durood can play when the phone is unlocked and prayer-time alarms keep working." />
+        </service>
 
         <provider
             android:name="androidx.core.content.FileProvider"

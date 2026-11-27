@@ -66,7 +66,8 @@ globalThis.detailSoundExplain=detailSoundExplain; globalThis.renderDetailSounds=
 // permission-chain helpers
 globalThis.speakText=speakText; globalThis.checkPreAzanVoice=checkPreAzanVoice;
 globalThis.AZAN_SPEAK_TEXTS=AZAN_SPEAK_TEXTS; globalThis.nativeAzanArmed=nativeAzanArmed; globalThis.scheduleNativeDhikr=scheduleNativeDhikr;
-globalThis.openDuroodAutostart=openDuroodAutostart; globalThis.syncDuroodToggleNative=syncDuroodToggleNative;
+globalThis.openDuroodAppSettings=openDuroodAppSettings; globalThis.syncDuroodToggleNative=syncDuroodToggleNative;
+globalThis.preazanText=preazanText; globalThis.JUMUAH_PREAZAN_TEXT=JUMUAH_PREAZAN_TEXT;
 globalThis.villageNameOf=villageNameOf; globalThis.normalizeCityName=normalizeCityName;
 globalThis.permStepsAsked=permStepsAsked; globalThis.permMarkAsked=permMarkAsked; globalThis.permTimeout=permTimeout;
 globalThis.detectLocation=detectLocation; globalThis.locPermStatus=locPermStatus; globalThis.saveSettingsFromUI=saveSettingsFromUI;
@@ -282,12 +283,12 @@ Object.assign(settings, _savedS);
 
 // ---- Alarm list ----
 let list = buildPrayerAlarmList();
-check("alarm list has 5 azan + 10 pre-azan by default", list.length===15 && list.filter(a=>a.type==="azan-v2").length===5 && list.filter(a=>a.type==="preazan").length===10, String(list.length));
+check("alarm list has 5 azan + 10 pre-azan by default", list.length===15 && list.filter(a=>a.type==="azan-v2").length===5 && list.filter(a=>a.type==="preazan-v2").length===10, String(list.length));
 const fajrAzan = list.find(a=>a.prayerId==="Fajr" && a.type==="azan-v2");
-const fajrPres = list.filter(a=>a.prayerId==="Fajr" && a.type==="preazan");
+const fajrPres = list.filter(a=>a.prayerId==="Fajr" && a.type==="preazan-v2");
 const fajrDiffs = fajrPres.map(a=>(fajrAzan.at - a.at + 86400000) % 86400000);
 check("pre-azan is twice: 5 and 2 min before azan", fajrAzan && fajrPres.length===2 && fajrDiffs.includes(300000) && fajrDiffs.includes(120000));
-check("pre-azan ids 31–35 and 51–55", list.filter(a=>a.type==="preazan").map(a=>a.id).sort((x,y)=>x-y).join(",")==="31,32,33,34,35,51,52,53,54,55");
+check("pre-azan ids 31–35 and 51–55", list.filter(a=>a.type==="preazan-v2").map(a=>a.id).sort((x,y)=>x-y).join(",")==="31,32,33,34,35,51,52,53,54,55");
 check("no tahajjud alarm when its toggle is off", !list.some(a=>a.type==="tahajjud"));
 settings.alarmOn.Tahajjud = true; settings.alarmOn.Sehri = true; settings.alarmOn.Iftar = true; settings.alarmOn.Duha = true;
 list = buildPrayerAlarmList();
@@ -311,7 +312,7 @@ getDetailDraft().offset = 0; updateDetailTime();
 check("offset 0 shows 'Exact time'", els["#detail-exact"].textContent === "Exact time", els["#detail-exact"].textContent);
 getDetailDraft().offset = 5; updateDetailTime();
 check("offset +5 changes the set time to 5:47", els["#detail-time"].textContent.includes("৫:৪৭"), els["#detail-time"].textContent);
-check("ALARM_SOUNDS has 6 options incl. notification and name", ALARM_SOUNDS.length===6 && ALARM_SOUNDS.some(s=>s.id==="azan") && ALARM_SOUNDS.some(s=>s.id==="silent") && ALARM_SOUNDS.some(s=>s.id==="name") && ALARM_SOUNDS.some(s=>s.id==="notification"));
+check("ALARM_SOUNDS has 5 options, no name row (Fix #42)", ALARM_SOUNDS.length===5 && ALARM_SOUNDS.some(s=>s.id==="azan") && ALARM_SOUNDS.some(s=>s.id==="silent") && ALARM_SOUNDS.some(s=>s.id==="notification") && !ALARM_SOUNDS.some(s=>s.id==="name"));
 
 // ---- Alarm page + calendar ----
 renderAlarmPage();
@@ -454,7 +455,7 @@ check("no hurry/check wording left anywhere in the app",
 __setTimings({Fajr:"05:42", Dhuhr:"13:04", Asr:"16:24", Maghrib:"18:58", Isha:"20:11", Sunrise:"07:03", Sunset:"18:58", Imsak:"05:32", Lastthird:"02:03"});
 settings.alarmOn = {...settings.alarmOn, Fajr:true, Dhuhr:true, Asr:true, Maghrib:true, Isha:true, Tahajjud:true, Sehri:false, Iftar:false, Duha:false};
 const alarmList = buildPrayerAlarmList();
-const preList = alarmList.filter(a=>a.type==="preazan");
+const preList = alarmList.filter(a=>a.type==="preazan-v2");
 check("each prayer gets two pre-azan reminders (5 min + 2 min before)",
   preList.length === 10 && ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>{
     const az = alarmList.find(a=>a.type==="azan-v2" && a.prayerId===pid);
@@ -522,9 +523,9 @@ settings.alarmSound.Fajr = ["name"];
 settings.alarmOn = {...settings.alarmOn, Fajr:false, Dhuhr:false, Asr:false, Maghrib:false, Isha:false, Tahajjud:false, Sehri:false, Iftar:false, Duha:false};
 const alarmListOff = buildPrayerAlarmList();
 check("pre-azan stays on even when every prayer alarm is off",
-  alarmListOff.filter(a=>a.type==="preazan").length===10 &&
+  alarmListOff.filter(a=>a.type==="preazan-v2").length===10 &&
   alarmListOff.filter(a=>a.type.startsWith("azan-v2")).length===0 &&
-  ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>alarmListOff.filter(a=>a.type==="preazan" && a.prayerId===pid).length===2));
+  ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>alarmListOff.filter(a=>a.type==="preazan-v2" && a.prayerId===pid).length===2));
 settings.alarmOn = {...settings.alarmOn, Fajr:true, Dhuhr:true, Asr:true, Maghrib:true, Isha:true};
 
 // ---- Fix #12: timezone — device clock vs location timezone ----
@@ -569,7 +570,7 @@ const maghAzan = buildPrayerAlarmList().find(a=>a.type.startsWith("azan-v2") && 
 check("Fix #12: Maghrib alarm fires at 17:17 Jashore wall-clock (absolute instant)",
   maghAzan && dhakaWall(maghAzan.at.getTime()).join(":")==="17:17",
   maghAzan ? dhakaWall(maghAzan.at.getTime()).join(":") : "none");
-const maghPres = buildPrayerAlarmList().filter(a=>a.type==="preazan" && a.prayerId==="Maghrib")
+const maghPres = buildPrayerAlarmList().filter(a=>a.type==="preazan-v2" && a.prayerId==="Maghrib")
   .map(a=>dhakaWall(a.at.getTime()).join(":")).sort();
 check("Fix #12: Maghrib pre-azan alarms fire at 17:12 and 17:15 Jashore wall-clock",
   maghPres.join(",")==="17:12,17:15", maghPres.join(","));
@@ -918,7 +919,7 @@ Object.assign(settings, _savedTz);
     // "এড়িয়ে যান / পরে করব"). The app now asks for each permission
     // directly, the way normal apps do: the phone's own dialog for
     // notifications/battery, the phone's own Settings page for exact
-    // alarms/autostart (those two can ONLY be a toggle on a system page).
+    // alarms/app settings (those two can ONLY be a toggle on a system page).
     // The plugin mechanism (requestStep, batteryExempt, manifest) is
     // unchanged — only the in-app modal UI is gone.
     const _idx = fs.readFileSync("/home/hatch/workspace/deen-day/www/index.html", "utf8");
@@ -931,15 +932,15 @@ Object.assign(settings, _savedTz);
       !src.includes("skipOnboard") && !_css.includes("perm-dot"),
       "modal removed");
     check("Fix #32: PERM_STEPS has the same 5 permissions, in order, as a plain list (location first — Fix #41 Step 2)",
-      src.includes('const PERM_STEPS = ["location", "notifications", "exact", "battery", "autostart"]'),
+      src.includes('const PERM_STEPS = ["location", "notifications", "exact", "battery", "appsettings"]'),
       "5 steps");
     check("Fix #25: plugin has requestStep with all 4 step branches",
       _pa.includes("public void requestStep") && _pa.includes('"notifications"') &&
-      _pa.includes('"exact"') && _pa.includes('"battery"') && _pa.includes('"autostart"'), "4 branches");
-    check("Fix #25: battery exemption uses the system dialog intent; autostart opens MIUI's page with a fallback",
+      _pa.includes('"exact"') && _pa.includes('"battery"') && _pa.includes('"appsettings"'), "4 branches");
+    check("Fix #25: battery exemption uses the system dialog intent; appsettings opens the generic app Settings page (no MIUI deep link — Fix #42)",
       _pa.includes("ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS") &&
-      _pa.includes("AutoStartManagementActivity") &&
-      _pa.includes("ACTION_APPLICATION_DETAILS_SETTINGS"), "intents");
+      _pa.includes("ACTION_APPLICATION_DETAILS_SETTINGS") &&
+      !_pa.includes("AutoStartManagementActivity") && !_pa.includes("com.miui.securitycenter"), "intents");
     check("Fix #25: getStatus reports batteryExempt so the chain can check it",
       _pa.includes('ret.put("batteryExempt"'), "batteryExempt");
     check("Fix #25: manifest declares the battery-optimisation request permission",
@@ -958,7 +959,7 @@ Object.assign(settings, _savedTz);
     check("Fix #32: onboarded flag defaults to false (new installs get asked once)",
       src.includes("onboarded:false"), "default false");
     check("Fix #32: on the web (no plugin) only the standard notification dialog is asked",
-      src.includes('Notification.requestPermission()') && src.includes('exact: true, battery: true, autostart: true'),
+      src.includes('Notification.requestPermission()') && src.includes('exact: true, battery: true, appsettings: true'),
       "web fallback");
 
     // ---- Fix #26: all 5 prayer times 100% correct (JAKIM, Ipoh/Chemor) ----
@@ -1001,20 +1002,20 @@ Object.assign(settings, _savedTz);
       ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(p=>_at26(p,"azan-v2")===_jakim[p]),
       ["Fajr","Dhuhr","Asr","Maghrib","Isha"].map(p=>p+" "+_at26(p,"azan-v2")).join(" "));
     check("Fix #26: T-5 notifications (ids 51–55) come 5 min before every prayer",
-      list26.filter(a=>a.type==="preazan" && [51,52,53,54,55].includes(a.id)).length===5 &&
+      list26.filter(a=>a.type==="preazan-v2" && [51,52,53,54,55].includes(a.id)).length===5 &&
       ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(p=>{
-        const five = list26.find(a=>a.prayerId===p && a.type==="preazan" && a.id>=51);
+        const five = list26.find(a=>a.prayerId===p && a.type==="preazan-v2" && a.id>=51);
         return five && (_at26(p,"azan-v2") - _wall26(five.at))===5;
       }), "T-5 ok");
     check("Fix #26: T-2 notifications (ids 31–35) come 2 min before every prayer",
-      list26.filter(a=>a.type==="preazan" && [31,32,33,34,35].includes(a.id)).length===5 &&
+      list26.filter(a=>a.type==="preazan-v2" && [31,32,33,34,35].includes(a.id)).length===5 &&
       ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(p=>{
-        const two = list26.find(a=>a.prayerId===p && a.type==="preazan" && a.id<40);
+        const two = list26.find(a=>a.prayerId===p && a.type==="preazan-v2" && a.id<40);
         return two && (_at26(p,"azan-v2") - _wall26(two.at))===2;
       }), "T-2 ok");
     check("Fix #26: every pre-azan carries the exact Bengali text (not one word changed)",
       ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(p=>
-        list26.filter(a=>a.prayerId===p && a.type==="preazan").every(a=>a.body===PREAZAN_TEXTS[p])), "texts exact");
+        list26.filter(a=>a.prayerId===p && a.type==="preazan-v2").every(a=>a.body===((p==="Dhuhr" && locNow(a.at).getDay()===5)?JUMUAH_PREAZAN_TEXT:PREAZAN_TEXTS[p]))), "texts exact");
     // Ring sweep: inside each waqt the ring shows that prayer, counting to
     // the end of its window (the next prayer start); before Fajr it shows
     // Fajr upcoming; overnight Isha counts to tomorrow's Fajr.
@@ -1310,18 +1311,18 @@ Object.assign(settings, _savedTz);
     check("Fix #38: the detail page has a plain-words explainer under the sound list",
       html.includes('id="detail-sound-explain"') && src.includes("detailSoundExplain(sel)"),
       "explainer shown");
-    check("Fix #38: with the default (name only) the explainer says the azan plays + the name shows",
-      detailSoundExplain(["name"]).includes("আজান বাজবে") && detailSoundExplain(["name"]).includes("ওয়াক্তের নাম (ডিফল্ট)"),
+    check("Fix #38: with the default (name only) the explainer says the azan plays + the name shows (no '(ডিফল্ট)' label — Fix #42)",
+      detailSoundExplain(["name"]).includes("আজান বাজবে") && !detailSoundExplain(["name"]).includes("ওয়াক্তের নাম (ডিফল্ট)"),
       "default = azan");
     check("Fix #38: with azan selected the explainer says the azan plays",
       detailSoundExplain(["name","azan"]).includes("আজান বাজবে"), "azan = azan");
     check("Fix #38: with silent selected the explainer says no sound plays",
       detailSoundExplain(["silent"]).includes("নিঃশব্দ") && detailSoundExplain(["silent"]).includes("কোনো সাউন্ড বাজবে না"),
       "silent = silent");
-    check("Fix #38: name stays the permanent default (forced into every selection)",
+    check("Fix #38: name stays the permanent default (forced into every selection) — the toast is gone (Fix #42)",
       JSON.stringify(normalizeSounds([]))===JSON.stringify(["name"]) &&
       JSON.stringify(normalizeSounds(["silent"]))===JSON.stringify(["silent"]) &&
-      src.includes('if (sid==="name"){ toast(Lb("ওয়াক্তের নাম সবসময় চালু থাকে"'),
+      !src.includes('ওয়াক্তের নাম সবসময় চালু থাকে'),
       "name locked");
     check("Fix #38: a silent azan posts on the silent channel (native + LN)",
       javaSched.includes('"azan-v2-silent"') && src.includes('id: "azan-v2-silent"'),
@@ -1339,8 +1340,8 @@ Object.assign(settings, _savedTz);
     // re-arm a fired alarm that is no longer stored.
     check("Fix #39: the exact pre-azan texts (his words) ride BOTH the T-5 and T-2 entries",
       ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>{
-        const pres = buildPrayerAlarmList().filter(a=>a.type==="preazan" && a.prayerId===pid);
-        return pres.length===2 && pres.every(a=>a.body===PREAZAN_TEXTS[pid]);
+        const pres = buildPrayerAlarmList().filter(a=>a.type==="preazan-v2" && a.prayerId===pid);
+        return pres.length===2 && pres.every(a=>a.body===((pid==="Dhuhr" && locNow(a.at).getDay()===5)?JUMUAH_PREAZAN_TEXT:PREAZAN_TEXTS[pid]));
       }),
       "both times, same text");
     check("Fix #39: no hurry wording anywhere — JS or native",
@@ -1407,13 +1408,13 @@ Object.assign(settings, _savedTz);
     // Fix #5: spoken pre-azan reminders.
     check("Build #19 Fix #5: both pre-azan entries carry speak:true (T-5 and T-2, every fard prayer)",
       ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>{
-        const pres = buildPrayerAlarmList().filter(a=>a.type==="preazan" && a.prayerId===pid);
-        return pres.length===2 && pres.every(a=>a.speak===true && a.body===PREAZAN_TEXTS[pid]);
+        const pres = buildPrayerAlarmList().filter(a=>a.type==="preazan-v2" && a.prayerId===pid);
+        return pres.length===2 && pres.every(a=>a.speak===true && a.body===((pid==="Dhuhr" && locNow(a.at).getDay()===5)?JUMUAH_PREAZAN_TEXT:PREAZAN_TEXTS[pid]));
       }), "speak flag");
     check("Build #19 Fix #5: syncPrayerAlarms passes speak through to the native plugin",
       src.includes("speak: !!a.speak"), "passthrough");
     check("Build #19 Fix #5: foreground voice check exists, speaks the exact Fix #8 text in Bengali, and is wired into the 1 s tick",
-      src.includes("function checkPreAzanVoice()") && src.includes('speakText(PREAZAN_TEXTS[p], "bn-BD")') &&
+      src.includes("function checkPreAzanVoice()") && src.includes('speakText(preazanText(p, locNow()), "bn-BD")') &&
       src.includes("checkAzan(); checkPreAzanVoice();"), "foreground voice");
     check("Build #19 Fix #5: native pending intent carries speak + the reschedule keeps it",
       javaSched.includes('i.putExtra("speak", alarm.optBoolean("speak", false))') &&
@@ -1640,67 +1641,70 @@ Object.assign(settings, _savedTz);
       }
     }
 
-    // ---- Fix #41 Step 1 (24 Nov 2026 voice call): unlock durood never
-    // played on the user's Xiaomi. Root cause, verified in source: MIUI
-    // never delivers ACTION_USER_PRESENT to a dead app without Autostart
-    // permission, and the only autostart prompt was the one-shot
-    // first-launch chain step. The receiver, the audio file and the
-    // native-toggle sync were all correct. Fix: a one-tap button in the
-    // Durood settings row opens the MIUI autostart page directly
-    // (existing native requestStep("autostart") deep link); the native
-    // side now reports honestly whether the page opened. Nothing about
-    // the durood itself changes — still ONLY on unlock; astaghfirullah
-    // and the pre-azan texts are untouched.
+    // ---- Fix #42 (27 Nov 2026 voice call): unlock durood, brand-neutral ----
+    // The user confirmed he already gave ALL settings on his Realme
+    // (Autostart ON + Battery "No restrictions") and the unlock durood
+    // STILL does not play — the settings explanation is ruled out, so a
+    // settings page is NOT the fix. The break is delivery: the system
+    // never delivers ACTION_USER_PRESENT to a dead app. The fix is the
+    // UnlockKeepAliveService (a lightweight foreground service that
+    // keeps the app alive, started on app open / boot / toggle). The
+    // old Xiaomi autostart button (openDuroodAutostart + MIUI deep link)
+    // is removed entirely and replaced by a brand-neutral button that
+    // opens the generic Android app-settings page. Nothing about the
+    // durood itself changes — still ONLY on unlock; astaghfirullah and
+    // the pre-azan texts are untouched.
     {
-      const _saved41 = { duroodOnUnlock: settings.duroodOnUnlock, duroodAutostartOpened: settings.duroodAutostartOpened, lang: settings.lang };
+      const _saved41 = { duroodOnUnlock: settings.duroodOnUnlock, duroodAppSettingsOpened: settings.duroodAppSettingsOpened, lang: settings.lang };
       settings.lang = "bn";
       const _toastEl41 = document.getElementById("toast");
-      const _btn41 = document.getElementById("btn-durood-autostart");
-      const _row41 = document.getElementById("durood-autostart-row");
-      const _hint41 = document.getElementById("durood-autostart-hint");
+      const _btn41 = document.getElementById("btn-durood-appsettings");
+      const _row41 = document.getElementById("durood-appsettings-row");
+      const _hint41 = document.getElementById("durood-appsettings-hint");
       try {
-        // Tapping the button calls the native autostart step, records
-        // that the page opened, and tells the user to flip the switch.
+        // Tapping the button calls the native appsettings step, records
+        // that the page opened, and confirms the page opened (it does
+        // NOT claim the settings are the fix — the keep-alive service is).
         let _req41 = [];
         globalThis.Capacitor = { Plugins: {
           PrayerAlarm: { requestStep: async(a)=>{ _req41.push(a); return { opened: true }; } },
         }};
-        settings.duroodAutostartOpened = false;
-        await openDuroodAutostart();
-        check("Fix #41 Step 1: tapping the autostart button calls native requestStep({step:'autostart'})",
-          _req41.length===1 && _req41[0] && _req41[0].step==="autostart", JSON.stringify(_req41));
-        check("Fix #41 Step 1: opening the page records settings.duroodAutostartOpened",
-          settings.duroodAutostartOpened===true, "flag set");
-        check("Fix #41 Step 1: success toast tells the user to flip the switch next to My Deen",
-          typeof _toastEl41.textContent==="string" && _toastEl41.textContent.includes("সুইচটি চালু করুন"), _toastEl41.textContent);
+        settings.duroodAppSettingsOpened = false;
+        await openDuroodAppSettings();
+        check("Fix #42: tapping the app-settings button calls native requestStep({step:'appsettings'})",
+          _req41.length===1 && _req41[0] && _req41[0].step==="appsettings", JSON.stringify(_req41));
+        check("Fix #42: opening the page records settings.duroodAppSettingsOpened",
+          settings.duroodAppSettingsOpened===true, "flag set");
+        check("Fix #42: success toast only confirms the page opened (no settings-as-fix claim)",
+          typeof _toastEl41.textContent==="string" && _toastEl41.textContent.includes("অ্যাপের সেটিংস খুলেছে") && !_toastEl41.textContent.includes("তাহলে আনলক করলে দরুদ বাজবে"), _toastEl41.textContent);
         // When the page cannot be opened the flag stays false and the
         // toast falls back to the manual path (no false "opened" claim).
         _req41 = [];
         globalThis.Capacitor = { Plugins: {
           PrayerAlarm: { requestStep: async(a)=>{ _req41.push(a); return { opened: false }; } },
         }};
-        settings.duroodAutostartOpened = false;
-        await openDuroodAutostart();
-        check("Fix #41 Step 1: a failed open does NOT record the page as opened",
-          settings.duroodAutostartOpened===false, "flag stays false");
-        check("Fix #41 Step 1: a failed open toasts the manual Settings path instead",
+        settings.duroodAppSettingsOpened = false;
+        await openDuroodAppSettings();
+        check("Fix #42: a failed open does NOT record the page as opened",
+          settings.duroodAppSettingsOpened===false, "flag stays false");
+        check("Fix #42: a failed open toasts the manual Settings path instead",
           typeof _toastEl41.textContent==="string" && _toastEl41.textContent.includes("Settings → Apps"), _toastEl41.textContent);
         // The row is native-only: hidden on web (no Capacitor), shown on
         // native, and the button is wired by fillSettings().
         delete globalThis.Capacitor;
         fillSettings();
-        check("Fix #41 Step 1: autostart row is hidden on web (no unlock durood there)",
+        check("Fix #42: app-settings row is hidden on web (no unlock durood there)",
           _row41.style.display==="none", "web hidden");
-        check("Fix #41 Step 1: hint explains Xiaomi kills the app without autostart",
-          typeof _hint41.textContent==="string" && _hint41.textContent.includes("অটোস্টার্ট"), _hint41.textContent);
+        check("Fix #42: hint says the app keeps itself running (no settings-as-fix claim)",
+          typeof _hint41.textContent==="string" && _hint41.textContent.includes("নিজে থেকেই চালু থাকে"), _hint41.textContent);
         globalThis.Capacitor = { Plugins: {
           PrayerAlarm: { requestStep: async()=>({ opened: true }) },
         }};
         fillSettings();
-        check("Fix #41 Step 1: autostart row is shown on native Android and the button is wired",
+        check("Fix #42: app-settings row is shown on native Android and the button is wired",
           _row41.style.display!=="none" && typeof _btn41.onclick==="function", "native shown + wired");
-        check("Fix #41 Step 1: button label is the one-tap autostart action",
-          typeof _btn41.textContent==="string" && _btn41.textContent.includes("অটোস্টার্ট চালু করুন"), _btn41.textContent);
+        check("Fix #42: button label is the one-tap app-settings action",
+          typeof _btn41.textContent==="string" && _btn41.textContent.includes("অ্যাপের সেটিংস খুলুন"), _btn41.textContent);
         // Toggle OFF still syncs disabled to the native receiver, and
         // the default is still ON (the pref default is true either way).
         let _du41 = [];
@@ -1708,34 +1712,42 @@ Object.assign(settings, _savedTz);
           DuroodUnlock: { setEnabled: (a)=>{ _du41.push(a); } },
         }};
         settings.duroodOnUnlock = false; syncDuroodToggleNative();
-        check("Fix #41 Step 1: durood OFF still syncs enabled:false to the native receiver",
+        check("Fix #42: durood OFF still syncs enabled:false to the native receiver",
           _du41.length===1 && _du41[0].enabled===false, JSON.stringify(_du41));
         settings.duroodOnUnlock = true; syncDuroodToggleNative();
-        check("Fix #41 Step 1: durood ON syncs enabled:true to the native receiver",
+        check("Fix #42: durood ON syncs enabled:true to the native receiver",
           _du41.length===2 && _du41[1].enabled===true, JSON.stringify(_du41));
         // Delivery chain pins (static): the receiver is manifest-registered
         // exported with USER_PRESENT, and the clip is bundled in the APK.
         const _man41 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/AndroidManifest.xml", "utf8");
-        check("Fix #41 Step 1: DuroodUnlockReceiver is manifest-registered exported with USER_PRESENT",
+        check("Fix #42: DuroodUnlockReceiver is manifest-registered exported with USER_PRESENT",
           _man41.includes('android:name=".DuroodUnlockReceiver" android:exported="true"') && _man41.includes("android.intent.action.USER_PRESENT"), "manifest");
-        check("Fix #41 Step 1: res/raw/durood.mp3 is bundled (the clip the receiver plays)",
+        check("Fix #42: res/raw/durood.mp3 is bundled (the clip the receiver plays)",
           fs.existsSync("/home/hatch/workspace/deen-day/android/app/src/main/res/raw/durood.mp3"), "raw clip");
-        // Native honesty pin: requestStep("autostart") returns the real
+        // Native honesty pin: requestStep("appsettings") returns the real
         // opened value, and the opener only reports success when an
-        // intent actually resolved.
+        // intent actually resolved — and the MIUI deep link is gone.
         const _pa41 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/PrayerAlarmPlugin.java", "utf8");
-        check("Fix #41 Step 1: native requestStep('autostart') returns the real opened value (no hardcoded true)",
-          _pa41.includes('ret.put("opened", openAutostartSettings())') && !_pa41.includes('ret.put("opened", true)'), "honest opened");
-        check("Fix #41 Step 1: native autostart opener guards each intent with resolveActivity and returns boolean",
-          _pa41.includes("private boolean openAutostartSettings()") && _pa41.includes("resolveActivity(getContext().getPackageManager()) != null") && _pa41.includes("com.miui.permcenter.autostart.AutoStartManagementActivity"), "guarded opener");
+        check("Fix #42: native requestStep('appsettings') returns the real opened value (no hardcoded true)",
+          _pa41.includes('ret.put("opened", openAppSettings())') && !_pa41.includes('ret.put("opened", true)'), "honest opened");
+        check("Fix #42: native app-settings opener guards its intent with resolveActivity and returns boolean — no MIUI component",
+          _pa41.includes("private boolean openAppSettings()") && _pa41.includes("resolveActivity(getContext().getPackageManager()) != null") && !_pa41.includes("AutoStartManagementActivity") && !_pa41.includes("com.miui.securitycenter"), "guarded opener");
+        // Absence pins: the MIUI autostart button, its deep-link step
+        // and the Xiaomi help text are gone from the shipped app.
+        const _src41 = fs.readFileSync("/home/hatch/workspace/deen-day/www/app.js", "utf8");
+        check("Fix #42: no openDuroodAutostart anywhere in the shipped JS",
+          !_src41.includes("openDuroodAutostart"), "button gone");
+        check("Fix #42: no requestStep(\"autostart\") anywhere in the shipped JS",
+          !_src41.includes('requestStep("autostart")'), "step gone");
+        check("Fix #42: no Xiaomi help string in the shipped JS",
+          !_src41.includes("Xiaomi ফোন অ্যাপ বন্ধ করে দিলে আনলকের দরুদ বাজে না"), "help gone");
         // Untouched pins: astaghfirullah reminder code and the Fix #8
         // pre-azan texts are not modified by this step.
-        const _src41 = fs.readFileSync("/home/hatch/workspace/deen-day/www/app.js", "utf8");
-        check("Fix #41 Step 1: this step does not touch the astaghfirullah reminder (astaghRem keys intact)",
+        check("Fix #42: this step does not touch the astaghfirullah reminder (astaghRem keys intact)",
           _src41.includes("astaghRemOn") && _src41.includes("astaghRemMin") && _src41.includes("astaghRemSound"), "astaghfirullah intact");
       } finally {
         settings.duroodOnUnlock = _saved41.duroodOnUnlock;
-        settings.duroodAutostartOpened = _saved41.duroodAutostartOpened;
+        settings.duroodAppSettingsOpened = _saved41.duroodAppSettingsOpened;
         settings.lang = _saved41.lang;
         delete globalThis.Capacitor;
       }
@@ -1761,7 +1773,7 @@ Object.assign(settings, _savedTz);
         check("Fix #41 Step 2: the old nag text is gone from the shipped JS",
           !src.includes("অনুমতি দিন, নইলে আজান বাজবে না") && !src.includes("ওপরে অনুমতি দিন"), "nag gone");
         check("Fix #41 Step 2: location is the FIRST step of the first-run chain",
-          src.includes('const PERM_STEPS = ["location", "notifications", "exact", "battery", "autostart"]'), "location first");
+          src.includes('const PERM_STEPS = ["location", "notifications", "exact", "battery", "appsettings"]'), "location first");
         check("Fix #41 Step 2: permStatus reports the location grant and permRequestStep asks it via detectLocation(false)",
           src.includes("location: locGranted") && src.includes('if (id === "location")') && src.includes("await detectLocation(false)"), "chain wiring");
         check("Fix #41 Step 2: detectLocation checks the real status first and never prompts from an automatic path",
@@ -1828,8 +1840,8 @@ Object.assign(settings, _savedTz);
         settings.permStepsAsked = {}; settings.onboarded = false; settings.locPermGranted = false;
         settings.locManual = false; settings.autoLoc = true;
         await runPermChain(false);
-        check("Fix #41 Step 2: first run asks location (via GPS, once) + notifications + exact + autostart (via requestStep, once each)",
-          _geoCalls.n === 1 && ["notifications","exact","autostart"].every(s=>_stepCalls.filter(x=>x===s).length === 1),
+        check("Fix #41 Step 2: first run asks location (via GPS, once) + notifications + exact + appsettings (via requestStep, once each)",
+          _geoCalls.n === 1 && ["notifications","exact","appsettings"].every(s=>_stepCalls.filter(x=>x===s).length === 1),
           "location via GPS x1; " + _stepCalls.join(","));
         check("Fix #41 Step 2: a failed exact-alarm open toasts the manual Settings path instead of stalling",
           els["#toast"].textContent.includes("Alarms & reminders"), "manual path");
@@ -2100,6 +2112,103 @@ Object.assign(settings, _savedTz);
         Object.assign(settings, _saved44);
         delete globalThis.Capacitor;
       }
+    }
+
+    // ---- Fix #42 (27 Nov 2026 voice call): azan keeps playing through
+    // notifications; unlock durood keep-alive; "name" row gone; pre-waqt
+    // announcement; Friday Jumu'ah text ----
+    {
+      const _man42 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/AndroidManifest.xml", "utf8");
+      const _javaAzan42 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AzanPlaybackService.java", "utf8");
+      const _javaKeep42 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/UnlockKeepAliveService.java", "utf8");
+      const _javaRecv42 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AlarmReceiver.java", "utf8");
+      const _javaSched42 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AlarmScheduler.java", "utf8");
+      const _javaMain42 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/MainActivity.java", "utf8");
+      const _javaBoot42 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/BootReceiver.java", "utf8");
+      const _javaPlug42 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodUnlockPlugin.java", "utf8");
+      // Azan service pins: the azan plays as real media, not a channel sound.
+      check("Fix #42: AzanPlaybackService plays R.raw.azan with a MediaPlayer holding AUDIOFOCUS_GAIN",
+        _javaAzan42.includes("R.raw.azan") && _javaAzan42.includes("MediaPlayer") && _javaAzan42.includes("AUDIOFOCUS_GAIN"), "media + focus");
+      check("Fix #42: azan service goes foreground on the silent channel and keeps the notification when done",
+        _javaAzan42.includes("startForeground(id, n)") && _javaAzan42.includes('"azan-v2-silent"') && _javaAzan42.includes("stopForeground(false)"), "silent visual");
+      check("Fix #42: azan service falls back to the sounding azan-v2 channel when playback fails",
+        _javaAzan42.includes("fallbackToChannelSound") && _javaAzan42.includes('"azan-v2"'), "fallback");
+      check("Fix #42: azan service never ducks for a notification ding (keeps playing at full volume)",
+        _javaAzan42.includes("AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK") && _javaAzan42.includes("setWillPauseWhenDucked(false)"), "no duck");
+      // Receiver routing pins.
+      check("Fix #42: AlarmReceiver routes a sounding azan through the service and posts the visual silently",
+        _javaRecv42.includes('if ("azan-v2".equals(type))') && _javaRecv42.includes("startAzanService(context, id, title, body)") && _javaRecv42.includes('visualChannel = serviceStarted ? "azan-v2-silent" : "azan-v2"'), "routing");
+      check("Fix #42: AlarmReceiver shows the full text (BigTextStyle) so the waqt name is always visible",
+        _javaRecv42.includes("BigTextStyle"), "big text");
+      check("Fix #42: AlarmReceiver still speaks the body with Bengali TTS (announcement unchanged)",
+        _javaRecv42.includes("speakViaTts") && _javaRecv42.includes('tts.setLanguage(new Locale("bn"))'), "TTS kept");
+      // Manifest pins.
+      check("Fix #42: manifest registers the azan service (mediaPlayback) and the keep-alive service (specialUse)",
+        _man42.includes('android:name=".AzanPlaybackService"') && _man42.includes('android:foregroundServiceType="mediaPlayback"') &&
+        _man42.includes('android:name=".UnlockKeepAliveService"') && _man42.includes('android:foregroundServiceType="specialUse"'), "services");
+      check("Fix #42: manifest declares the special-use subtype property and both foreground-service permissions",
+        _man42.includes("android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE") && _man42.includes("FOREGROUND_SERVICE_MEDIA_PLAYBACK") && _man42.includes("FOREGROUND_SERVICE_SPECIAL_USE"), "permissions");
+      // Keep-alive service pins: the real unlock-durood fix (settings ruled out).
+      check("Fix #42: keep-alive service is a foreground service (START_STICKY) with a persistent notification",
+        _javaKeep42.includes("startForeground(NOTIF_ID, n)") && _javaKeep42.includes("START_STICKY") && _javaKeep42.includes("setOngoing(true)"), "keep-alive");
+      check("Fix #42: keep-alive service plays NO audio and registers NO receiver (the manifest receiver stays the only durood player)",
+        !_javaKeep42.includes("MediaPlayer") && !_javaKeep42.includes("registerReceiver") && !_javaKeep42.includes("IntentFilter") && !_javaKeep42.includes("BroadcastReceiver"), "no double durood");
+      check("Fix #42: keep-alive notification is silent (LOW importance, no sound, no vibration)",
+        _javaKeep42.includes("IMPORTANCE_LOW") && _javaKeep42.includes("setSound(null, null)") && _javaKeep42.includes("enableVibration(false)"), "silent notification");
+      check("Fix #42: keep-alive service starts on app open and on boot, only when the durood toggle is on",
+        _javaMain42.includes("UnlockKeepAliveService.start(this)") && _javaBoot42.includes("UnlockKeepAliveService.start(context)"), "wired");
+      check("Fix #42: the durood toggle starts/stops the keep-alive service",
+        _javaPlug42.includes("UnlockKeepAliveService.start(getContext())") && _javaPlug42.includes("UnlockKeepAliveService.stop(getContext())"), "toggle");
+      // Pre-azan v2 pins.
+      check("Fix #42: native pre-azan channel is preazan-v2, HIGH importance with the reminder sound, old channel deleted",
+        _javaSched42.includes('"preazan-v2"') && _javaSched42.includes("IMPORTANCE_HIGH, R.raw.reminder") && _javaSched42.includes('deleteNotificationChannel("preazan")'), "preazan-v2");
+      check("Fix #42: LN pre-azan channel is preazan-v2 with the reminder sound (JS side)",
+        src.includes('id: "preazan-v2"') && src.includes('sound: "reminder.mp3"'), "LN v2");
+      // "name" row gone pins (the model still keeps "name" — see Fix #38).
+      check("Fix #42: the 'name' option object is gone from ALARM_SOUNDS (the row cannot render)",
+        !src.includes('id:"name"'), "no name option");
+      // Friday Jumu'ah functional tests: mock Friday 20 Nov 2026 and
+      // Thursday 19 Nov 2026 (same pattern as Fix #26's fake26).
+      const _saved42j = { ...settings };
+      Object.assign(settings, { country:"Malaysia", city:"Ipoh", lat:4.5975, lon:101.0901,
+        tzName:"Asia/Kuala_Lumpur", locId:"ipoh", tzLoc:"ipoh", method:0, school:1, schoolExplicit:false });
+      __setTimings({Fajr:"05:42", Sunrise:"07:03", Dhuhr:"13:00", Asr:"16:24", Maghrib:"18:58", Isha:"20:10", Imsak:"05:32", Firstthird:"22:59", Lastthird:"03:01"});
+      const _RealDate42 = Date;
+      const _fake42 = (y, m, d) => {
+        const t = new Date(y, m, d); t.setHours(4, 0, 0, 0);
+        globalThis.Date = class extends _RealDate42 {
+          constructor(...a){ super(...(a.length ? a : [t.getTime()])); }
+          static now(){ return t.getTime(); }
+        };
+      };
+      try {
+        _fake42(2026, 10, 20); // Friday
+        const _fri = buildPrayerAlarmList();
+        const _friDhuhr = _fri.filter(a=>a.prayerId==="Dhuhr" && a.type==="preazan-v2");
+        check("Fix #42: on Friday the Dhuhr pre-azan (T-5 and T-2) says 'জুম্মার নামাজ পড়ার প্রস্তুতি নিন'",
+          _friDhuhr.length===2 && _friDhuhr.every(a=>a.body===JUMUAH_PREAZAN_TEXT), _friDhuhr.map(a=>a.body).join(" | "));
+        const _friFajr = _fri.filter(a=>a.prayerId==="Fajr" && a.type==="preazan-v2");
+        check("Fix #42: on Friday Fajr pre-azan is unchanged (normal Fajr text)",
+          _friFajr.length===2 && _friFajr.every(a=>a.body===PREAZAN_TEXTS.Fajr), "Fajr unchanged");
+        check("Fix #42: on Friday the azan-time announcement is unchanged (AZAN == PREAZAN, no Jumu'ah text at azan time)",
+          AZAN_SPEAK_TEXTS.Dhuhr === PREAZAN_TEXTS.Dhuhr, "azan unchanged");
+        _fake42(2026, 10, 19); // Thursday
+        const _thu = buildPrayerAlarmList();
+        const _thuDhuhr = _thu.filter(a=>a.prayerId==="Dhuhr" && a.type==="preazan-v2");
+        check("Fix #42: on Thursday the Dhuhr pre-azan says the normal Dhuhr text (no Jumu'ah text)",
+          _thuDhuhr.length===2 && _thuDhuhr.every(a=>a.body===PREAZAN_TEXTS.Dhuhr), "Thursday normal");
+      } finally {
+        globalThis.Date = _RealDate42;
+        Object.assign(settings, _saved42j);
+      }
+      // PREAZAN/AZAN verbatim pins (Fix #8, user-approved 25 Nov).
+      check("Fix #42: PREAZAN_TEXTS verbatim and AZAN_SPEAK_TEXTS == PREAZAN_TEXTS",
+        PREAZAN_TEXTS.Fajr === "ফজরের নামাজের সময় হয়েছে, ঘুম থেকে উঠে মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+        PREAZAN_TEXTS.Dhuhr === "যোহরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+        PREAZAN_TEXTS.Asr === "আসরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+        PREAZAN_TEXTS.Maghrib === "মাগরিবের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+        PREAZAN_TEXTS.Isha === "ইশার নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+        AZAN_SPEAK_TEXTS.Dhuhr === PREAZAN_TEXTS.Dhuhr, "verbatim");
     }
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);

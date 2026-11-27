@@ -145,6 +145,11 @@ public final class AlarmScheduler {
         try {
             NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm == null) return;
+            // Fix #42: the azan-v2 channel sound (azan.mp3) is now only
+            // the FALLBACK — the live azan plays as media from
+            // AzanPlaybackService, and its visual notification posts on
+            // azan-v2-silent. The channel is kept so the fallback still
+            // rings when the service cannot start.
             createChannel(nm, ctx, "azan-v2", "Azan", "Prayer time azan alerts",
                     NotificationManager.IMPORTANCE_HIGH, R.raw.azan);
             // Fix #38: silent azan channel — a "নিঃশব্দ" alarm posts here,
@@ -157,8 +162,16 @@ public final class AlarmScheduler {
             // channel's sound, so the only reliable repair is a fresh
             // channel ID. Delete the old (possibly silent) one.
             nm.deleteNotificationChannel("azan");
-            createChannel(nm, ctx, "preazan", "Pre-azan reminders", "2 minutes before prayer time",
-                    NotificationManager.IMPORTANCE_DEFAULT, -1);
+            // Fix #42: pre-waqt reminders (T-5/T-2) now post on a FRESH
+            // HIGH-importance channel with the reminder sound, so the
+            // waqt name is actually announced (shown + spoken). The old
+            // "preazan" channel was DEFAULT importance with no sound,
+            // so on his phone the reminder never announced — and Android
+            // never updates an existing channel, so only a new channel
+            // id fixes it. The old channel is deleted.
+            createChannel(nm, ctx, "preazan-v2", "Pre-azan reminders", "Waqt announcement 5 and 2 minutes before each prayer",
+                    NotificationManager.IMPORTANCE_HIGH, R.raw.reminder);
+            nm.deleteNotificationChannel("preazan");
             createChannel(nm, ctx, "tahajjud", "Tahajjud", "Tahajjud notification (no azan)",
                     NotificationManager.IMPORTANCE_DEFAULT, -1);
             createChannel(nm, ctx, "sehri", "Sehri", "Sehri alarm",

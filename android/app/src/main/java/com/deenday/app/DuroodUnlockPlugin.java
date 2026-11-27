@@ -18,6 +18,11 @@ public class DuroodUnlockPlugin extends Plugin {
         boolean enabled = call.getBoolean("enabled", true);
         getContext().getSharedPreferences("mydeen", Context.MODE_PRIVATE)
                 .edit().putBoolean("durood_on_unlock", enabled).apply();
+        // Fix #42: the keep-alive service is what makes the unlock durood
+        // actually play on aggressive OEMs — start it with the toggle,
+        // stop it when the user turns the durood off.
+        if (enabled) UnlockKeepAliveService.start(getContext());
+        else UnlockKeepAliveService.stop(getContext());
         call.resolve();
     }
 }

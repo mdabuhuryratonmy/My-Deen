@@ -146,10 +146,11 @@ public class PrayerAlarmPlugin extends Plugin {
      * Bengali explanation in the app. "notifications" asks the runtime
      * permission only (in-app dialog); "exact" opens the exact-alarm
      * Settings page directly; "battery" asks the system battery-exemption
-     * dialog; "autostart" opens MIUI's autostart page (or the app's
-     * Settings page on other phones). Android does not let any app grant
-     * exact alarms or autostart itself — the app opens the exact page so
-     * the user only flips one switch, never digs through Settings.
+     * dialog; "appsettings" opens the app's Settings page (where
+     * autostart and battery live on every phone). Android does not let
+     * any app grant exact alarms or autostart itself — the app opens the
+     * exact page so the user only flips one switch, never digs through
+     * Settings.
      */
     @PluginMethod
     public void requestStep(PluginCall call) {
@@ -191,9 +192,13 @@ public class PrayerAlarmPlugin extends Plugin {
             call.resolve(ret);
             return;
         }
-        if ("autostart".equals(step)) {
+        // Fix #42: the old "autostart" step opened Xiaomi's MIUI
+        // autostart page — the wrong page for every other phone, and the
+        // user already has autostart on. The step now opens the generic
+        // app Settings page, which works on all phones.
+        if ("appsettings".equals(step)) {
             JSObject ret = new JSObject();
-            ret.put("opened", openAutostartSettings());
+            ret.put("opened", openAppSettings());
             call.resolve(ret);
             return;
         }
@@ -216,25 +221,15 @@ public class PrayerAlarmPlugin extends Plugin {
         }
     }
 
-    /** MIUI autostart page (Xiaomi/HyperOS); falls back to the app's
-        Settings page on other phones. Autostart cannot be detected
-        programmatically, so the app asks the user to confirm.
-        Fix #41 Step 1: returns whether a page actually opened — the old
-        version always reported success even when both intents failed, so
-        the app told the user the page had opened when nothing happened.
-        Each intent is only started when the system can resolve it. */
-    private boolean openAutostartSettings() {
-        try {
-            Intent intent = new Intent();
-            intent.setComponent(new android.content.ComponentName(
-                    "com.miui.securitycenter",
-                    "com.miui.permcenter.autostart.AutoStartManagementActivity"));
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            if (intent.resolveActivity(getContext().getPackageManager()) != null) {
-                getContext().startActivity(intent);
-                return true;
-            }
-        } catch (Exception ignored) {}
+    /** The app's own Settings page (generic Android intent, works on
+        every phone — this is where autostart and battery settings live).
+        Autostart cannot be detected programmatically, so the app asks
+        the user to confirm. Fix #41 Step 1: returns whether a page
+        actually opened — the old version always reported success even
+        when both intents failed, so the app told the user the page had
+        opened when nothing happened. The intent is only started when
+        the system can resolve it. */
+    private boolean openAppSettings() {
         try {
             Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
             intent.setData(Uri.parse("package:" + getContext().getPackageName()));
@@ -279,8 +274,8 @@ public class PrayerAlarmPlugin extends Plugin {
     /** Exact alarms (Android 12+) are granted on a Settings page, not by
         a runtime prompt — open it so the user can switch it on. Returns
         whether a page actually opened. Fix #41 Step 2: the old version
-        fired the intent blind and swallowed failure — on Xiaomi the
-        exact-alarm intent often does not resolve, so the app claimed the
+        fired the intent blind and swallowed failure — on some phones
+        the exact-alarm intent often does not resolve, so the app claimed the
         page had opened when nothing happened (the dead "অনুমতি দিন"
         button). Now the intent is only started when the system can
         resolve it, and the app's own Settings page is the fallback. */

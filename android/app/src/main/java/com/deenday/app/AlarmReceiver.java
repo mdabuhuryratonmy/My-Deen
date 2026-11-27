@@ -29,6 +29,20 @@ import org.json.JSONObject;
  * the announcement (speakText, Fix #40: "[Waqt] নামাজের সময় হয়েছে,
  * নামাজ পড়ে নাও") — as well as playing the azan through their
  * channel. Tahajjud stays a silent notification.
+ *
+ * Fix #42 (27 Nov 2026): the azan NO LONGER plays as the notification
+ * channel sound. Android plays only one notification sound at a time,
+ * so any incoming message/notification cut the azan dead. A sounding
+ * azan (type "azan-v2") is now played as real media by
+ * AzanPlaybackService (foreground service + MediaPlayer with
+ * AUDIOFOCUS_GAIN), and the visual notification posts on the silent
+ * channel (azan-v2-silent) so the azan never plays twice. If the
+ * service cannot start, the notification posts on the sounding azan-v2
+ * channel instead — the old behaviour, degraded but never silent.
+ * Silent azans (type "azan-v2-silent") are unchanged: notification
+ * only, no service. Pre-azan reminders (type "preazan-v2") are also
+ * unchanged apart from the BigTextStyle below, which shows the full
+ * Fix #8 sentence instead of truncating it to one line.
  */
 public class AlarmReceiver extends BroadcastReceiver {
     @Override
@@ -44,7 +58,16 @@ public class AlarmReceiver extends BroadcastReceiver {
             if (type.equals("azan")) type = "azan-v2";
             String title = intent.getStringExtra("title");
             String body = intent.getStringExtra("body");
-            NotificationCompat.Builder builder = new NotificationCompat.Builder(context, type)
+            // Fix #42: a sounding azan plays as real media, not as the
+            // channel sound — start the playback service and post the
+            // visual notification silently (no double azan). If the
+            // service cannot start, fall back to the sounding channel.
+            String visualChannel = type;
+            if ("azan-v2".equals(type)) {
+                boolean serviceStarted = startAzanService(context, id, title, body);
+                visualChannel = serviceStarted ? "azan-v2-silent" : "azan-v2";
+            }
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(context, visualChannel)
                     // Fix #14: was android.R.drawable.ic_dialog_info (the
                     // generic "i" in the screenshot). Small icon is the
                     // white "ماي دين" silhouette (status bar + shade);
@@ -52,6 +75,10 @@ public class AlarmReceiver extends BroadcastReceiver {
                     .setSmallIcon(R.drawable.ic_notification)
                     .setContentTitle(title != null ? title : "My Deen")
                     .setContentText(body != null ? body : "")
+                    // Fix #42: show the full text (the pre-azan Fix #8
+                    // sentence, the azan announcement) instead of one
+                    // truncated line, so the waqt name is always visible.
+                    .setStyle(new NotificationCompat.BigTextStyle().bigText(body != null ? body : ""))
                     .setAutoCancel(true)
                     .setPriority(NotificationCompat.PRIORITY_HIGH);
             Bitmap largeIcon = BitmapFactory.decodeResource(
@@ -104,6 +131,29 @@ public class AlarmReceiver extends BroadcastReceiver {
         finishes or 25 s pass, then shuts TTS down. Returns silently
         when TTS is unavailable or has no Bengali voice — the
         notification was already posted, so nothing is lost. */
+    /**
+     * Fix #42: start the azan media-playback service for a sounding
+     * azan. Returns true when the service was started (the visual
+     * notification then posts silently); false when it could not be
+     * started (the caller falls back to the sounding azan-v2 channel).
+     */
+    private static boolean startAzanService(Context context, int id, String title, String body) {
+        try {
+            Intent i = new Intent(context, AzanPlaybackService.class);
+            i.putExtra("id", id);
+            i.putExtra("title", title);
+            i.putExtra("body", body);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(i);
+            } else {
+                context.startService(i);
+            }
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
     private void speakViaTts(Context context, String text) {
         final Object lock = new Object();
         final boolean[] done = { false };

@@ -22,8 +22,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * in SharedPreferences ("mydeen" / "durood_on_unlock", default true)
  * and synced from the web settings toggle via DuroodUnlockPlugin.
  * Best-effort: on some Android versions / OEM skins the broadcast may
- * be delayed or not delivered while the app is killed (Xiaomi MIUI also
- * needs Autostart ON + Battery "No restrictions" for this app).
+ * be delayed or not delivered while the app is killed (some phones also
+ * need Autostart ON + Battery "No restrictions" for this app). Fix #42:
+ * the UnlockKeepAliveService keeps the app process alive so this
+ * broadcast is delivered even when the app was killed in the
+ * background — that, not a settings page, is the fix for a durood
+ * that never plays.
  * Build #19, Fix #6: the player is now built with explicit
  * notification audio attributes + full volume (see createPlayer) —
  * the old implicit MediaPlayer.create() left the audible route to

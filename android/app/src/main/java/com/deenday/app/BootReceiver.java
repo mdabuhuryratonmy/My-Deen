@@ -33,5 +33,9 @@ public class BootReceiver extends BroadcastReceiver {
         } catch (Exception ignored) {
             // Never crash the boot path.
         }
+        // Fix #42: restart the unlock keep-alive service after a reboot
+        // (only when the durood toggle is on) so the unlock durood
+        // keeps working without opening the app first.
+        UnlockKeepAliveService.start(context);
     }
 }

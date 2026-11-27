@@ -1807,7 +1807,7 @@ const Lb = (bn, en) => { const l = settings.lang; if (l==="bn") return bn;
 /* ---------------- settings ---------------- */
 const DEFAULTS = {city:"", country:"", lat:null, lon:null, method:0, school:0, schoolExplicit:false,
   lang:"en", theme:"dark", azan:true, adhan:"a1", reciter:"ar.alafasy", notif:false, tasbihTarget:33,
-  autoLoc:true, useCoords:false, profileName:"", gmail:"", duroodOnUnlock:true, duroodAutostartOpened:false, learnMadhhab:"hanafi",
+  autoLoc:true, useCoords:false, profileName:"", gmail:"", duroodOnUnlock:true, duroodAppSettingsOpened:false, learnMadhhab:"hanafi",
   dailyNotif:true, duroodRemOn:true, duroodRemMin:30, duroodRemSound:true, astaghRemOn:true, astaghRemMin:30, astaghRemSound:true,
   /* Location identity: locId names the CURRENT location ("c:lat,lon" for
      coordinate locations, "n:city|country" for city-name ones). The
@@ -3961,7 +3961,6 @@ const ALARM_SOUNDS = [
   {id:"silent", bn:"নিঃশব্দ", en:"Silent"},
   {id:"beep", bn:"বিপ", en:"Beep"},
   {id:"ring", bn:"রিং", en:"Ring"},
-  {id:"name", bn:"ওয়াক্তের নাম", en:"Prayer name"},
   {id:"notification", bn:"নোটিফিকেশন", en:"Notification"},
   {id:"azan", bn:"আজান", en:"Azan"}
 ];
@@ -3995,12 +3994,18 @@ function updateDetailTime(){
   const dt = $("#detail-time");
   if (dt) dt.textContent = `${Lb("সেট করা সময়", "Set time")}: ${set}`;
 }
-/* Multi-select (Fix #10): "name" is the permanent default and cannot be
-   turned off; one extra sound may be added (max 2 together). "silent"
-   stands alone. */
+/* Multi-select (Fix #10): "name" is the permanent default in the DATA
+   MODEL and cannot be turned off (normalizeSounds always keeps it); one
+   extra sound may be added (max 2 together). "silent" stands alone.
+   Fix #42 (27 Nov 2026): the "ওয়াক্তের নাম (ডিফল্ট)" ROW is gone from
+   the UI — the user asked for it removed (it could never be deselected,
+   tapping it only showed a toast). The model is untouched: "name" stays
+   in every stored selection, and the notification still shows the waqt
+   name. So the "name" tap is now a silent no-op (unreachable from the
+   UI), not a toast. */
 function toggleDetailSound(sid){
   if (!detailDraft) return;
-  if (sid==="name"){ toast(Lb("ওয়াক্তের নাম সবসময় চালু থাকে", "Prayer name is always on")); return; }
+  if (sid==="name") return; // permanent default in the model; no row, no toast
   let cur = detailDraft.sounds || ["name"];
   if (sid==="silent"){
     detailDraft.sounds = cur.includes("silent") ? ["name"] : ["silent"];
@@ -4018,7 +4023,7 @@ function renderDetailSounds(){
   const box = $("#detail-sounds"); if (!box) return;
   const sel = detailDraft.sounds || ["name"];
   box.innerHTML = ALARM_SOUNDS.map(s=>`<div class="sound-row ${sel.includes(s.id)?"on":""}" data-sound="${s.id}" role="button" tabindex="0">
-    <span class="sound-name">${Lb(s.bn, s.en)}${s.id==="name"?" ("+Lb("ডিফল্ট","Default")+")":""}</span>
+    <span class="sound-name">${Lb(s.bn, s.en)}</span>
     <span class="row"><span class="sound-check">${sel.includes(s.id)?"✅":""}</span>
     <button class="mini-btn" data-preview="${s.id}" title="${Lb("শুনুন","Preview")}">▶</button></span></div>`).join("");
   $$("#detail-sounds [data-sound]").forEach(r=>r.onclick=e=>{
@@ -4027,27 +4032,24 @@ function renderDetailSounds(){
   });
   $$("#detail-sounds [data-preview]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); previewAlarmSound(b.dataset.preview); });
   /* Fix #38: say plainly what the current selection plays at prayer
-     time. The truth: "name" (ওয়াক্তের নাম, the permanent default) adds
-     no separate sound — it is spoken only in the ▶ preview — but the
-     alarm itself still plays the azan on the azan channel, and the
-     prayer name shows in the notification. Only "silent" silences it. */
+     time. The truth: "name" (ওয়াক্তের নাম, the permanent default in the
+     model) adds no separate sound — but the alarm itself still plays the
+     azan on the azan channel, and the prayer name shows in the
+     notification. Only "silent" silences it.
+     Fix #42: the "(ডিফল্ট)" option row is gone from the UI, so the
+     explainer no longer names it — it just says what plays. */
   const ex = $("#detail-sound-explain"); if (ex) ex.textContent = detailSoundExplain(sel);
 }
 function detailSoundExplain(sounds){
   const ss = normalizeSounds(sounds);
   if (ss.includes("silent")) return Lb("নিঃশব্দ — ওয়াক্তের সময় কোনো সাউন্ড বাজবে না; শুধু নোটিফিকেশন আসবে।", "Silent — no sound plays at prayer time; only the notification arrives.");
   if (ss.includes("azan")) return Lb("ওয়াক্তের সময় আজান বাজবে।", "The azan will play at prayer time.");
-  return Lb("ওয়াক্তের নাম (ডিফল্ট) সবসময় চালু থাকে — ওয়াক্তের সময় আজান বাজবে, আর নোটিফিকেশনে ওয়াক্তের নাম দেখাবে।", "Prayer name (default) is always on — the azan will play at prayer time, and the notification shows the prayer name.");
+  return Lb("ওয়াক্তের সময় আজান বাজবে, আর নোটিফিকেশনে ওয়াক্তের নাম দেখাবে।", "The azan will play at prayer time, and the notification shows the prayer name.");
 }
 function previewAlarmSound(sound){
   stopAyahAudio();
   if (sound==="silent") return;
   if (sound==="beep" || sound==="ring"){ beepPreview(sound==="ring"); return; }
-  if (sound==="name"){
-    const name = detailId ? alarmItemName(detailId) : "";
-    speakText(Lb(`${name}র নামাজের সময় হয়েছে`, `It is time for ${name} prayer`));
-    return;
-  }
   if (sound==="notification"){ const a = $("#audio-reminder"); if (a){ a.currentTime=0; a.play().catch(()=>{}); } return; }
   if (sound==="azan"){ const a = $("#audio-azan"); if (a){ a.currentTime=0; a.play().catch(()=>{}); } return; }
 }
@@ -4096,7 +4098,7 @@ function checkPreAzanVoice(){
     for (const before of [5, 2]){
       if (at - before === mins && !rungToday[`${todayKey()}_${p}_pre${before}`]){
         rungToday[`${todayKey()}_${p}_pre${before}`] = true;
-        speakText(PREAZAN_TEXTS[p], "bn-BD");
+        speakText(preazanText(p, locNow()), "bn-BD"); // Fix #42: Friday Dhuhr speaks the Jumu'ah sentence
       }
     }
   }
@@ -4190,34 +4192,38 @@ function syncDuroodToggleNative(){
   } catch(e){}
 }
 
-/* Fix #41 Step 1 (24 Nov 2026 voice call): unlock durood never played on
-   the user's Xiaomi — NOT a receiver/audio bug. Verified correct: the
-   manifest receiver (exported, USER_PRESENT), DuroodUnlockReceiver's
+/* Fix #42 (27 Nov 2026 voice call): brand-neutral replacement for the
+   Fix #41 Xiaomi autostart button. The old button opened MIUI's
+   autostart page — useless on the user's Realme (and on every
+   non-Xiaomi phone), and the removal promised in the 25 Nov voice call
+   never happened. The failure itself is NOT a receiver/audio bug:
+   the manifest receiver (exported, USER_PRESENT), DuroodUnlockReceiver's
    goAsync playback, res/raw/durood.mp3 in the APK, the plugin registered
-   in MainActivity, and syncDuroodToggleNative() running at startup. The
-   break is delivery: MIUI never delivers ACTION_USER_PRESENT to a dead
-   app without Autostart permission (default OFF for a sideloaded APK),
-   and the only autostart prompt was the one-shot first-launch chain step,
-   which he never completed — autostart state is undetectable, so the
-   chain could not know. The Settings page only told him to dig through
-   Settings by hand, which users will not do. So the Durood row now has a
-   one-tap button that opens the MIUI autostart page directly (the
-   existing native requestStep("autostart") deep link — no new native
-   code path). The app records only that the page was opened
-   (settings.duroodAutostartOpened) and tells the user, in one line, to
-   flip the switch next to My Deen. Nothing else about durood changes:
-   it still plays ONLY on unlock, and the toggle still syncs on/off to
-   the native receiver. */
-async function openDuroodAutostart(){
+   in MainActivity, and syncDuroodToggleNative() running at startup are
+   all verified correct. The break is delivery: the system never delivers
+   ACTION_USER_PRESENT to a dead app. The user confirmed 27 Nov he
+   already has Autostart ON + Battery "No restrictions" and the durood
+   STILL does not play — so a settings page is NOT the fix. The fix is
+   the UnlockKeepAliveService (a lightweight foreground service that
+   keeps the app alive, started from MainActivity/BootReceiver and
+   from the durood toggle). This button is only a secondary affordance:
+   a one-tap way to open the generic Android app-settings page for
+   My Deen (the native requestStep("appsettings") step — no
+   brand-specific page on any phone). The app records only that the
+   page was opened (settings.duroodAppSettingsOpened). Nothing else
+   about durood changes: it still plays ONLY on unlock, and the toggle
+   still syncs on/off to the native receiver — and switching the toggle
+   now also starts/stops the keep-alive service. */
+async function openDuroodAppSettings(){
   const PA = permPA();
   let opened = false;
   if (PA && PA.requestStep){
-    try { const r = await PA.requestStep({ step: "autostart" }); opened = !!(r && r.opened); } catch(e){}
+    try { const r = await PA.requestStep({ step: "appsettings" }); opened = !!(r && r.opened); } catch(e){}
   }
-  if (opened){ settings.duroodAutostartOpened = true; saveSettings(); }
+  if (opened){ settings.duroodAppSettingsOpened = true; saveSettings(); }
   toast(opened
-    ? Lb("অটোস্টার্ট পেজ খুলেছে — সেখানে My Deen-এর পাশের সুইচটি চালু করুন, তাহলে আনলক করলে দরুদ বাজবে", "Autostart page opened — turn on the switch next to My Deen there, then the durood will play on unlock")
-    : Lb("অটোস্টার্ট পেজ খোলা যায়নি — ফোনের Settings → Apps → My Deen → Autostart চালু করুন", "Could not open the autostart page — turn on Autostart in your phone's Settings → Apps → My Deen"));
+    ? Lb("অ্যাপের সেটিংস খুলেছে", "App settings opened")
+    : Lb("সেটিংস পেজ খোলা যায়নি — ফোনের Settings → Apps → My Deen খুলুন", "Could not open the settings page — open My Deen in your phone's Settings → Apps"));
 }
 
 /* ---------------- Daily hadith & verse notification (fully local) ----
@@ -4642,6 +4648,18 @@ const AZAN_SPEAK_TEXTS = {
   Isha: "ইশার নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন"
 };
 const TAHAJJUD_TEXT = "তাহাজ্জুদের সময় হয়েছে, উঠে নামাজের প্রস্তুতি নিন";
+/* Friday Jumu'ah (Fix #42, 27 Nov 2026 — his exact words, voice call):
+   on Fridays the Dhuhr pre-azan reminders (T-5/T-2) say
+   "জুম্মার নামাজ পড়ার প্রস্তুতি নিন" instead of the usual Dhuhr
+   sentence. Friday only; other days and other prayers are unchanged.
+   PREAZAN_TEXTS is NEVER altered — the Jumu'ah sentence lives in its
+   own constant. locDate is a location-frame Date (locNow), so the
+   Friday is judged by the location's day, not the device's. */
+const JUMUAH_PREAZAN_TEXT = "জুম্মার নামাজ পড়ার প্রস্তুতি নিন";
+function preazanText(id, locDate){
+  if (id === "Dhuhr" && locDate && locDate.getDay() === 5) return JUMUAH_PREAZAN_TEXT;
+  return PREAZAN_TEXTS[id];
+}
 const PREAZAN_IDS = [31,32,33,34,35];
 const PREAZAN5_IDS = [51,52,53,54,55];
 const TAHAJJUD_ID = 36, SEHRI_ID = 37, IFTAR_ID = 38;
@@ -4688,8 +4706,14 @@ function buildPrayerAlarmList(){
     [5, 2].forEach((mins, j)=>{
       const preAt = new Date(at.getTime() - mins*60000);
       if (preAt <= now) preAt.setDate(preAt.getDate()+1);
-      list.push({ id: (j===0 ? PREAZAN5_IDS : PREAZAN_IDS)[i], at: preAt, type: "preazan",
-        title: "My Deen — " + name, body: PREAZAN_TEXTS[id], sound: "none", prayerId: id, speak: true });
+      /* Fix #42: the pre-azan channel is preazan-v2 (HIGH importance +
+         reminder sound) — the old "preazan" channel was silent and
+         DEFAULT importance, and Android never updates an existing
+         channel, so the reminder never announced itself. The body is
+         the exact Fix #8 sentence (Friday Dhuhr: the Jumu'ah sentence
+         via preazanText) and the native receiver speaks it. */
+      list.push({ id: (j===0 ? PREAZAN5_IDS : PREAZAN_IDS)[i], at: preAt, type: "preazan-v2",
+        title: "My Deen — " + name, body: preazanText(id, locNow(preAt)), sound: "none", prayerId: id, speak: true });
     });
     if (!settings.alarmOn[id]) return;
     /* Fix #38: "silent" must actually silence — before this every azan
@@ -4827,7 +4851,11 @@ async function scheduleNativeAzan(){
     await LN.createChannel({ id: "azan-v2", name: "Azan", description: "Prayer time azan alerts", sound: "azan.mp3", importance: 5, vibration: true });
     // Fix #38: silent azan channel — "নিঃশব্দ" posts here, so no sound plays.
     await LN.createChannel({ id: "azan-v2-silent", name: "Azan (silent)", description: "Prayer time alerts without sound", importance: 5, vibration: true });
-    await LN.createChannel({ id: "preazan", name: "Pre-azan reminders", description: "5 and 2 minutes before prayer time", importance: 4, vibration: true });
+    // Fix #42: pre-azan reminders post on preazan-v2 — HIGH importance
+    // with the reminder sound, so the reminder actually announces itself
+    // (the old "preazan" channel was silent + DEFAULT importance, and
+    // Android never updates an existing channel's sound/importance).
+    await LN.createChannel({ id: "preazan-v2", name: "Pre-azan reminders", description: "5 and 2 minutes before prayer time", sound: "reminder.mp3", importance: 5, vibration: true });
     await LN.createChannel({ id: "tahajjud", name: "Tahajjud", description: "Tahajjud notification (no azan)", importance: 4, vibration: true });
     await LN.createChannel({ id: "sehri", name: "Sehri", description: "Sehri alarm", importance: 4, vibration: true });
     await LN.createChannel({ id: "iftar", name: "Iftar", description: "Iftar alarm", importance: 4, vibration: true });
@@ -4882,7 +4910,7 @@ const NOMINATIM = "https://nominatim.openstreetmap.org/reverse";
 /* Fix #41 Step 2: the location permission must be asked ONCE, never again
    from an automatic path. Before this fix, saveSettingsFromUI called
    detectLocation(true) on EVERY settings save, and detectLocation called
-   getCurrentPosition blindly — on Xiaomi (MIUI "ask every time" / one-time
+   getCurrentPosition blindly — on some phones ("ask every time" / one-time
    grants / a fresh install after a reinstall) the OS reports the permission
    as not-granted, so the plugin re-requested it on every save. Now:
    - locPermStatus() reads the real status first (Capacitor plugin; then the
@@ -5232,24 +5260,24 @@ function maybeAskPermissions(){
 // dots, "এড়িয়ে যান / পরে করব", explanations). When the app opens it
 // just asks for each permission the way normal apps do: the phone's own
 // dialog for location, notifications and battery, the phone's own
-// Settings page for exact alarms and autostart (Android allows those two
-// ONLY as a toggle on a system page — no app can grant them from inside
-// itself). The chain runs ONCE (first launch) and then marks onboarded
+// Settings page for exact alarms and the app-settings page (Android
+// allows those ONLY as toggles on a system page — no app can grant them
+// from inside itself). The chain runs ONCE (first launch) and then marks onboarded
 // even if the user declines something — a decline is never re-asked on
 // every launch. Fix #41 Step 2 (user 24 Nov 22:47): the Fix #19 home
 // banner is GONE — it is no longer the fallback; the Settings "সব
 // অনুমতি দিন" button re-runs the chain for what is missing. Location
 // is the first step, so a fresh install asks for everything at once.
-const PERM_STEPS = ["location", "notifications", "exact", "battery", "autostart"];
+const PERM_STEPS = ["location", "notifications", "exact", "battery", "appsettings"];
 /* Build #19, Fix #3 — why the chain re-prompted / stalled, and the repair:
    (a) The chain only marked onboarded at the very END. Any interruption
-       — the app killed while the user is on a Settings page (Xiaomi
-       kills background apps aggressively), or a plugin promise that
+       — the app killed while the user is on a Settings page (some phones
+       kill background apps aggressively), or a plugin promise that
        never settles (the permission dialog's activity result is lost
        when the activity is recreated) — restarted the WHOLE chain on
-       the next launch, re-opening pages the user already saw. Autostart
-       can never be detected as granted, so it re-opened EVERY time
-       until the chain completed.
+       the next launch, re-opening pages the user already saw. The
+       app-settings step can never be detected as done, so it re-opened
+       EVERY time until the chain completed.
    (b) The fix: every step is recorded the moment it is ASKED
        (settings.permStepsAsked, saved at once) and the auto chain never
        asks the same step twice. A kill mid-chain resumes from the next
@@ -5276,9 +5304,9 @@ async function permStatus(){
   const PA = permPA();
   const locGranted = (await locPermStatus()) === "granted"; // Fix #41 Step 2: location is a first-run step too
   if (PA && PA.getStatus){ try { const s = await PA.getStatus();
-    return { location: locGranted, notifications: !!s.notificationsGranted, exact: !!s.exactAlarmGranted, battery: !!s.batteryExempt, autostart: false /* undetectable */ };
+    return { location: locGranted, notifications: !!s.notificationsGranted, exact: !!s.exactAlarmGranted, battery: !!s.batteryExempt, appsettings: false /* undetectable */ };
   } catch(e){} }
-  return { location: locGranted, notifications: (typeof Notification !== "undefined" && Notification.permission === "granted"), exact: true, battery: true, autostart: true }; // web: only notifications exist
+  return { location: locGranted, notifications: (typeof Notification !== "undefined" && Notification.permission === "granted"), exact: true, battery: true, appsettings: true }; // web: only notifications exist
 }
 async function permRequestStep(id){
   /* Fix #41 Step 2: location is the first first-run step. An explicit
@@ -5309,11 +5337,10 @@ async function permChainFrom(idx, force){
     // settles), the next launch does not re-open this page.
     permMarkAsked(id);
     const res = await permTimeout(permRequestStep(id), id === "notifications" ? 90000 : 30000);
-    if (id === "exact" || id === "autostart"){
+    if (id === "exact" || id === "appsettings"){
       // A system page opened — the user is away from the app. Pause the
       // chain here; the foreground handler resumes it when they return.
-      // Autostart is last, so pausing there just ends the chain on return.
-      if (id === "autostart"){ finishPermChain(); return; }
+      // "appsettings" is last, so a page that opened just ends the chain.
       /* Fix #41 Step 1 hole (24 Nov 2026 night): pause ONLY when a
          system page actually opened. The old else-branch also paused
          when the plugin threw (res null), when the 30 s stall guard
@@ -5323,11 +5350,15 @@ async function permChainFrom(idx, force){
          a tap looked dead. Now: no page opened → tell the user the
          manual path once (unless already granted) and carry on. */
       if (res && res !== "timeout" && res.opened === true){
+        if (id === "appsettings"){ finishPermChain(); return; }
         permChainWaiting = true; permChainIdx = i + 1; return;
       }
       if (!res || res === "timeout" || !res.granted){
-        toast(Lb("অ্যালার্মের পেজ খোলা যায়নি — ফোনের Settings → Apps → My Deen → 'Alarms & reminders' চালু করুন, তাহলে সঠিক সময়ে আজান বাজবে", "Could not open the alarm page — turn on 'Alarms & reminders' for My Deen in your phone's Settings → Apps → My Deen, then the azan will ring on time"));
+        toast(id === "exact"
+          ? Lb("অ্যালার্মের পেজ খোলা যায়নি — ফোনের Settings → Apps → My Deen → 'Alarms & reminders' চালু করুন, তাহলে সঠিক সময়ে আজান বাজবে", "Could not open the alarm page — turn on 'Alarms & reminders' for My Deen in your phone's Settings → Apps → My Deen, then the azan will ring on time")
+          : Lb("অ্যাপের সেটিংস পেজ খোলা যায়নি — ফোনের Settings → Apps → My Deen খুলে Autostart চালু করুন এবং Battery-তে \"No restrictions\" দিন", "Could not open the app settings page — open My Deen in your phone's Settings → Apps, turn Autostart on and set Battery to 'No restrictions'"));
       }
+      if (id === "appsettings"){ finishPermChain(); return; }
     }
     if (id === "battery"){
       // The battery dialog resolves immediately after opening — wait for
@@ -5371,18 +5402,19 @@ function applyLang(){
 }
 function fillSettings(){
   const du = $("#set-durood"); if (du) du.checked = !!settings.duroodOnUnlock;
-  /* Fix #41 Step 1: one-tap autostart button under the durood toggle.
+  /* Fix #42 (27 Nov 2026): brand-neutral app-settings button under the
+     durood toggle — replaces the Fix #41 Xiaomi autostart button.
      Native Android only — the web/PWA has no unlock durood, so the row
      stays hidden there. */
-  const ab = $("#btn-durood-autostart");
+  const ab = $("#btn-durood-appsettings");
   if (ab){
-    ab.onclick = ()=>openDuroodAutostart();
-    ab.textContent = Lb("📱 অটোস্টার্ট চালু করুন", "📱 Turn on Autostart");
+    ab.onclick = ()=>openDuroodAppSettings();
+    ab.textContent = Lb("⚙️ অ্যাপের সেটিংস খুলুন", "⚙️ Open app settings");
   }
-  const ar = $("#durood-autostart-row");
+  const ar = $("#durood-appsettings-row");
   if (ar) ar.style.display = permPA() ? "" : "none";
-  const ah = $("#durood-autostart-hint");
-  if (ah) ah.textContent = Lb("Xiaomi ফোন অ্যাপ বন্ধ করে দিলে আনলকের দরুদ বাজে না — অটোস্টার্ট চালু থাকতে হয়।", "On Xiaomi phones the app is stopped when closed, so the unlock durood needs Autostart on.");
+  const ah = $("#durood-appsettings-hint");
+  if (ah) ah.textContent = Lb("আনলক করলে দরুদ বাজানোর জন্য অ্যাপটি নিজে থেকেই চালু থাকে — নিচের বোতামে অ্যাপের সেটিংস খুলতে পারবেন।", "The app keeps itself running so the durood plays on unlock — the button below opens the app settings.");
   const pn = $("#set-profile-name"); if (pn) pn.value = settings.profileName || "";
   renderGreet(); renderLoginState();
   const sl0 = $("#set-lang");
@@ -5416,7 +5448,7 @@ async function saveSettingsFromUI(){
   /* Fix #41 Step 2: saving settings must never re-ask for location.
      The old code re-ran GPS detection on every save, and the plugin
      re-requested the permission whenever the OS reported it as
-     not-granted — on Xiaomi that was every save. Times now refresh from
+     not-granted — on some phones that was every save. Times now refresh from
      the saved location; GPS is only re-run from the explicit GPS button
      or the first-run permission flow. */
   initPrayers();
