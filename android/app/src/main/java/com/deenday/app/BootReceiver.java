@@ -35,7 +35,7 @@ public class BootReceiver extends BroadcastReceiver {
         }
         // Fix #42: restart the unlock keep-alive service after a reboot
         // (only when the durood toggle is on) so the unlock durood
-        // keeps working without opening the app first.
+        // keeps auto-playing without opening the app first.
         UnlockKeepAliveService.start(context);
     }
 }

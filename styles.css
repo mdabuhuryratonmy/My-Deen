@@ -32,20 +32,20 @@ input,select{font-family:inherit}
 /* ---------- header ---------- */
 header{
   background:linear-gradient(135deg,var(--emerald-d),var(--emerald) 60%,var(--emerald-l));
-  color:#fff; padding:16px 16px 20px; border-radius:0 0 22px 22px;
+  color:#fff; padding:12px 16px 14px; border-radius:0 0 22px 22px;
   box-shadow:var(--shadow); position:sticky; top:0; z-index:20;
 }
 .head-row{display:flex; align-items:center; justify-content:space-between; gap:8px}
 .brand{display:flex; align-items:center; gap:10px}
-.brand img{width:44px; height:44px; border-radius:12px; border:2px solid var(--gold)}
+.brand img{width:36px; height:36px; border-radius:12px; border:2px solid var(--gold)}
 .brand h1{margin:0; font-size:22px; line-height:1.1}
 .brand small{display:block; font-size:12px; color:var(--gold-l); letter-spacing:.4px}
 .icon-btn{background:rgba(255,255,255,.16); color:#fff; border:1px solid rgba(255,255,255,.35);
-  border-radius:10px; width:40px; height:40px; font-size:19px; position:relative}
+  border-radius:10px; width:36px; height:36px; font-size:17px; position:relative}
 .icon-btn .badge{position:absolute; top:-7px; right:-7px; min-width:19px; height:19px;
   background:#e11d48; color:#fff; border-radius:999px; font-size:11px; font-weight:700;
   display:flex; align-items:center; justify-content:center; padding:0 5px; border:2px solid #fff}
-.dates{margin-top:10px; font-size:13.5px; color:#e7f2ec; line-height:1.6}
+.dates{margin-top:10px; font-size:13.5px; color:#e7f2ec; line-height:1.5}
 .dates b{color:var(--gold-l)}
 .greet{margin-top:6px; font-size:14px; color:var(--gold-l); font-weight:600}
 
@@ -380,15 +380,20 @@ nav button.on{color:var(--emerald); font-weight:700}
 .hidden{display:none !important}
 .center{text-align:center}
 hr.sep{border:none; border-top:1px solid var(--line); margin:14px 0}
-/* ---------- Fix #4: countdown ring hero ---------- */
-.ring-hero{position:relative; overflow:hidden; text-align:center; color:#fff; border:none; padding:22px 16px 16px}
+/* ---------- Fix #4: countdown ring hero ----------
+   Fix #47 (28 Nov 2026): the ring is 180px, not 220 — the marked
+   Home section (dates + ring + pills + 5 prayer rows + Alarm/Calendar
+   row) must fit on one 1080x2400 screen without scrolling. The JS
+   progress math uses the SVG's own units (r=96), so shrinking the
+   CSS size does not touch it. */
+.ring-hero{position:relative; overflow:hidden; text-align:center; color:#fff; border:none; padding:18px 16px 12px}
 .ring-hero[data-sky="dawn"]{background:linear-gradient(180deg,#2b3a67 0%, #7b5e9e 34%, #e8907c 62%, #f7b267 100%)}
 .ring-hero[data-sky="day"]{background:linear-gradient(180deg,#1d6fb8 0%, #4aa3df 45%, #a8d8f0 78%, #d9eefb 100%)}
 .ring-hero[data-sky="golden"]{background:linear-gradient(180deg,#5b4a8a 0%, #c97b4a 42%, #f2a65a 70%, #ffd98a 100%)}
 .ring-hero[data-sky="dusk"]{background:linear-gradient(180deg,#1c1445 0%, #6d2a5e 40%, #c94f5e 68%, #ff8a5c 100%)}
 .ring-hero[data-sky="night"]{background:linear-gradient(180deg,#020617 0%, #0b1e3a 52%, #16324f 82%, #1e4a6b 100%)}
-.ring-wrap{position:relative; width:220px; height:220px; margin:0 auto}
-.ring-svg{width:220px; height:220px; transform:rotate(-90deg)}
+.ring-wrap{position:relative; width:180px; height:180px; margin:0 auto}
+.ring-svg{width:180px; height:180px; transform:rotate(-90deg)}
 .ring-bg{fill:none; stroke:rgba(255,255,255,.28); stroke-width:9}
 .ring-fg{fill:none; stroke:var(--gold); stroke-width:9; stroke-linecap:round}
 .ring-center{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-shadow:0 2px 10px rgba(0,0,0,.45)}
@@ -400,22 +405,27 @@ hr.sep{border:none; border-top:1px solid var(--line); margin:14px 0}
 .alarm-status{font-size:13px; color:#666; margin-top:8px}
 .ring-count{font-size:34px; font-weight:700; letter-spacing:1px; margin:2px 0}
 .ring-sub{font-size:13px; opacity:.92}
-.pills{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:16px}
+.pills{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:12px}
 .pill{background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.35); color:#fff;
-  border-radius:999px; padding:6px 12px; font-size:13px; font-weight:600}
+  border-radius:999px; padding:5px 10px; font-size:13px; font-weight:600}
 .small-ring{margin:6px auto 0}
 
-/* prayer list: icon + orange dot */
-.p-ic{margin-right:6px}
-.orange-dot{display:inline-block; width:9px; height:9px; border-radius:50%; background:#f97316; margin-left:6px; vertical-align:middle}
+/* prayer list: icon + orange dot (Fix #47: icons smaller — the
+   prayer emoji 16→14px, done circle 26→22px, orange dot 9→8px;
+   prayer names/times keep their sizes) */
+.p-ic{margin-right:6px; font-size:14px}
+.orange-dot{display:inline-block; width:8px; height:8px; border-radius:50%; background:#f97316; margin-left:6px; vertical-align:middle}
 .link-btn{background:none; border:none; color:var(--emerald); font-size:13px; font-weight:600; text-decoration:underline; padding:4px 0}
 [data-theme="dark"] .link-btn{color:var(--gold-l)}
 
 /* detail page: slider + sounds */
 .adj-slider{width:100%; accent-color:var(--emerald); margin:14px 0 6px}
-/* home: Alarm | Calendar row + Top Features (Fix #6, reference design) */
+/* home: Alarm | Calendar row + Top Features (Fix #6, reference design)
+   Fix #47: the button icons are wrapped in .hic (13px) so the icons
+   shrink while the button text stays 16px. */
 .home-nav-row{display:flex; align-items:center; padding:8px 10px}
-.home-nav-btn{flex:1; background:none; border:none; color:var(--gold-d); font-size:16px; font-weight:700; padding:10px 4px; cursor:pointer}
+.home-nav-btn{flex:1; background:none; border:none; color:var(--gold-d); font-size:16px; font-weight:700; padding:8px 4px; cursor:pointer}
+.home-nav-btn .hic{font-size:13px}
 [data-theme="dark"] .home-nav-btn{color:var(--gold-l)}
 .home-nav-div{width:1px; height:26px; background:var(--line); flex:none}
 .feat-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:14px}
@@ -426,8 +436,8 @@ hr.sep{border:none; border-top:1px solid var(--line); margin:14px 0}
 /* home: reference layout (Fix #7) — full-bleed ring, ref rows.
    Build #19, Fix #1: the home-top date row is gone (the header date
    is the one date now), so its rules go too. */
-#view-home .ring-hero{margin:0 -14px 14px; border-radius:0; padding-top:26px}
-.ring-hero .ring-moon{position:absolute; right:16px; top:104px; font-size:34px; line-height:1}
+#view-home .ring-hero{margin:0 -14px 14px; border-radius:0; padding-top:18px}
+.ring-hero .ring-moon{position:absolute; right:16px; top:84px; font-size:28px; line-height:1}
 .ring-hero[data-sky="day"] .ring-fg, .ring-hero[data-sky="dawn"] .ring-fg, .ring-hero[data-sky="golden"] .ring-fg{stroke:#16324f}
 .ring-hero[data-sky="day"], .ring-hero[data-sky="dawn"], .ring-hero[data-sky="golden"]{color:#16324f}
 .ring-hero[data-sky="day"] .ring-name, .ring-hero[data-sky="dawn"] .ring-name, .ring-hero[data-sky="golden"] .ring-name{color:#16324f}
@@ -436,12 +446,12 @@ hr.sep{border:none; border-top:1px solid var(--line); margin:14px 0}
 .home-section{margin-bottom:18px}
 .home-section .sec-title{font-size:18px; margin:0}
 .forbid-title{color:#e5484d}
-#prayer-list .prayer-row{gap:10px; padding:13px 2px}
+#prayer-list .prayer-row{gap:10px; padding:10px 2px}
 #prayer-list .p-name{flex:1; text-align:left}
 #prayer-list .p-range{font-size:15px; font-weight:600; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap}
 #prayer-list .p-range .orange-dot{margin:0 6px 0 0}
 #prayer-list .prayer-row.next .p-range{color:var(--text)}
-.done-circle{width:26px; height:26px; border-radius:50%; border:2px solid var(--muted); background:transparent; flex:none; cursor:pointer; padding:0; display:flex; align-items:center; justify-content:center}
+.done-circle{width:22px; height:22px; border-radius:50%; border:2px solid var(--muted); background:transparent; flex:none; cursor:pointer; padding:0; display:flex; align-items:center; justify-content:center}
 .done-circle.done{background:var(--gold); border-color:var(--gold)}
 .done-circle.done::after{content:"✓"; color:#fff; font-size:14px; font-weight:700; line-height:1}
 .nafl-strip{margin:12px 0 0; background:var(--card); border:1px solid var(--line); border-radius:var(--radius)}

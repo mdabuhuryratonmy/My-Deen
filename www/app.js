@@ -369,7 +369,7 @@ const STR = {  en: {
     langLabel:"ভাষা",
     themeLabel:"ডার্ক থিম (আকাশ থিম)",
     azanLabel:"নামাজের সময় আজান",
-    duroodLabel:"📿 ফোন আনলক করলে দরুদের রিমাইন্ডার",
+    duroodLabel:"📿 ফোন আনলক করলে দরুদ বাজবে",
     duroodDesc:"চালু থাকলে ফোন আনলক করলে (বা অ্যাপ খুললে) দরুদ শরিফের অডিও বাজবে। বন্ধ করলে বাজবে না।",
     adhanLabel:"আজানের সুর",
     reciterLabel:"তিলাওয়াতের কারি",
@@ -2352,18 +2352,49 @@ function forbiddenWindows(){
     {id:"ForbEvening", bn:"নিষিদ্ধ সময় (সন্ধ্যা)", en:"Forbidden time (evening)", start:magh-15, end:magh}
   ];
 }
+/* Fix #46 (28 Nov 2026): the morning nafl period — after the morning
+   forbidden window ends (sunrise+15) until zawal (the noon forbidden
+   window starts, dhuhr−4). Muslims Day shows this period as three
+   named windows — Ishraq, then Chasht, then Duha — all counting down
+   to the same end (zawal). The period is split into three equal parts;
+   the name changes by the time of day, the countdown always runs to
+   the period end. Returns the CURRENT nafl window
+   {kind:"nafl", id, name, at:end, prev:start, state:"current"} or null
+   when now is outside the period. `prev` is the period start, so the
+   ring progress sweeps across the whole morning, matching the
+   countdown to the period end. */
+function naflWindow(now=locNow()){
+  if (!timings) return null;
+  const sunrise = toMin(timings.Sunrise), dhuhr = toMin(timings.Dhuhr);
+  if (sunrise==null || dhuhr==null) return null;
+  const start = sunrise + 15, end = dhuhr - 4;
+  if (end <= start) return null;
+  const dayStart = new Date(now); dayStart.setHours(0,0,0,0);
+  const atMin = m => { const d = new Date(dayStart); d.setMinutes(m); return d; };
+  const s = atMin(start), e = atMin(end);
+  if (now < s || now >= e) return null;
+  const third = (end - start) / 3;
+  const elapsed = (now - s) / 60000;
+  const id = elapsed < third ? "Ishraq" : elapsed < 2*third ? "Chasht" : "Duha";
+  const name = id==="Ishraq" ? Lb("ইশরাক", "Ishraq") : id==="Chasht" ? Lb("চাশত", "Chasht") : Lb("দুহা", "Duha");
+  return {kind:"nafl", id, name, at:e, prev:s, state:"current"};
+}
 /* The countdown ring (Fix #4 §1; Fix #11; Fix #15) shows the CURRENT
    event — the prayer whose window we are in, counting down to the end
    of its window (the next prayer's start) — or the next event if no
-   prayer is current. Two rules keep it honest, matching the reference
+   prayer is current. Three rules keep it honest, matching the reference
    the user sent (19 Nov 18:36: Asr, "শেষ হতে বাকি ০০:২১:৫৫" to 18:58):
    (1) if we are inside a forbidden window, the ring counts down to its
    end; (2) a forbidden window must NEVER displace a prayer that can
    still be prayed — while a prayer is in its valid window the ring
    shows THAT prayer, counting to the end of its window (the next
-   prayer's start), NOT to the forbidden window's start. `state` tells
-   the ring whether the event is running ("current" → "শেষ হতে বাকি")
-   or still to come ("upcoming" → "শুরু হতে বাকি"). Returns {name,
+   prayer's start), NOT to the forbidden window's start; (3) Fix #46:
+   inside the morning nafl period (sunrise+15 → dhuhr−4) the ring shows
+   the CURRENT nafl window (Ishraq → Chasht → Duha), counting down to
+   its end (zawal) — it NEVER shows a future forbidden window as the
+   current state. `state` tells the ring whether the event is running
+   ("current" → "শেষ হতে বাকি") or still to come ("upcoming" →
+   "শুরু হতে বাকি"). Returns {name,
    at: Date, prev: Date, kind, id, state}. */
 function nextEvent(now=locNow()){
   const dayStart = new Date(now); dayStart.setHours(0,0,0,0);
@@ -2396,8 +2427,20 @@ function nextEvent(now=locNow()){
       return {kind:"prayer", id:p, name:pname(p), at:e, prev:s, state:"current"};
     }
   }
+  // Fix #46: inside the morning nafl period (sunrise+15 → dhuhr−4)
+  // no prayer is current and no forbidden window is active — the ring
+  // shows the CURRENT nafl window (Ishraq → Chasht → Duha), counting
+  // down to its end (zawal). It must NEVER fall through to the next
+  // forbidden window as an "upcoming" event: on 28 Nov at 07:35 the
+  // ring showed "নিষিদ্ধ সময় (দুপুর)" with "শুরু হতে বাকি" 05:23
+  // while it was actually Ishraq time.
+  const nafl = naflWindow(now);
+  if (nafl) return nafl;
   cands.sort((a,b)=>a.at - b.at);
-  let next = cands.find(c=>c.at > now);
+  // Fix #46: a forbidden window is NEVER the "next" event — it is
+  // shown only while actually inside it (see above). If nothing is
+  // current, the ring shows the next prayer instead.
+  let next = cands.filter(c=>c.kind!=="forbidden").find(c=>c.at > now);
   if (!next){ // everything today passed — tomorrow's first prayer
     const f = toMin(timings.Fajr);
     const at = atMin(f + (settings.offsets.Fajr || 0)); at.setDate(at.getDate()+1);
@@ -2464,7 +2507,8 @@ function renderPrayers(){
   if (ringCount) ringCount.textContent = `${num(pad2(h))}:${num(pad2(m))}:${num(pad2(s))}`;
   if (ringLabel) ringLabel.textContent = ev.kind==="prayer"
     ? (ev.state==="current" ? Lb("বর্তমান নামাজ", "Current prayer") : Lb("পরের নামাজ", "Next prayer"))
-    : ev.kind==="tahajjud" ? Lb("তাহাজ্জুদ", "Tahajjud") : Lb("নিষিদ্ধ সময়", "Forbidden time");
+    : ev.kind==="tahajjud" ? Lb("তাহাজ্জুদ", "Tahajjud")
+    : ev.kind==="nafl" ? Lb("নফল নামাজ", "Nafl prayer") : Lb("নিষিদ্ধ সময়", "Forbidden time");
   if (ringSub) ringSub.textContent = ev.state==="current" ? Lb("শেষ হতে বাকি", "Time remaining") : Lb("শুরু হতে বাকি", "Starts in");
   if (ringFg){
     const C = 2*Math.PI*96;
@@ -4204,11 +4248,14 @@ function syncDuroodToggleNative(){
   } catch(e){}
 }
 
-/* Fix #44: the reminder sounds the user can pick in Settings. The
-   notification itself never plays the durood; the ✅ button on the
-   notification plays it (native DuroodPlayReceiver) and counts it.
-   Sounds are our own bundled files: reminder.mp3 (2.2 s tone),
-   istighfar.mp3 (6.2 s), or silent. */
+/* Fix #45 (UPDATED Fix #44): the reminder sounds the user can pick
+   in Settings. On unlock the durood AUTO-PLAYS (native
+   DuroodUnlockReceiver + DuroodPlayer) and counts it; the reminder
+   notification appears AFTER the durood finishes, on the channel of
+   the chosen sound, so the tone never overlaps the durood — and the
+   ✅ button on the notification replays the durood (native
+   DuroodPlayReceiver). Sounds are our own bundled files:
+   reminder.mp3 (2.2 s tone), istighfar.mp3 (6.2 s), or silent. */
 const DUROOD_REMIND_SOUNDS = [
   {id:"reminder", bn:"রিমাইন্ডার টোন", en:"Reminder tone"},
   {id:"istighfar", bn:"ইস্তিগফার", en:"Istighfar"},

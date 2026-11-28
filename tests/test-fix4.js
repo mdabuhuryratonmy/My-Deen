@@ -24,7 +24,7 @@ const src = fs.readFileSync("/home/hatch/workspace/deen-day/www/app.js", "utf8")
 const cut = src.indexOf('document.addEventListener("DOMContentLoaded"');
 eval(src.slice(0, cut) + `
 ;globalThis.settings=settings; globalThis.store=store;
-globalThis.forbiddenWindows=forbiddenWindows; globalThis.nextEvent=nextEvent; globalThis.nextPrayer=nextPrayer;
+globalThis.forbiddenWindows=forbiddenWindows; globalThis.nextEvent=nextEvent; globalThis.nextPrayer=nextPrayer; globalThis.naflWindow=naflWindow;
 globalThis.computeTimingsLocal=computeTimingsLocal; globalThis.effSchool=effSchool; globalThis.schoolForRegion=schoolForRegion; globalThis.toMin=toMin;
 globalThis.locNow=locNow; globalThis.locAbs=locAbs; globalThis.todayKey=todayKey; globalThis.ddmmyyyy=ddmmyyyy; globalThis.__getTimings=()=>timings;
 globalThis.buildPrayerAlarmList=buildPrayerAlarmList; globalThis.renderPrayers=renderPrayers;
@@ -142,8 +142,11 @@ check("evening forbidden maghrib−15→maghrib", fw[2].start===1123 && fw[2].en
 // ---- nextEvent / countdown ring ----
 const atNoon = new Date(); atNoon.setHours(12,0,0,0);
 const ne1 = nextEvent(atNoon);
-// ForbNoon (12:56) starts before Dhuhr (13:00), so it IS the next event.
-check("nextEvent at 12:00 is the midday forbidden window (upcoming)", ne1.kind==="forbidden" && ne1.id==="ForbNoon" && ne1.at.getHours()===12 && ne1.at.getMinutes()===56 && ne1.state==="upcoming", ne1.id);
+// Fix #46 (UPDATED: the old pin said the ring showed the upcoming
+// ForbNoon at 12:00 — that was the 28 Nov bug: at noon it is Duha
+// time, and the ring must show the CURRENT nafl window, never a
+// future forbidden window as the state).
+check("Fix #46: nextEvent at 12:00 is Duha (current nafl), counting to zawal 12:56", ne1.kind==="nafl" && ne1.id==="Duha" && ne1.at.getHours()===12 && ne1.at.getMinutes()===56 && ne1.state==="current", ne1.id);
 const at1305 = new Date(); at1305.setHours(13,5,0,0);
 const ne1b = nextEvent(at1305);
 check("Fix #15: nextEvent at 13:05 is Dhuhr (current), counting to Asr 16:24", ne1b.kind==="prayer" && ne1b.id==="Dhuhr" && ne1b.state==="current" && ne1b.at.getHours()===16 && ne1b.at.getMinutes()===24, ne1b.id);
@@ -168,7 +171,10 @@ const ne1850 = nextEvent(at1850);
 check("Fix #11: at 18:50 (inside evening window) the ring shows forbidden, counting to 18:58", ne1850.kind==="forbidden" && ne1850.id==="ForbEvening" && ne1850.state==="current" && ne1850.at.getHours()===18 && ne1850.at.getMinutes()===58, ne1850.kind+" "+ne1850.id);
 const at0725 = new Date(); at0725.setHours(7,25,0,0);
 const ne0725 = nextEvent(at0725);
-check("Fix #11: at 07:25 (no prayer current) the next forbidden window is upcoming, not current", ne0725.kind==="forbidden" && ne0725.id==="ForbNoon" && ne0725.state==="upcoming", ne0725.kind+" "+ne0725.id+" "+ne0725.state);
+// Fix #46 (UPDATED Fix #11: the old pin said the ring showed the
+// upcoming ForbNoon at 07:25 — that was the 28 Nov bug. At 07:25 it
+// is Ishraq time; the ring shows the CURRENT nafl window).
+check("Fix #46: at 07:25 (no prayer current) the ring shows Ishraq (current nafl), never the upcoming forbidden window", ne0725.kind==="nafl" && ne0725.id==="Ishraq" && ne0725.state==="current" && ne0725.at.getHours()===12 && ne0725.at.getMinutes()===56, ne0725.kind+" "+ne0725.id+" "+ne0725.state);
 
 // ---- Fix #15: current prayer counts to the next prayer start ----
 // The user's side-by-side screenshots, 19 Nov 18:36: reference ring =
@@ -1246,9 +1252,9 @@ Object.assign(settings, _savedTz);
       src.includes('document.addEventListener("visibilitychange", ()=>{ if (!document.hidden){ resyncCountdown(); syncPrayerAlarms();'),
       "listeners clean");
     const _dur = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodUnlockReceiver.java", "utf8");
-    check("Fix #35 (UPDATED Fix #44): the native unlock receiver fires ONLY on the real USER_PRESENT unlock broadcast — and posts the reminder, never audio",
+    check("Fix #35 (UPDATED Fix #45): the native unlock receiver fires ONLY on the real USER_PRESENT unlock broadcast — and auto-plays the durood, then posts the reminder",
       _dur.includes('Intent.ACTION_USER_PRESENT.equals(intent.getAction())') &&
-      _dur.includes("postReminder(context)") && !_dur.includes("R.raw.durood"),
+      _dur.includes("DuroodPlayer.playOnce(context)") && _dur.includes("postReminder(context)"),
       "unlock only");
     check("Fix #35: the durood REMINDER still plays its audio at its set time (only the open-hook is gone)",
       src.includes("function playDurood(force)") &&
@@ -1463,13 +1469,13 @@ Object.assign(settings, _savedTz);
 
     // Fix #6: durood on unlock — receiver hardened; manifest still
     // registers it and the JS still syncs the native toggle at init.
-    // (UPDATED Fix #44: the explicit player moved to DuroodPlayReceiver —
-    // the ✅ button is the only player now; the unlock receiver has none.)
-    const _playB19 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodPlayReceiver.java", "utf8");
-    check("Build #19 Fix #6 (UPDATED Fix #44): the ✅-press player uses explicit notification audio attributes + full volume",
+    // (UPDATED Fix #45: the explicit player moved to DuroodPlayer —
+    // the shared player for unlock auto-play + the ✅ replay.)
+    const _playB19 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodPlayer.java", "utf8");
+    check("Build #19 Fix #6 (UPDATED Fix #45): the shared durood player uses explicit notification audio attributes + full volume",
       _playB19.includes("AudioAttributes.USAGE_NOTIFICATION") && _playB19.includes("CONTENT_TYPE_SONIFICATION") &&
       _playB19.includes("setVolume(1.0f, 1.0f)") && _playB19.includes("createPlayer"), "explicit audio");
-    check("Build #19 Fix #6 (UPDATED Fix #44): the ✅-press player keeps the create() fallback if the explicit build fails",
+    check("Build #19 Fix #6 (UPDATED Fix #45): the shared durood player keeps the create() fallback if the explicit build fails",
       _playB19.includes("MediaPlayer.create(context, R.raw.durood)"), "fallback");
     check("Build #19 Fix #6: receiver is still registered for USER_PRESENT and the JS still syncs the toggle at init",
       javaManifest.includes("DuroodUnlockReceiver") && javaManifest.includes("android.intent.action.USER_PRESENT") &&
@@ -2376,20 +2382,26 @@ Object.assign(settings, _savedTz);
     // ✅ button plays the durood + counts it, sound choice, on/off toggle,
     // count in Settings. Clean-room: our own code, our own audio, our own
     // design. The keep-alive service and BootReceiver still deliver the
-    // unlock. ----
+    // unlock. UPDATED Fix #45 (28 Nov 2026): the user corrected the
+    // Al-Shafie reading — the durood AUTO-PLAYS on unlock, no button
+    // press; the ✅ button is only a replay and the notification posts
+    // AFTER the durood finishes. Pins below marked (UPDATED Fix #45)
+    // changed with it; the rest still hold. ----
     {
       const _javaUnlock44 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodUnlockReceiver.java", "utf8");
       const _javaPlay44 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodPlayReceiver.java", "utf8");
+      const _javaPlayer45 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodPlayer.java", "utf8");
       const _javaPlug44 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodUnlockPlugin.java", "utf8");
       const _javaKeep44 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/UnlockKeepAliveService.java", "utf8");
       const _manifest44 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/AndroidManifest.xml", "utf8");
       const _main44 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/MainActivity.java", "utf8");
       const _html44 = fs.readFileSync("/home/hatch/workspace/deen-day/index.html", "utf8");
-      // Unlock never plays audio any more (the word "MediaPlayer" appears
-      // only in the file's doc comment — the check is on real usage).
-      check("Fix #44: the unlock receiver contains NO MediaPlayer — it cannot auto-play anything",
-        !_javaUnlock44.includes("new MediaPlayer") && !_javaUnlock44.includes("import android.media.MediaPlayer") && !_javaUnlock44.includes("MediaPlayer.create"), "no player on unlock");
-      check("Fix #44: on unlock the receiver posts the reminder notification (USER_PRESENT → postReminder)",
+      // (UPDATED Fix #45: the unlock receiver now auto-plays the durood
+      // via the shared DuroodPlayer — no inline MediaPlayer in the
+      // receiver itself, the player lives in DuroodPlayer.)
+      check("Fix #44 (UPDATED Fix #45): the unlock receiver auto-plays the durood through the shared player (no inline MediaPlayer in the receiver)",
+        _javaUnlock44.includes("DuroodPlayer.playOnce(context)") && !_javaUnlock44.includes("new MediaPlayer") && !_javaUnlock44.includes("import android.media.MediaPlayer"), "auto-play via player");
+      check("Fix #44: on unlock the receiver posts the reminder notification (USER_PRESENT → postReminder, after playback)",
         _javaUnlock44.includes("Intent.ACTION_USER_PRESENT") && _javaUnlock44.includes("postReminder(context)"), "unlock notifies");
       check("Fix #44: the reminder is off when the toggle is off (receiver returns before posting)",
         _javaUnlock44.includes('if (!prefs.getBoolean(KEY_DUROOD_ON, true)) return;'), "toggle off");
@@ -2397,8 +2409,8 @@ Object.assign(settings, _savedTz);
         _javaUnlock44.includes(".setAutoCancel(false)") && _javaUnlock44.includes("REMINDER_NOTIF_ID = 9001"), "stays listed");
       check("Fix #44: the reminder has the ✅ action button (check icon + PLAY_DUROOD action)",
         _javaUnlock44.includes("addAction(R.drawable.ic_check") && _javaUnlock44.includes('"✅ দরুদ শুনুন"') && _javaUnlock44.includes("DuroodPlayReceiver.ACTION_PLAY_DUROOD"), "button present");
-      check("Fix #44: the reminder text shows today's durood count",
-        _javaUnlock44.includes("getTodayCount(ctx)") && _javaUnlock44.includes('আজ " + today + " বার দরুদ পড়া হয়েছে'), "count in text");
+      check("Fix #44 (UPDATED Fix #45): the reminder text shows today's durood count (✅ replays it now)",
+        _javaUnlock44.includes("getTodayCount(ctx)") && _javaUnlock44.includes('আজ " + today + " বার দরুদ পড়া হয়েছে') && _javaUnlock44.includes("✅ চাপলে আবার বাজবে"), "count in text");
       // Three reminder-sound channels, our own audio only.
       check("Fix #44: one channel per reminder sound — reminder.mp3, istighfar.mp3, silent (no other sound)",
         _javaUnlock44.includes('CHANNEL_REMINDER = "durood-unlock-reminder"') &&
@@ -2406,13 +2418,14 @@ Object.assign(settings, _savedTz);
         _javaUnlock44.includes('CHANNEL_SILENT = "durood-unlock-silent"') && !_javaUnlock44.includes("R.raw.azan"), "3 channels");
       check("Fix #44: the receiver picks the channel from the stored sound choice (default reminder)",
         _javaUnlock44.includes('getString(KEY_REMIND_SOUND, "reminder")') && _javaUnlock44.includes("channelForSound"), "sound choice");
-      // The ✅ button is the only player.
+      // The ✅ button replays through the shared player.
       check("Fix #44: the play receiver fires ONLY on the ✅ action (explicit PendingIntent, no intent-filter)",
         _javaPlay44.includes('ACTION_PLAY_DUROOD = "com.deenday.app.PLAY_DUROOD"') && _javaPlay44.includes("goAsync()"), "button only");
-      check("Fix #44: pressing ✅ plays our durood clip (R.raw.durood) with the proven explicit player",
-        _javaPlay44.includes("R.raw.durood") && _javaPlay44.includes("USAGE_NOTIFICATION"), "plays durood");
-      check("Fix #44: pressing ✅ counts the durood and refreshes the reminder with the new count",
-        _javaPlay44.includes("incrementCount(context)") && _javaPlay44.includes("postReminder(context)"), "counts");
+      check("Fix #44 (UPDATED Fix #45): pressing ✅ replays our durood clip (R.raw.durood) through the shared explicit player",
+        _javaPlayer45.includes("R.raw.durood") && _javaPlayer45.includes("USAGE_NOTIFICATION") && _javaPlay44.includes("DuroodPlayer.playOnce(context)"), "replays durood");
+      check("Fix #44 (UPDATED Fix #45): the shared player counts the durood when playback starts, and the play receiver refreshes the reminder after playback",
+        _javaPlayer45.includes("incrementCount(context)") && _javaPlay44.includes("postReminder(context)") &&
+        _javaPlay44.indexOf("DuroodPlayer.playOnce(context)") < _javaPlay44.indexOf("postReminder(context)"), "counts");
       check("Fix #44: the count is today + total, rolling over by calendar date",
         _javaUnlock44.includes('KEY_COUNT_TOTAL = "durood_count_total"') && _javaUnlock44.includes('KEY_COUNT_TODAY = "durood_count_today"') &&
         _javaUnlock44.includes('KEY_COUNT_DATE = "durood_count_date"') && _javaUnlock44.includes("yyyy-MM-dd"), "count keys");
@@ -2425,9 +2438,9 @@ Object.assign(settings, _savedTz);
       check("Fix #44: the play receiver is registered NOT exported; the reminder channels are created at startup too",
         _manifest44.includes('<receiver android:name=".DuroodPlayReceiver" android:exported="false"') &&
         _main44.includes("DuroodUnlockReceiver.ensureChannels(this)"), "registered");
-      check("Fix #44: the check icon exists (our own vector) and the keep-alive no longer claims the durood auto-plays",
+      check("Fix #44 (UPDATED Fix #45): the check icon exists and the keep-alive DOES say the durood plays on unlock now",
         fs.existsSync("/home/hatch/workspace/deen-day/android/app/src/main/res/drawable/ic_check.xml") &&
-        !_javaKeep44.includes("আনলক করলে দরুদ বাজবে") && _javaKeep44.includes("আনলক করলে দরুদের রিমাইন্ডার আসবে"), "icon + wording");
+        _javaKeep44.includes("আনলক করলে দরুদ বাজবে"), "icon + wording");
       check("Fix #44: the settings page has the sound select and the count line",
         _html44.includes('id="set-durood-sound"') && _html44.includes('id="durood-count"') && _html44.includes('id="durood-sound-row"'), "settings html");
       check("Fix #44: PREAZAN_TEXTS verbatim and AZAN_SPEAK_TEXTS == PREAZAN_TEXTS (unchanged by this fix)",
@@ -2474,6 +2487,192 @@ Object.assign(settings, _savedTz);
         Object.assign(settings, _saved44);
         delete globalThis.Capacitor;
       }
+    }
+    // ---- Fix #45 (28 Nov 2026, user correction): the unlock durood
+    // AUTO-PLAYS on unlock (Al-Shafie behaviour) — no button press.
+    // Count, sound choice and toggle stay from Fix #44. The ✅ button
+    // is only a replay; the notification posts AFTER the durood
+    // finishes so the chosen tone never overlaps it. ----
+    {
+      const _javaUnlock45 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodUnlockReceiver.java", "utf8");
+      const _javaPlay45 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodPlayReceiver.java", "utf8");
+      const _javaPlayer45 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodPlayer.java", "utf8");
+      const _html45 = fs.readFileSync("/home/hatch/workspace/deen-day/index.html", "utf8");
+      // (a) unlock triggers durood playback with no button press: the
+      // receiver calls the shared player directly on USER_PRESENT —
+      // playback is not behind any PendingIntent/action.
+      check("Fix #45: unlock auto-plays the durood — the receiver plays it directly on USER_PRESENT, no button press",
+        _javaUnlock45.includes("DuroodPlayer.playOnce(context)") &&
+        _javaUnlock45.indexOf("DuroodPlayer.playOnce(context)") < _javaUnlock45.indexOf("postReminder(context)"), "auto-play first");
+      // (b) the count increments on auto-play (inside the shared player,
+      // once playback actually starts).
+      check("Fix #45: the count increments when the durood auto-plays",
+        _javaPlayer45.includes("DuroodUnlockReceiver.incrementCount(context)") &&
+        _javaPlayer45.indexOf("mp.start()") < _javaPlayer45.indexOf("incrementCount(context)"), "counts on play");
+      // (c) toggle off disables auto-play: the receiver returns before
+      // any playback when the stored toggle is off.
+      check("Fix #45: toggle off disables auto-play (receiver returns before playing)",
+        _javaUnlock45.includes('if (!prefs.getBoolean(KEY_DUROOD_ON, true)) return;') &&
+        _javaUnlock45.indexOf('if (!prefs.getBoolean(KEY_DUROOD_ON, true)) return;') < _javaUnlock45.indexOf("DuroodPlayer.playOnce(context)"), "toggle gates play");
+      // (d) the sound choice is respected: the reminder still posts on
+      // the channel of the stored choice — after the durood, so the
+      // tone never overlaps it.
+      check("Fix #45: the sound choice is respected (reminder posts on the chosen channel, after playback)",
+        _javaUnlock45.includes("channelForSound(ctx)") && _javaUnlock45.includes('getString(KEY_REMIND_SOUND, "reminder")'), "sound kept");
+      // The shared player: blocks until the clip finishes/errors or
+      // 10 s elapse, then releases; full volume + create() fallback.
+      check("Fix #45: the shared player waits for the clip (latch + 10 s cap) and releases it",
+        _javaPlayer45.includes("CountDownLatch") && _javaPlayer45.includes("await(10, TimeUnit.SECONDS)") && _javaPlayer45.includes("safeRelease(mp)"), "bounded wait");
+      // Exactly two playback call sites in all of Java: unlock auto-play
+      // + ✅ replay. No other path can play the durood.
+      const _allJava45 = ["DuroodUnlockReceiver", "DuroodPlayReceiver", "DuroodPlayer", "DuroodUnlockPlugin", "UnlockKeepAliveService", "MainActivity", "BootReceiver", "AlarmReceiver", "AlarmScheduler", "PrayerAlarmPlugin", "AzanPlaybackService"]
+        .map(f => { try { return fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/" + f + ".java", "utf8"); } catch (e) { return ""; } }).join("\n");
+      check("Fix #45: exactly two durood playback call sites (unlock + ✅ replay), nowhere else",
+        (_allJava45.match(/DuroodPlayer\.playOnce\(context\)/g) || []).length === 2, "two triggers");
+      // The notification is a replay-only affordance now, and the
+      // settings hint says so.
+      check("Fix #45: the ✅ button is a replay (label kept) and the settings hint says the durood plays by itself",
+        _javaUnlock45.includes('"✅ দরুদ শুনুন"') && _html45.includes("আনলক করলে দরুদ নিজে থেকেই বাজবে"), "replay wording");
+      // Functional JS: toggle off syncs enabled:false to native.
+      const _saved45 = JSON.parse(JSON.stringify({ duroodOnUnlock: settings.duroodOnUnlock, duroodRemindSound: settings.duroodRemindSound }));
+      settings.duroodOnUnlock = false;
+      settings.duroodRemindSound = "silent";
+      try {
+        const _rec45 = [];
+        globalThis.Capacitor = { Plugins: { DuroodUnlock: {
+          setEnabled: async(a)=>{ _rec45.push(["setEnabled", a]); return {}; },
+          setReminderSound: async(a)=>{ _rec45.push(["setReminderSound", a]); return {}; },
+          getDuroodStats: async()=>({ total: 0, today: 0 }),
+        }}};
+        syncDuroodToggleNative();
+        check("Fix #45: toggle off syncs enabled:false (and the sound choice) to native",
+          _rec45.some(r=>r[0]==="setEnabled" && r[1].enabled===false) &&
+          _rec45.some(r=>r[0]==="setReminderSound" && r[1].sound==="silent"), "off syncs");
+      } finally {
+        Object.assign(settings, _saved45);
+        delete globalThis.Capacitor;
+      }
+      // PREAZAN_TEXTS verbatim (unchanged by this fix).
+      check("Fix #45: PREAZAN_TEXTS verbatim and AZAN_SPEAK_TEXTS == PREAZAN_TEXTS (unchanged by this fix)",
+        PREAZAN_TEXTS.Fajr === "ফজরের নামাজের সময় হয়েছে, ঘুম থেকে উঠে মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+        PREAZAN_TEXTS.Isha === "ইশার নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+        AZAN_SPEAK_TEXTS.Fajr === PREAZAN_TEXTS.Fajr && AZAN_SPEAK_TEXTS.Isha === PREAZAN_TEXTS.Isha, "verbatim");
+    }
+    // ---- Fix #46 (28 Nov 2026, user report + screenshots): the Home
+    // countdown ring showed the NEXT forbidden window as the current
+    // state ("নিষিদ্ধ সময় (দুপুর)", "শুরু হতে বাকি" 05:23 at 07:35,
+    // when it was Ishraq time). The ring now shows ONLY what is
+    // happening NOW: the current nafl window (Ishraq → Chasht → Duha)
+    // in the morning, a forbidden window only while actually inside
+    // it — and a future forbidden window is never the "next" event. ----
+    {
+      const _savedTimings46 = __getTimings();
+      // The stubbed day is 19 Nov Ipoh (Fajr 05:42, Sunrise 07:03,
+      // Dhuhr 13:00, Asr 16:24, Maghrib 18:58, Isha 20:10): nafl period
+      // 07:18 → 12:56, thirds ≈ 112.7 min (Ishraq → 09:10, Chasht →
+      // 11:03, Duha → 12:56).
+      __setTimings({Fajr:"05:42", Sunrise:"07:03", Dhuhr:"13:00", Asr:"16:24", Maghrib:"18:58", Isha:"20:10", Imsak:"05:32", Firstthird:"22:59", Lastthird:"03:01"});
+      try {
+        const _at46 = (h, m, s=0) => { const d = new Date(); d.setHours(h, m, s, 0); return d; };
+        const _n0735 = nextEvent(_at46(7, 35, 40));
+        check("Fix #46: at 07:35 the ring shows Ishraq (current nafl), counting to zawal 12:56 — never forbidden",
+          _n0735.kind==="nafl" && _n0735.id==="Ishraq" && _n0735.state==="current" && _n0735.at.getHours()===12 && _n0735.at.getMinutes()===56, _n0735.kind+" "+_n0735.id);
+        const _n1000 = nextEvent(_at46(10, 0));
+        check("Fix #46: mid-morning the ring shows Chasht (current nafl), counting to zawal",
+          _n1000.kind==="nafl" && _n1000.id==="Chasht" && _n1000.state==="current" && _n1000.at.getHours()===12 && _n1000.at.getMinutes()===56, _n1000.kind+" "+_n1000.id);
+        const _n1130 = nextEvent(_at46(11, 30));
+        check("Fix #46: late morning the ring shows Duha (current nafl), counting to zawal",
+          _n1130.kind==="nafl" && _n1130.id==="Duha" && _n1130.state==="current" && _n1130.at.getHours()===12 && _n1130.at.getMinutes()===56, _n1130.kind+" "+_n1130.id);
+        const _n0710 = nextEvent(_at46(7, 10));
+        check("Fix #46: inside the morning forbidden window the ring still shows forbidden (current), counting to its end 07:18",
+          _n0710.kind==="forbidden" && _n0710.id==="ForbMorning" && _n0710.state==="current" && _n0710.at.getHours()===7 && _n0710.at.getMinutes()===18, _n0710.kind+" "+_n0710.id);
+        const _n1300 = nextEvent(_at46(13, 0));
+        check("Fix #46: inside the midday forbidden window the ring still shows forbidden (current), counting to its end 13:02",
+          _n1300.kind==="forbidden" && _n1300.id==="ForbNoon" && _n1300.state==="current" && _n1300.at.getHours()===13 && _n1300.at.getMinutes()===2, _n1300.kind+" "+_n1300.id);
+        const _n0600 = nextEvent(_at46(6, 0));
+        check("Fix #46: a prayable prayer is never displaced by the nafl window (06:00 shows Fajr, current)",
+          _n0600.kind==="prayer" && _n0600.id==="Fajr" && _n0600.state==="current", _n0600.kind+" "+_n0600.id);
+        // Property: across the whole stubbed day, the ring NEVER shows
+        // a forbidden window as an upcoming event.
+        let _bad46 = null;
+        for (let m = 0; m < 1440; m += 30) {
+          const ev = nextEvent(_at46(Math.floor(m/60), m%60));
+          if (ev.kind==="forbidden" && ev.state==="upcoming") { _bad46 = `${Math.floor(m/60)}:${String(m%60).padStart(2,"0")} ${ev.id}`; break; }
+        }
+        check("Fix #46: no time of day shows a forbidden window as upcoming (day sweep, every 30 min)",
+          _bad46===null, _bad46 || "clean sweep");
+        // The ring label knows the nafl kind (not "forbidden time").
+        check("Fix #46: the ring label shows 'নফল নামাজ' for a nafl event",
+          src.includes('ev.kind==="nafl" ? Lb("নফল নামাজ", "Nafl prayer")'), "nafl label");
+        // The reported 28 Nov case, with the user's own times (Fajr
+        // 05:45, Sunrise 07:07, Dhuhr 13:03): 07:35 is Ishraq, counting
+        // to 12:59 (dhuhr−4) — the same 05:23 countdown Muslims Day
+        // showed.
+        __setTimings({Fajr:"05:45", Sunrise:"07:07", Dhuhr:"13:03", Asr:"16:27", Maghrib:"19:02", Isha:"20:16", Imsak:"05:35", Firstthird:"23:02", Lastthird:"03:04"});
+        const _n0735b = nextEvent(_at46(7, 35, 40));
+        check("Fix #46: the reported 28 Nov case — 07:35 is Ishraq (current), counting to 12:59",
+          _n0735b.kind==="nafl" && _n0735b.id==="Ishraq" && _n0735b.state==="current" && _n0735b.at.getHours()===12 && _n0735b.at.getMinutes()===59, _n0735b.kind+" "+_n0735b.id);
+      } finally {
+        __setTimings(_savedTimings46);
+      }
+    }
+    // ---- Fix #47 (28 Nov 2026, user order + marked screenshot): the
+    // Home page icons are smaller and the marked section (dates +
+    // countdown ring + pills + 5 prayer rows + Alarm/Calendar row)
+    // fits on ONE 1080x2400 screen without scrolling. The budget is
+    // computed from the CSS itself (box model), not by feel:
+    // viewport 411x914 CSS px (1080/2400 @ 2.625 density), minus the
+    // 24px status bar and the ~51px bottom nav = 839px for the marked
+    // section (sticky header + ring hero + prayer card + nav row).
+    // Text sizes are NOT shrunk — only icons, paddings and the ring. ----
+    {
+      const _css47 = css; // www/styles.css, read at the top of this file
+      const _num47 = re => { const m = _css47.match(re); return m ? parseFloat(m[1]) : NaN; };
+      const _nums47 = re => { const m = _css47.match(re); return m ? [parseFloat(m[1]), parseFloat(m[2])].filter(v=>!isNaN(v)) : [NaN, NaN]; };
+      // Icon sizes (smaller than before).
+      const _ring47 = _num47(/\.ring-wrap\{[^}]*width:(\d+)px/);
+      const _brand47 = _num47(/\.brand img\{[^}]*width:(\d+)px/);
+      const _bell47 = _num47(/\.icon-btn\{[^}]*width:(\d+)px/);
+      const _moon47 = _num47(/\.ring-hero \.ring-moon\{[^}]*font-size:(\d+)px/);
+      const _pic47 = _num47(/\.p-ic\{[^}]*font-size:(\d+)px/);
+      const _done47 = _num47(/\.done-circle\{[^}]*width:(\d+)px/);
+      const _hic47 = _num47(/\.home-nav-btn \.hic\{[^}]*font-size:(\d+)px/);
+      check("Fix #47: Home icons are smaller (ring 220→180, brand 44→36, bell 40→36, moon 34→28, prayer 16→14, done 26→22, nav 16→13)",
+        _ring47===180 && _brand47===36 && _bell47===36 && _moon47===28 && _pic47===14 && _done47===22 && _hic47===13,
+        `ring ${_ring47}, brand ${_brand47}, bell ${_bell47}, moon ${_moon47}, pic ${_pic47}, done ${_done47}, hic ${_hic47}`);
+      // Text sizes are NOT shrunk.
+      check("Fix #47: text sizes unchanged (prayer name 16, range 15, ring count 34, ring name 22, nav button 16, dates 13.5)",
+        /\.prayer-row \.p-name\{[^}]*font-size:16px/.test(_css47) && /#prayer-list \.p-range\{[^}]*font-size:15px/.test(_css47) &&
+        /\.ring-count\{[^}]*font-size:34px/.test(_css47) && /\.ring-name\{[^}]*font-size:22px/.test(_css47) &&
+        /\.home-nav-btn\{[^}]*font-size:16px/.test(_css47) && /\.dates\{[^}]*font-size:13\.5px/.test(_css47), "text kept");
+      // Layout budget from the CSS values (single-line text ≈ 1.2×
+      // font-size; the date lines are 2 lines at 13.5px × 1.5).
+      const _hdrPad47 = _nums47(/header\{[^}]*padding:(\d+)px \d+px (\d+)px/);
+      const _dates47 = _nums47(/\.dates\{[^}]*margin-top:(\d+)px; font-size:([\d.]+)px;[^}]*line-height:([\d.]+)/);
+      const _datesMt47 = _dates47[0], _datesFs47 = _dates47[1];
+      const _datesLh47 = (()=>{ const m = _css47.match(/\.dates\{[^}]*line-height:([\d.]+)/); return m ? parseFloat(m[1]) : NaN; })();
+      const _ringPadT47 = _num47(/#view-home \.ring-hero\{[^}]*padding-top:(\d+)px/);
+      const _ringPadB47 = _nums47(/^\.ring-hero\{[^}]*padding:(\d+)px \d+px (\d+)px/m)[1];
+      const _pillsMt47 = _num47(/\.pills\{[^}]*margin-top:(\d+)px/);
+      const _pillPad47 = _num47(/\.pill\{[^}]*padding:(\d+)px/);
+      const _rowPad47 = _num47(/#prayer-list \.prayer-row\{[^}]*padding:(\d+)px/);
+      const _cardPad47 = _num47(/\.card\{[^}]*padding:(\d+)px/);
+      const _cardMb47 = _num47(/\.card\{[^}]*margin-bottom:(\d+)px/);
+      const _navBtnPad47 = _num47(/\.home-nav-btn\{[^}]*padding:(\d+)px/);
+      const _navPad47 = _nums47(/nav button\{[^}]*padding:(\d+)px \d+px (\d+)px/);
+      const _navIc47 = _num47(/nav button \.ic\{[^}]*font-size:(\d+)px/);
+      const _navFs47 = _num47(/nav button\{[^}]*font-size:([\d.]+)px/);
+      const _mainPad47 = _num47(/main\{padding:(\d+)px/);
+      const _headerH47 = _hdrPad47[0] + _hdrPad47[1] + Math.max(_brand47, 41) + _datesMt47 + Math.ceil(2 * _datesFs47 * _datesLh47);
+      const _pillH47 = _pillPad47 * 2 + Math.ceil(13 * 1.2) + 2;
+      const _ringH47 = _ringPadT47 + _ring47 + _pillsMt47 + _pillH47 + _ringPadB47 + _cardMb47;
+      const _prayerH47 = _cardPad47 * 2 + 5 * (_rowPad47 * 2 + _done47) + 4 + _cardMb47;
+      const _navRowH47 = 8 * 2 + (_navBtnPad47 * 2 + Math.ceil(16 * 1.2)) + _cardMb47;
+      const _total47 = _headerH47 + _mainPad47 + _ringH47 + _prayerH47 + _navRowH47;
+      const _navH47 = _navPad47[0] + _navPad47[1] + Math.ceil(_navIc47 * 1.1) + Math.ceil(_navFs47 * 1.3) + 1;
+      const _avail47 = 914 - 24 - _navH47;
+      check("Fix #47: the marked Home section fits one 1080x2400 screen (total ≤ viewport − status bar − bottom nav)",
+        _total47 <= _avail47, `total ${_total47} ≤ ${_avail47} (header ${_headerH47} + ring ${_ringH47} + prayer ${_prayerH47} + navrow ${_navRowH47})`);
     }
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);

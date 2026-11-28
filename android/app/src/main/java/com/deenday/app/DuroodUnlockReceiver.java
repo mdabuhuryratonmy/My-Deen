@@ -17,31 +17,30 @@ import java.util.Date;
 import java.util.Locale;
 
 /**
- * Fix #44 (27 Nov 2026, user order): the unlock durood now works like
- * the Al-Shafie app — clean-room: our own code, our own bundled audio,
- * our own design; nothing copied from Al-Shafie. On phone unlock a
- * durood REMINDER notification appears — it does NOT auto-play. The
- * notification has a ✅ action button ("✅ দরুদ শুনুন"); pressing it
- * plays the durood audio (DuroodPlayReceiver, our res/raw/durood.mp3,
- * 3.72 s) and counts it. The button must be pressed each time — the
- * notification itself never plays the durood. The notification stays
- * in the notification list until the user swipes it away
- * (setAutoCancel(false)); each unlock re-posts it (same id, fresh
- * count). The user picks the reminder sound in Settings ("reminder" =
- * res/raw/reminder.mp3, "istighfar" = res/raw/istighfar.mp3, "silent"
- * = no sound) — the sound is the notification CHANNEL's sound, so
- * there is one channel per choice. The durood count (today + total)
- * lives in SharedPreferences and is shown in the reminder text and in
- * Settings (via DuroodUnlockPlugin).
+ * Fix #45 (28 Nov 2026, user correction of the Fix #44 reading of
+ * Al-Shafie): in Al-Shafie (الشفيع) the durood plays AUTOMATICALLY on
+ * phone unlock — no button press anywhere. So the unlock durood
+ * auto-plays again (as it did before Fix #44): on USER_PRESENT the
+ * receiver plays the durood itself (DuroodPlayer.playOnce, our own
+ * bundled res/raw/durood.mp3, 3.72 s, one recitation) and counts it.
+ * No button press, no notification tap is needed for the durood to
+ * play. Clean-room: our own code, our own bundled audio, our own
+ * design; nothing copied from Al-Shafie.
  *
- * The old behaviour (Fix #35) auto-played the durood on every unlock.
- * That is gone: this receiver contains NO MediaPlayer at all — the
- * only player is DuroodPlayReceiver, fired only by the ✅ button.
+ * The reminder notification still appears — but AFTER the durood
+ * finishes, on the user's chosen sound channel (reminder / istighfar /
+ * silent), showing the fresh count. That way the chosen tone (reminder
+ * 2.2 s, istighfar 6.2 s) never overlaps the durood itself. The
+ * notification has a ✅ action button ("✅ দরুদ শুনুন") that only
+ * REPLAYS the durood (DuroodPlayReceiver) — it is never required. The
+ * notification stays in the notification list until the user swipes it
+ * away (setAutoCancel(false)); each unlock re-posts it (same id 9001,
+ * fresh count).
  *
- * Delivery is unchanged and resilient: the manifest receiver (exported,
- * USER_PRESENT) plus the UnlockKeepAliveService keeps the app alive so
- * the broadcast is delivered even when the app was killed in the
- * background (Fix #42). The on/off state is SharedPreferences
+ * Delivery is unchanged and resilient: the manifest receiver
+ * (exported, USER_PRESENT) plus the UnlockKeepAliveService keeps the
+ * app alive so the broadcast is delivered even when the app was killed
+ * in the background (Fix #42). The on/off state is SharedPreferences
  * ("mydeen" / "durood_on_unlock", default true), synced from the web
  * settings toggle via DuroodUnlockPlugin.
  */
@@ -62,7 +61,17 @@ public class DuroodUnlockReceiver extends BroadcastReceiver {
         SharedPreferences prefs = context.getSharedPreferences("mydeen", Context.MODE_PRIVATE);
         if (!prefs.getBoolean(KEY_DUROOD_ON, true)) return;
         ensureChannels(context);
-        postReminder(context);
+        // Fix #45: the durood AUTO-PLAYS on unlock — no button press.
+        // goAsync + a background thread, because playOnce() blocks until
+        // the 3.72 s clip finishes (10 s cap). The reminder notification
+        // posts AFTER playback, on the chosen sound channel, so the
+        // chosen tone never overlaps the durood itself.
+        final BroadcastReceiver.PendingResult result = goAsync();
+        new Thread(() -> {
+            try { DuroodPlayer.playOnce(context); } catch (Exception ignored) {}
+            try { postReminder(context); } catch (Exception ignored) {}
+            result.finish();
+        }).start();
     }
 
     /** Create the three reminder channels (one per sound choice) — idempotent. */
@@ -80,7 +89,7 @@ public class DuroodUnlockReceiver extends BroadcastReceiver {
     private static void createChannel(NotificationManager nm, Context ctx, String id, String name, int importance, int rawRes) {
         if (nm.getNotificationChannel(id) != null) return;
         NotificationChannel ch = new NotificationChannel(id, name, importance);
-        ch.setDescription("ফোন আনলক করলে দরুদের রিমাইন্ডার দেখায়");
+        ch.setDescription("ফোন আনলক করলে দরুদ বাজে, আর হিসাব দেখায়");
         if (rawRes != 0) {
             Uri soundUri = Uri.parse("android.resource://" + ctx.getPackageName() + "/" + rawRes);
             AudioAttributes attrs = new AudioAttributes.Builder()
@@ -111,7 +120,7 @@ public class DuroodUnlockReceiver extends BroadcastReceiver {
             ensureChannels(ctx);
             int today = getTodayCount(ctx);
             String body = today > 0
-                    ? "আজ " + today + " বার দরুদ পড়া হয়েছে • ✅ চাপলে দরুদ বাজবে"
+                    ? "আজ " + today + " বার দরুদ পড়া হয়েছে • ✅ চাপলে আবার বাজবে"
                     : "আজ এখনো দরুদ পড়া হয়নি • ✅ চাপলে দরুদ বাজবে";
             Intent open = new Intent(ctx, MainActivity.class);
             open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);

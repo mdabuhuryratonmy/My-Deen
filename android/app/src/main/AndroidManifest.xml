@@ -50,10 +50,11 @@
             </intent-filter>
         </receiver>
 
-        <!-- Fix #44: plays the durood ONLY when the user presses the ✅
-             button on the unlock reminder notification. NOT exported —
-             it is only ever fired by the app's own explicit PendingIntent
-             from DuroodUnlockReceiver.postReminder(). -->
+        <!-- Fix #45: replays the durood when the user presses the ✅
+             button on the unlock durood notification (the durood itself
+             auto-plays on unlock, from DuroodUnlockReceiver). NOT
+             exported — it is only ever fired by the app's own explicit
+             PendingIntent from DuroodUnlockReceiver.postReminder(). -->
         <receiver android:name=".DuroodPlayReceiver" android:exported="false" />
 
         <!-- Fix #4 §5: exact prayer-time alarms + re-arm after reboot -->
@@ -74,7 +75,7 @@
         <service android:name=".UnlockKeepAliveService" android:exported="false"
             android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Keeps My Deen alive so the unlock durood reminder can appear when the phone is unlocked and prayer-time alarms keep working." />
+                android:value="Keeps My Deen alive so the unlock durood plays when the phone is unlocked and prayer-time alarms keep working." />
         </service>
 
         <provider

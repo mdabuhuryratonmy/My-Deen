@@ -9,7 +9,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 /**
  * Tiny bridge so the web settings can control the native unlock durood
- * reminder (DuroodUnlockReceiver / DuroodPlayReceiver).
+ * (DuroodUnlockReceiver auto-plays it on unlock, DuroodPlayReceiver
+ * replays it from the ✅ button).
  * JS usage: Capacitor.Plugins.DuroodUnlock.setEnabled({ enabled: true })
  * Fix #44: setReminderSound({ sound: "reminder" | "istighfar" | "silent" })
  * picks the reminder notification's sound; getDuroodStats() returns
@@ -23,8 +24,8 @@ public class DuroodUnlockPlugin extends Plugin {
         getContext().getSharedPreferences("mydeen", Context.MODE_PRIVATE)
                 .edit().putBoolean("durood_on_unlock", enabled).apply();
         // Fix #42: the keep-alive service is what makes the unlock durood
-        // reminder actually appear on aggressive OEMs — start it with the
-        // toggle, stop it when the user turns the reminder off.
+        // auto-play actually happen on aggressive OEMs — start it with
+        // the toggle, stop it when the user turns auto-play off.
         if (enabled) UnlockKeepAliveService.start(getContext());
         else UnlockKeepAliveService.stop(getContext());
         call.resolve();
