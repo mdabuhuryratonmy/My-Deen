@@ -4255,7 +4255,7 @@ function syncDuroodToggleNative(){
    the chosen sound, so the tone never overlaps the durood — and the
    ✅ button on the notification replays the durood (native
    DuroodPlayReceiver). Sounds are our own bundled files:
-   reminder.mp3 (2.2 s tone), istighfar.mp3 (6.2 s), or silent. */
+   reminder.mp3 (2.2 s tone), istighfar.mp3 (1.4 s), or silent. */
 const DUROOD_REMIND_SOUNDS = [
   {id:"reminder", bn:"রিমাইন্ডার টোন", en:"Reminder tone"},
   {id:"istighfar", bn:"ইস্তিগফার", en:"Istighfar"},
@@ -4663,7 +4663,9 @@ function checkAzan(){
       const silent = normalizeSounds(settings.alarmSound[p]).includes("silent");
       if (!nativeAzanArmed() && !silent){
         playAzan();
-        speakText(AZAN_SPEAK_TEXTS[p], "bn-BD");
+        /* Fix #49: Friday Dhuhr speaks the Jumu'ah sentence instead
+           (azanSpeakText judges the location day, like preazanText). */
+        speakText(azanSpeakText(p, now), "bn-BD");
       }
       toast(`🕌 ${Lb("নামাজের সময় হয়েছে", "Time for prayer")} — ${p}`);
     }
@@ -4774,6 +4776,20 @@ function preazanText(id, locDate){
   if (id === "Dhuhr" && locDate && locDate.getDay() === 5) return JUMUAH_PREAZAN_TEXT;
   return PREAZAN_TEXTS[id];
 }
+/* Friday Jumu'ah azan-time speech (Fix #49, 28 Nov 2026 — the user's
+   words, same check as the pre-azan reminders): on Fridays the Dhuhr
+   azan-time announcement says "জুম্মার নামাজের সময় হয়েছে, মিসওয়াক
+   ও অজু করে নামাজের প্রস্তুতি নিন" instead of the usual Dhuhr
+   sentence. Friday only; other days and other prayers are unchanged.
+   AZAN_SPEAK_TEXTS is NEVER altered — the Jumu'ah sentence lives in
+   its own constant, like JUMUAH_PREAZAN_TEXT. locDate is a
+   location-frame Date (locNow), so the Friday is judged by the
+   location's day, not the device's. */
+const JUMUAH_AZAN_SPEAK_TEXT = "জুম্মার নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন";
+function azanSpeakText(id, locDate){
+  if (id === "Dhuhr" && locDate && locDate.getDay() === 5) return JUMUAH_AZAN_SPEAK_TEXT;
+  return AZAN_SPEAK_TEXTS[id];
+}
 const PREAZAN_IDS = [31,32,33,34,35];
 const PREAZAN5_IDS = [51,52,53,54,55];
 const TAHAJJUD_ID = 36, SEHRI_ID = 37, IFTAR_ID = 38;
@@ -4850,7 +4866,10 @@ function buildPrayerAlarmList(){
     const azanEntry = { id: AZAN_IDS[i], at, type: snd==="none" ? "azan-v2-silent" : "azan-v2", title: "My Deen — " + name,
       body: Lb("মিসওয়াক ও অজু করে নামাজের জন্য প্রস্তুত হোন", "Use miswak and perform wudu to prepare for prayer"),
       sound: snd, prayerId: id, speak: snd!=="none" };
-    if (snd!=="none") azanEntry.speakText = AZAN_SPEAK_TEXTS[id];
+    /* Fix #49: Friday Dhuhr speaks the Jumu'ah sentence — azanSpeakText
+       judges the prayer's own day (locNow(at)), like preazanText does
+       for the reminders. Other days and prayers use AZAN_SPEAK_TEXTS. */
+    if (snd!=="none") azanEntry.speakText = azanSpeakText(id, locNow(at));
     list.push(azanEntry);
   });
   // Tahajjud: notification ONLY, never an azan — and only when its

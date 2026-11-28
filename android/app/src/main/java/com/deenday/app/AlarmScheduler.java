@@ -27,6 +27,18 @@ public final class AlarmScheduler {
     public static final String PREFS = "mydeen";
     public static final String KEY_ALARMS = "prayer_alarms";
 
+    /* Fix #49: Friday Jumu'ah sentences (verbatim from the JS tables —
+       AZAN_SPEAK_TEXTS.Dhuhr == PREAZAN_TEXTS.Dhuhr). The stored
+       speakText/body was baked for the day the alarm was built;
+       re-arming moves it a day forward, so the day-aware Dhuhr
+       sentences must be recomputed for the NEW day — otherwise
+       Friday's Jumu'ah text would be spoken again on Saturday.
+       Judged by the device day (his phone and his location share
+       Asia/Kuala_Lumpur); the JS re-sync on app open is the backstop. */
+    private static final String DHUHR_SPEAK_TEXT = "যোহরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন";
+    private static final String JUMUAH_PREAZAN_TEXT = "জুম্মার নামাজ পড়ার প্রস্তুতি নিন";
+    private static final String JUMUAH_AZAN_SPEAK_TEXT = "জুম্মার নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন";
+
     public static JSONArray readStored(Context ctx) {
         try {
             SharedPreferences prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -96,6 +108,28 @@ public final class AlarmScheduler {
             long now = System.currentTimeMillis();
             while (at <= now) at += 86400000L;
             alarm.put("at", at);
+            // Fix #49: recompute the Dhuhr Friday sentences for the NEW
+            // day — only swap when the stored text is one of the two
+            // known Dhuhr sentences, so nothing else is ever touched.
+            if ("Dhuhr".equals(alarm.optString("prayerId", ""))) {
+                java.util.Calendar cal = java.util.Calendar.getInstance();
+                cal.setTimeInMillis(at);
+                boolean friday = cal.get(java.util.Calendar.DAY_OF_WEEK) == java.util.Calendar.FRIDAY;
+                String rtype = alarm.optString("type", "");
+                if (rtype.startsWith("preazan")) {
+                    String b = alarm.optString("body", "");
+                    if (JUMUAH_PREAZAN_TEXT.equals(b) || DHUHR_SPEAK_TEXT.equals(b)) {
+                        String t = friday ? JUMUAH_PREAZAN_TEXT : DHUHR_SPEAK_TEXT;
+                        alarm.put("body", t);
+                        alarm.put("speakText", t);
+                    }
+                } else if (rtype.startsWith("azan")) {
+                    String st = alarm.optString("speakText", "");
+                    if (JUMUAH_AZAN_SPEAK_TEXT.equals(st) || DHUHR_SPEAK_TEXT.equals(st)) {
+                        alarm.put("speakText", friday ? JUMUAH_AZAN_SPEAK_TEXT : DHUHR_SPEAK_TEXT);
+                    }
+                }
+            }
             JSONArray next = new JSONArray();
             boolean replaced = false;
             for (int i = 0; i < stored.length(); i++) {

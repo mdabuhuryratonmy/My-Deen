@@ -22,7 +22,7 @@ import java.util.Locale;
  * phone unlock — no button press anywhere. So the unlock durood
  * auto-plays again (as it did before Fix #44): on USER_PRESENT the
  * receiver plays the durood itself (DuroodPlayer.playOnce, our own
- * bundled res/raw/durood.mp3, 3.72 s, one recitation) and counts it.
+ * bundled res/raw/durood.mp3, 2.68 s, one recitation) and counts it.
  * No button press, no notification tap is needed for the durood to
  * play. Clean-room: our own code, our own bundled audio, our own
  * design; nothing copied from Al-Shafie.
@@ -30,7 +30,7 @@ import java.util.Locale;
  * The reminder notification still appears — but AFTER the durood
  * finishes, on the user's chosen sound channel (reminder / istighfar /
  * silent), showing the fresh count. That way the chosen tone (reminder
- * 2.2 s, istighfar 6.2 s) never overlaps the durood itself. The
+ * 2.2 s, istighfar 1.4 s) never overlaps the durood itself. The
  * notification has a ✅ action button ("✅ দরুদ শুনুন") that only
  * REPLAYS the durood (DuroodPlayReceiver) — it is never required. The
  * notification stays in the notification list until the user swipes it
@@ -63,7 +63,7 @@ public class DuroodUnlockReceiver extends BroadcastReceiver {
         ensureChannels(context);
         // Fix #45: the durood AUTO-PLAYS on unlock — no button press.
         // goAsync + a background thread, because playOnce() blocks until
-        // the 3.72 s clip finishes (10 s cap). The reminder notification
+        // the 2.68 s clip finishes (10 s cap). The reminder notification
         // posts AFTER playback, on the chosen sound channel, so the
         // chosen tone never overlaps the durood itself.
         final BroadcastReceiver.PendingResult result = goAsync();

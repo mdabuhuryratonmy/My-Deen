@@ -71,6 +71,7 @@ globalThis.openDuroodAppSettings=openDuroodAppSettings; globalThis.syncDuroodTog
 globalThis.renderDuroodSoundSelect=renderDuroodSoundSelect; globalThis.refreshDuroodStats=refreshDuroodStats;
 globalThis.DUROOD_REMIND_SOUNDS=DUROOD_REMIND_SOUNDS; globalThis.duroodRemindSoundName=duroodRemindSoundName;
 globalThis.preazanText=preazanText; globalThis.JUMUAH_PREAZAN_TEXT=JUMUAH_PREAZAN_TEXT;
+globalThis.azanSpeakText=azanSpeakText; globalThis.JUMUAH_AZAN_SPEAK_TEXT=JUMUAH_AZAN_SPEAK_TEXT;
 globalThis.villageNameOf=villageNameOf; globalThis.normalizeCityName=normalizeCityName;
 globalThis.permStepsAsked=permStepsAsked; globalThis.permMarkAsked=permMarkAsked; globalThis.permTimeout=permTimeout;
 globalThis.detectLocation=detectLocation; globalThis.locPermStatus=locPermStatus; globalThis.saveSettingsFromUI=saveSettingsFromUI;
@@ -230,9 +231,10 @@ globalThis.Date = RealDate16; settings.tzName = _tz16;
 // channel is created its sound can never be changed — the old
 // dhikr-durood/dhikr-istighfar channels on the user's phone were
 // created without a working sound, so every reminder arrived silent.
-// (The MP3s themselves are fine: durood 3.72 s / mean −22.1 dB,
-// istighfar 6.17 s / mean −23.0 dB — normal audible speech; the
-// plugin resolves "durood.mp3" correctly by stripping the extension.)
+// (The MP3s themselves are fine — Fix #48 shortened them: durood
+// 2.68 s / mean −18.5 dB, istighfar 1.38 s / mean −20.5 dB, normal
+// audible speech; the plugin resolves "durood.mp3" correctly by
+// stripping the extension.)
 // Fix: fresh v2 channel IDs in both the native ensureChannels (with
 // R.raw.durood/istighfar + HIGH importance) and the JS scheduler,
 // and the old channels are deleted. The old IDs must not appear as a
@@ -2206,8 +2208,8 @@ Object.assign(settings, _savedTz);
         const _friFajr = _fri.filter(a=>a.prayerId==="Fajr" && a.type==="preazan-v2");
         check("Fix #42: on Friday Fajr pre-azan is unchanged (normal Fajr text)",
           _friFajr.length===2 && _friFajr.every(a=>a.body===PREAZAN_TEXTS.Fajr), "Fajr unchanged");
-        check("Fix #42: on Friday the azan-time announcement is unchanged (AZAN == PREAZAN, no Jumu'ah text at azan time)",
-          AZAN_SPEAK_TEXTS.Dhuhr === PREAZAN_TEXTS.Dhuhr, "azan unchanged");
+        check("Fix #49 (UPDATED Fix #42): AZAN_SPEAK_TEXTS table unchanged (still == PREAZAN_TEXTS) — the Friday Jumu'ah azan-time text comes from azanSpeakText, not the table",
+          AZAN_SPEAK_TEXTS.Dhuhr === PREAZAN_TEXTS.Dhuhr, "azan table unchanged");
         _fake42(2026, 10, 19); // Thursday
         const _thu = buildPrayerAlarmList();
         const _thuDhuhr = _thu.filter(a=>a.prayerId==="Dhuhr" && a.type==="preazan-v2");
@@ -2673,6 +2675,119 @@ Object.assign(settings, _savedTz);
       const _avail47 = 914 - 24 - _navH47;
       check("Fix #47: the marked Home section fits one 1080x2400 screen (total ≤ viewport − status bar − bottom nav)",
         _total47 <= _avail47, `total ${_total47} ≤ ${_avail47} (header ${_headerH47} + ring ${_ringH47} + prayer ${_prayerH47} + navrow ${_navRowH47})`);
+    }
+
+    // ---- Fix #48 (28 Nov 2026, user order): shorten the notification
+    // durood + istighfar audio. Istighfar was 6.17 s (two phrases) —
+    // now just "আস্তাগফিরুল্লাহ" once (~1.4 s). Durood was 3.72 s
+    // ("আল্লাহুম্মা সাল্লি ওয়া সাল্লিম আলা নাবিয়্যিনা মুহাম্মাদ") —
+    // now the shortest form "সাল্লাল্লাহু আলাইহি ওয়াসাল্লাম" (~2.7 s).
+    // Same Google Translate TTS voice (bn), same 24 kHz mono 64 kbps
+    // format; silence trimmed at both ends. The wait is dynamic
+    // (DuroodPlayer blocks on MediaPlayer completion, 10 s cap), so no
+    // timing constant changes — only the comments pinning the old
+    // durations. Istighfar travels as base64 text (assets/istighfar.b64,
+    // decoded by the workflow at build time); durood is a binary in the
+    // repo (www/audio + res/raw).
+    {
+      const _cp48 = require("child_process");
+      const _durFn48 = f => parseFloat(_cp48.execSync(`ffprobe -v error -show_entries format=duration -of csv=p=0 "${f}"`, {encoding:"utf8"}).trim());
+      const _d48 = "/home/hatch/workspace/deen-day/audio/durood.mp3";
+      const _i48 = "/home/hatch/workspace/deen-day/audio/istighfar.mp3";
+      const _dd48 = _durFn48(_d48), _di48 = _durFn48(_i48);
+      check("Fix #48: new durood clip is the short form (~2.7 s, was 3.72 s)", _dd48 > 2.0 && _dd48 < 3.2, `${_dd48} s`);
+      check("Fix #48: new istighfar clip is one 'আস্তাগফিরুল্লাহ' (~1.4 s, was 6.17 s)", _di48 > 1.0 && _di48 < 2.0, `${_di48} s`);
+      const _same48 = (a, b) => fs.readFileSync(a).equals(fs.readFileSync(b));
+      check("Fix #48: all 4 durood.mp3 copies byte-identical",
+        _same48(_d48, "/home/hatch/workspace/deen-day/www/audio/durood.mp3") &&
+        _same48(_d48, "/home/hatch/workspace/deen-day/android/app/src/main/res/raw/durood.mp3") &&
+        _same48(_d48, "/home/hatch/workspace/deen-day/android/app/src/main/assets/public/audio/durood.mp3"), "4 copies");
+      check("Fix #48: all 4 istighfar.mp3 copies byte-identical",
+        _same48(_i48, "/home/hatch/workspace/deen-day/www/audio/istighfar.mp3") &&
+        _same48(_i48, "/home/hatch/workspace/deen-day/android/app/src/main/res/raw/istighfar.mp3") &&
+        _same48(_i48, "/home/hatch/workspace/deen-day/android/app/src/main/assets/public/audio/istighfar.mp3"), "4 copies");
+      const _b64_48 = fs.readFileSync("/home/hatch/workspace/deen-day/assets/istighfar.b64", "utf8");
+      check("Fix #48: assets/istighfar.b64 decodes to the new short istighfar clip",
+        Buffer.from(_b64_48.trim(), "base64").equals(fs.readFileSync(_i48)) && !_b64_48.includes("\n"), "single-line base64");
+      const _dp48 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodPlayer.java", "utf8");
+      const _duroodRcv48 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodUnlockReceiver.java", "utf8");
+      const _dpr48 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodPlayReceiver.java", "utf8");
+      check("Fix #48: Java comments pin the new durations (2.68 s / 1.4 s)",
+        _dp48.includes("2.68 s") && _dp48.includes("istighfar 1.4 s") &&
+        _duroodRcv48.includes("2.68 s") && _duroodRcv48.includes("istighfar 1.4 s") && _dpr48.includes("2.68 s"), "new durations");
+      check("Fix #48: old durations gone from the player/receiver comments + app.js",
+        !/3\.72 s/.test(_dp48 + _duroodRcv48 + _dpr48) && !/6\.2 s/.test(_dp48 + _duroodRcv48 + _dpr48) &&
+        src.includes("istighfar.mp3 (1.4 s)") && !src.includes("istighfar.mp3 (6.2 s)"), "old durations gone");
+    }
+
+    // ---- Fix #49 (28 Nov 2026, user report): Friday Dhuhr azan-time
+    // speech must say Jumu'ah. The pre-azan reminders already did
+    // (Fix #42), but the azan-time announcement still said the normal
+    // Dhuhr sentence — AZAN_SPEAK_TEXTS has no Friday override. New
+    // day-aware azanSpeakText(id, locDate), mirroring preazanText:
+    // Friday Dhuhr → JUMUAH_AZAN_SPEAK_TEXT, everything else →
+    // AZAN_SPEAK_TEXTS. Used by checkAzan (foreground TTS) and by
+    // buildPrayerAlarmList (native alarm speakText, baked at schedule
+    // time). The Java rescheduleNextDay recomputes the same sentences
+    // for the new day, so Friday's Jumu'ah text never leaks to
+    // Saturday. PREAZAN_TEXTS / AZAN_SPEAK_TEXTS verbatim, never edited.
+    {
+      const _saved49 = { ...settings };
+      Object.assign(settings, { country:"Malaysia", city:"Ipoh", lat:4.5975, lon:101.0901,
+        tzName:"Asia/Kuala_Lumpur", locId:"ipoh", tzLoc:"ipoh", method:0, school:1, schoolExplicit:false });
+      __setTimings({Fajr:"05:42", Sunrise:"07:03", Dhuhr:"13:00", Asr:"16:24", Maghrib:"18:58", Isha:"20:10", Imsak:"05:32", Firstthird:"22:59", Lastthird:"03:01"});
+      const _RealDate49 = Date;
+      const _fake49 = (y, m, d) => {
+        const t = new Date(y, m, d); t.setHours(4, 0, 0, 0);
+        globalThis.Date = class extends _RealDate49 {
+          constructor(...a){ super(...(a.length ? a : [t.getTime()])); }
+          static now(){ return t.getTime(); }
+        };
+      };
+      try {
+        const _fri49 = new Date(2026, 10, 20); // Friday
+        const _thu49 = new Date(2026, 10, 19); // Thursday
+        check("Fix #49: azanSpeakText returns the Jumu'ah sentence for Friday Dhuhr",
+          azanSpeakText("Dhuhr", _fri49) === JUMUAH_AZAN_SPEAK_TEXT &&
+          JUMUAH_AZAN_SPEAK_TEXT === "জুম্মার নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন", azanSpeakText("Dhuhr", _fri49));
+        check("Fix #49: azanSpeakText is unchanged on other days and other prayers",
+          azanSpeakText("Dhuhr", _thu49) === AZAN_SPEAK_TEXTS.Dhuhr &&
+          azanSpeakText("Fajr", _fri49) === AZAN_SPEAK_TEXTS.Fajr &&
+          azanSpeakText("Asr", _fri49) === AZAN_SPEAK_TEXTS.Asr &&
+          azanSpeakText("Maghrib", _fri49) === AZAN_SPEAK_TEXTS.Maghrib &&
+          azanSpeakText("Isha", _fri49) === AZAN_SPEAK_TEXTS.Isha, "other days/prayers");
+        check("Fix #49: AZAN_SPEAK_TEXTS / PREAZAN_TEXTS verbatim (Dhuhr entries unchanged)",
+          AZAN_SPEAK_TEXTS.Dhuhr === "যোহরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+          PREAZAN_TEXTS.Dhuhr === "যোহরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন" &&
+          AZAN_SPEAK_TEXTS.Dhuhr === PREAZAN_TEXTS.Dhuhr, "verbatim");
+        _fake49(2026, 10, 20); // Friday
+        const _friList49 = buildPrayerAlarmList();
+        const _friAzan49 = _friList49.filter(a=>a.prayerId==="Dhuhr" && a.type.indexOf("azan")===0 && a.speakText);
+        check("Fix #49: Friday Dhuhr azan entry carries the Jumu'ah speakText (native path)",
+          _friAzan49.length===1 && _friAzan49[0].speakText===JUMUAH_AZAN_SPEAK_TEXT, _friAzan49.map(a=>a.speakText).join(" | "));
+        const _friOther49 = _friList49.filter(a=>a.prayerId!=="Dhuhr" && a.type.indexOf("azan")===0 && a.speakText);
+        check("Fix #49: Friday azan entries for other prayers keep their normal speakText",
+          _friOther49.length===4 && _friOther49.every(a=>a.speakText===AZAN_SPEAK_TEXTS[a.prayerId]), "4 others");
+        _fake49(2026, 10, 19); // Thursday
+        const _thuList49 = buildPrayerAlarmList();
+        const _thuAzan49 = _thuList49.filter(a=>a.prayerId==="Dhuhr" && a.type.indexOf("azan")===0 && a.speakText);
+        check("Fix #49: Thursday Dhuhr azan entry carries the normal Dhuhr speakText",
+          _thuAzan49.length===1 && _thuAzan49[0].speakText===AZAN_SPEAK_TEXTS.Dhuhr, "Thursday normal");
+      } finally {
+        globalThis.Date = _RealDate49;
+        Object.assign(settings, _saved49);
+      }
+      check("Fix #49: checkAzan speaks via azanSpeakText (foreground TTS path)",
+        src.includes('speakText(azanSpeakText(p, now), "bn-BD")'), "checkAzan");
+      check("Fix #49: buildPrayerAlarmList bakes azanSpeakText(id, locNow(at)) (native path)",
+        src.includes('azanSpeakText(id, locNow(at))'), "schedule-time");
+      check("Fix #49: azanSpeakText mirrors preazanText (same Friday check locDate.getDay() === 5)",
+        src.includes('function azanSpeakText(id, locDate)') && src.includes('locDate.getDay() === 5') &&
+        src.includes('const JUMUAH_AZAN_SPEAK_TEXT = "জুম্মার নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন"'), "same check");
+      const _sched49 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AlarmScheduler.java", "utf8");
+      check("Fix #49: rescheduleNextDay recomputes the Dhuhr Friday sentences for the new day (no Saturday leak)",
+        _sched49.includes("JUMUAH_AZAN_SPEAK_TEXT") && _sched49.includes("DAY_OF_WEEK") &&
+        _sched49.includes("Calendar.FRIDAY") && _sched49.includes("JUMUAH_PREAZAN_TEXT"), "re-arm guard");
     }
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);

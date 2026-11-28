@@ -22,10 +22,10 @@ import java.util.concurrent.TimeUnit;
  * (Fix #3 / Build #19 / Fix #6): explicit notification audio
  * attributes + full volume, with a MediaPlayer.create() fallback.
  * playOnce() runs on the CALLER's background thread (both callers use
- * goAsync + a thread) and blocks until the 3.72 s clip finishes, errors
+ * goAsync + a thread) and blocks until the 2.68 s clip finishes, errors
  * out, or 10 s elapse — so the caller can post the reminder
  * notification AFTER the durood finishes, on the user's chosen sound
- * channel, and the chosen tone (reminder 2.2 s, istighfar 6.2 s) never
+ * channel, and the chosen tone (reminder 2.2 s, istighfar 1.4 s) never
  * overlaps the durood itself. The count is incremented only once
  * playback actually starts.
  */
