@@ -26,6 +26,9 @@ public class DuroodPlayReceiver extends BroadcastReceiver {
         new Thread(() -> {
             try { DuroodPlayer.playOnce(context); } catch (Exception ignored) {}
             try { DuroodUnlockReceiver.postReminder(context); } catch (Exception ignored) {}
+            // Fix #57: self-heal — same re-arm as the unlock path, so a
+            // service Realme killed is restarted after every replay.
+            UnlockKeepAliveService.start(context);
             result.finish();
         }).start();
     }

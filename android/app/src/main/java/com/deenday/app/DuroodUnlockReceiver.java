@@ -54,22 +54,54 @@ public class DuroodUnlockReceiver extends BroadcastReceiver {
     public static final String KEY_COUNT_TOTAL = "durood_count_total";
     public static final String KEY_COUNT_TODAY = "durood_count_today";
     public static final String KEY_COUNT_DATE = "durood_count_date";
+    // Fix #56: last unlock-play attempt / success (epoch ms, 0 = never)
+    // — read by DuroodUnlockPlugin.getUnlockStatus() for the Settings
+    // diagnostic ("শেষবার আনলক-দরুদ বেজেছে", else "এখনো হয়নি").
+    public static final String KEY_LAST_UNLOCK_ATTEMPT = "durood_last_unlock_attempt";
+    public static final String KEY_LAST_UNLOCK_PLAY = "durood_last_unlock_play";
+
+    /** Fix #56: record an unlock-play attempt / success (epoch ms). */
+    public static void recordUnlockAttempt(Context ctx) {
+        try { ctx.getSharedPreferences("mydeen", Context.MODE_PRIVATE).edit().putLong(KEY_LAST_UNLOCK_ATTEMPT, System.currentTimeMillis()).apply(); } catch (Exception ignored) {}
+    }
+    public static void recordUnlockPlay(Context ctx) {
+        try { ctx.getSharedPreferences("mydeen", Context.MODE_PRIVATE).edit().putLong(KEY_LAST_UNLOCK_PLAY, System.currentTimeMillis()).apply(); } catch (Exception ignored) {}
+    }
+    public static long getLastUnlockAttempt(Context ctx) {
+        try { return ctx.getSharedPreferences("mydeen", Context.MODE_PRIVATE).getLong(KEY_LAST_UNLOCK_ATTEMPT, 0L); } catch (Exception e) { return 0L; }
+    }
+    public static long getLastUnlockPlay(Context ctx) {
+        try { return ctx.getSharedPreferences("mydeen", Context.MODE_PRIVATE).getLong(KEY_LAST_UNLOCK_PLAY, 0L); } catch (Exception e) { return 0L; }
+    }
 
     @Override
     public void onReceive(Context context, Intent intent) {
         if (intent == null || !Intent.ACTION_USER_PRESENT.equals(intent.getAction())) return;
         SharedPreferences prefs = context.getSharedPreferences("mydeen", Context.MODE_PRIVATE);
         if (!prefs.getBoolean(KEY_DUROOD_ON, true)) return;
-        ensureChannels(context);
-        // Fix #45: the durood AUTO-PLAYS on unlock — no button press.
+        // Fix #57: no ensureChannels() here any more — postReminder()
+        // creates the channels itself AFTER playback, so the channel
+        // setup (binder calls) no longer sits on the playback-start
+        // path. The durood must start as soon as possible after unlock.
         // goAsync + a background thread, because playOnce() blocks until
         // the 2.68 s clip finishes (10 s cap). The reminder notification
         // posts AFTER playback, on the chosen sound channel, so the
         // chosen tone never overlaps the durood itself.
         final BroadcastReceiver.PendingResult result = goAsync();
         new Thread(() -> {
-            try { DuroodPlayer.playOnce(context); } catch (Exception ignored) {}
+            // Fix #56: record the attempt BEFORE playing, and the
+            // success only when playback actually started — the
+            // Settings diagnostic reads these two timestamps.
+            recordUnlockAttempt(context);
+            boolean played = false;
+            try { played = DuroodPlayer.playOnce(context); } catch (Exception ignored) {}
+            if (played) recordUnlockPlay(context);
             try { postReminder(context); } catch (Exception ignored) {}
+            // Fix #57: self-heal — if Realme killed the keep-alive
+            // service, restart it now (best-effort: start() swallows a
+            // refusal) so the NEXT unlock finds a warm process and
+            // plays promptly instead of cold-starting every time.
+            UnlockKeepAliveService.start(context);
             result.finish();
         }).start();
     }

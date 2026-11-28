@@ -413,6 +413,14 @@
         <div class="row mt" id="durood-sound-row"><label>🔔 রিমাইন্ডারের শব্দ</label>
           <select id="set-durood-sound"></select></div>
         <p class="muted small" id="durood-count" style="display:none"></p>
+        <!-- Fix #56: unlock-durood diagnostic (native Android only; hidden
+             on the web) — a test button that plays the durood through the
+             same DuroodPlayer path the unlock uses, an honest status
+             (toggle / unlock listener / keep-alive / last unlock play),
+             and a one-line battery/autostart note for Realme. -->
+        <div class="row mt" id="durood-test-row" style="display:none"><button class="btn block" id="btn-durood-test">▶️ দুরুদ পরীক্ষা করুন</button></div>
+        <p class="muted small" id="durood-unlock-status" style="display:none"></p>
+        <p class="muted small" id="durood-battery-hint" style="display:none">🔋 ফোনের সেটিংসে My Deen-এর ব্যাটারি "Don't optimize" রাখুন আর অটোস্টার্ট চালু রাখুন — তাহলে আনলক করলেই দরুদ বাজবে। (Settings → Apps → My Deen → Battery)</p>
         <div class="row mt" id="durood-appsettings-row"><button class="btn block" id="btn-durood-appsettings">⚙️ অ্যাপের সেটিংস খুলুন</button></div>
         <div id="reminder-settings"></div>
         <label data-i18n="adhanLabel">আজানের সুর</label>

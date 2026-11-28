@@ -69,6 +69,10 @@ globalThis.AZAN_SPEAK_TEXTS=AZAN_SPEAK_TEXTS; globalThis.nativeAzanArmed=nativeA
 globalThis.scheduleNativeAzan=scheduleNativeAzan; // Fix #43: the LN fallback under test — it must never schedule a sounding azan
 globalThis.openDuroodAppSettings=openDuroodAppSettings; globalThis.syncDuroodToggleNative=syncDuroodToggleNative;
 globalThis.renderDuroodSoundSelect=renderDuroodSoundSelect; globalThis.refreshDuroodStats=refreshDuroodStats;
+globalThis.PRAYER_NAMES=PRAYER_NAMES; globalThis.PRAYERS=PRAYERS;
+globalThis.fmtTime=fmtTime; globalThis.fmtTimeNoSuffix=fmtTimeNoSuffix;
+globalThis.naflRotateName=naflRotateName;
+globalThis.duroodUnlockStatusText=duroodUnlockStatusText; globalThis.refreshDuroodStatus=refreshDuroodStatus; globalThis.playDuroodTest=playDuroodTest;
 globalThis.DUROOD_REMIND_SOUNDS=DUROOD_REMIND_SOUNDS; globalThis.duroodRemindSoundName=duroodRemindSoundName;
 globalThis.preazanText=preazanText; globalThis.JUMUAH_PREAZAN_TEXT=JUMUAH_PREAZAN_TEXT;
 globalThis.azanSpeakText=azanSpeakText; globalThis.JUMUAH_AZAN_SPEAK_TEXT=JUMUAH_AZAN_SPEAK_TEXT;
@@ -99,8 +103,12 @@ settings.lang = "bn";
 check("no profilePhoto in defaults/settings", settings.profilePhoto === undefined && !("profilePhoto" in settings));
 check("renderGmailStatus/renderProfilePhoto/handleProfilePhotoFile removed from source",
   !src.includes("function renderGmailStatus") && !src.includes("function renderProfilePhoto") && !src.includes("function handleProfilePhotoFile"));
-check("durood test button removed (source + HTML)",
-  !src.includes("btn-test-durood") && !src.includes("দরুদ পরীক্ষা") && !html.includes("btn-test-durood"));
+/* Fix #56 (28 Nov 2026): the OLD test button id stays gone — but the
+   phrase "দরুদ পরীক্ষা" is back as the new diagnostic button's label
+   ("দরুদ পরীক্ষা করুন", id btn-durood-test), so the old blanket
+   phrase ban is lifted; only the old id is pinned gone. */
+check("old durood test button id removed (source + HTML)",
+  !src.includes("btn-test-durood") && !html.includes("btn-test-durood"));
 check("no profile photo markup in HTML",
   !html.includes("hdr-avatar") && !html.includes("profile-photo-input") && !html.includes("btn-change-photo") && !html.includes("gmail-status"));
 check("renderLoginState is a function", typeof renderLoginState === "function");
@@ -2633,19 +2641,22 @@ Object.assign(settings, _savedTz);
       const _nums47 = re => { const m = _css47.match(re); return m ? [parseFloat(m[1]), parseFloat(m[2])].filter(v=>!isNaN(v)) : [NaN, NaN]; };
       // Icon sizes (smaller than before).
       const _ring47 = _num47(/\.ring-wrap\{[^}]*width:(\d+)px/);
+      // Fix #55: the HOME ring is larger (192) — the base .ring-wrap
+      // (180) is now only the fasting ring's size.
+      const _ringHero47 = _num47(/\.ring-hero \.ring-wrap\{[^}]*width:(\d+)px/);
       const _brand47 = _num47(/\.brand img\{[^}]*width:(\d+)px/);
       const _bell47 = _num47(/\.icon-btn\{[^}]*width:(\d+)px/);
       const _moon47 = _num47(/\.ring-hero \.ring-moon\{[^}]*font-size:(\d+)px/);
       const _pic47 = _num47(/\.p-ic\{[^}]*font-size:(\d+)px/);
       const _done47 = _num47(/\.done-circle\{[^}]*width:(\d+)px/);
       const _hic47 = _num47(/\.home-nav-btn \.hic\{[^}]*font-size:(\d+)px/);
-      check("Fix #47: Home icons are smaller (ring 220→180, brand 44→36, bell 40→36, moon 34→28, prayer 16→14, done 26→22, nav 16→13)",
-        _ring47===180 && _brand47===36 && _bell47===36 && _moon47===28 && _pic47===14 && _done47===22 && _hic47===13,
-        `ring ${_ring47}, brand ${_brand47}, bell ${_bell47}, moon ${_moon47}, pic ${_pic47}, done ${_done47}, hic ${_hic47}`);
+      check("Fix #47: Home icons are smaller (base ring 220→180, hero ring 192 — Fix #55, brand 44→36, bell 40→36, moon 34→28, prayer 16→14, done 26→22, nav 16→13)",
+        _ring47===180 && _ringHero47===192 && _brand47===36 && _bell47===36 && _moon47===28 && _pic47===14 && _done47===22 && _hic47===13,
+        `ring ${_ring47}/${_ringHero47}, brand ${_brand47}, bell ${_bell47}, moon ${_moon47}, pic ${_pic47}, done ${_done47}, hic ${_hic47}`);
       // Text sizes are NOT shrunk.
-      check("Fix #47: text sizes unchanged (prayer name 16, range 15, ring count 34, ring name 22, nav button 16, dates 13.5)",
+      check("Fix #47: text sizes unchanged (prayer name 16, range 15, ring count 34 base / 28 hero — Fix #55, ring name 22, nav button 16, dates 13.5)",
         /\.prayer-row \.p-name\{[^}]*font-size:16px/.test(_css47) && /#prayer-list \.p-range\{[^}]*font-size:15px/.test(_css47) &&
-        /\.ring-count\{[^}]*font-size:34px/.test(_css47) && /\.ring-name\{[^}]*font-size:22px/.test(_css47) &&
+        /\.ring-count\{[^}]*font-size:34px/.test(_css47) && /\.ring-hero \.ring-count\{[^}]*font-size:28px/.test(_css47) && /\.ring-name\{[^}]*font-size:22px/.test(_css47) &&
         /\.home-nav-btn\{[^}]*font-size:16px/.test(_css47) && /\.dates\{[^}]*font-size:13\.5px/.test(_css47), "text kept");
       // Layout budget from the CSS values (single-line text ≈ 1.2×
       // font-size; the date lines are 2 lines at 13.5px × 1.5).
@@ -2665,9 +2676,11 @@ Object.assign(settings, _savedTz);
       const _navIc47 = _num47(/nav button \.ic\{[^}]*font-size:(\d+)px/);
       const _navFs47 = _num47(/nav button\{[^}]*font-size:([\d.]+)px/);
       const _mainPad47 = _num47(/main\{padding:(\d+)px/);
-      const _headerH47 = _hdrPad47[0] + _hdrPad47[1] + Math.max(_brand47, 41) + _datesMt47 + Math.ceil(2 * _datesFs47 * _datesLh47);
+      // Fix #50: the header dates are 3 lines now (Gregorian / Hijri /
+      // Bengali, each on its own line) — the old 2-line count is wrong.
+      const _headerH47 = _hdrPad47[0] + _hdrPad47[1] + Math.max(_brand47, 41) + _datesMt47 + Math.ceil(3 * _datesFs47 * _datesLh47);
       const _pillH47 = _pillPad47 * 2 + Math.ceil(13 * 1.2) + 2;
-      const _ringH47 = _ringPadT47 + _ring47 + _pillsMt47 + _pillH47 + _ringPadB47 + _cardMb47;
+      const _ringH47 = _ringPadT47 + _ringHero47 + _pillsMt47 + _pillH47 + _ringPadB47 + _cardMb47;
       const _prayerH47 = _cardPad47 * 2 + 5 * (_rowPad47 * 2 + _done47) + 4 + _cardMb47;
       const _navRowH47 = 8 * 2 + (_navBtnPad47 * 2 + Math.ceil(16 * 1.2)) + _cardMb47;
       const _total47 = _headerH47 + _mainPad47 + _ringH47 + _prayerH47 + _navRowH47;
@@ -2675,6 +2688,249 @@ Object.assign(settings, _savedTz);
       const _avail47 = 914 - 24 - _navH47;
       check("Fix #47: the marked Home section fits one 1080x2400 screen (total ≤ viewport − status bar − bottom nav)",
         _total47 <= _avail47, `total ${_total47} ≤ ${_avail47} (header ${_headerH47} + ring ${_ringH47} + prayer ${_prayerH47} + navrow ${_navRowH47})`);
+    }
+
+    // ---- Fix #50 (28 Nov 2026, header glass panel): the header texts
+    // stay ON the glass; below the writing there is NOTHING inside the
+    // header. The old two-line date layout wrapped the Bengali year
+    // ("১৪৩৩") onto an orphaned third line — now Gregorian / Hijri /
+    // Bengali each have their own line, and the bottom padding hugs
+    // the text (14→8px). ----
+    {
+      renderDates();
+      const _dl50 = els["#date-line"].innerHTML;
+      const _lines50 = _dl50.split("<br>");
+      check("Fix #50: header dates are 3 lines (Gregorian / Hijri / Bengali), no orphaned wrap",
+        _lines50.length===3, `${_lines50.length} lines`);
+      check("Fix #50: line 2 is Hijri only (no Bengali date on it)",
+        _lines50[1].includes("🌙") && !_lines50[1].includes("🇧🇩"), _lines50[1].slice(0, 40));
+      check("Fix #50: line 3 is the Bengali date only (no Hijri on it)",
+        _lines50[2].includes("🇧🇩") && !_lines50[2].includes("🌙"), _lines50[2].slice(0, 40));
+      // Each line fits the 411px viewport (content 379px) on one line:
+      // conservative 8.5px per char at 13.5px + 16px per emoji (PIL
+      // measured the real lines at 104–237px incl. emoji — the model
+      // overestimates, so passing it means truly no wrap).
+      const _w50 = s => [...s].reduce((a, c) => a + (c.codePointAt(0) > 0xFFFF ? 16 : 8.5), 0);
+      check("Fix #50: every date line fits on one line (no wrap below the writing)",
+        _lines50.every(l => _w50(l.replace(/<[^>]+>/g, "")) < 379),
+        _lines50.map(l => Math.round(_w50(l.replace(/<[^>]+>/g, "")))).join("/"));
+      const _hdrPad50 = (()=>{ const m = css.match(/header\{[^}]*padding:(\d+)px \d+px (\d+)px/); return m ? [parseFloat(m[1]), parseFloat(m[2])] : [NaN, NaN]; })();
+      check("Fix #50: header bottom padding hugs the text (14→8px)",
+        _hdrPad50[0]===12 && _hdrPad50[1]===8, `${_hdrPad50}`);
+      // Nothing below the writing inside the header: after the greet
+      // line (hidden unless a name is set) the header closes.
+      const _hdr50 = html.slice(html.indexOf("<header>"), html.indexOf("</header>"));
+      check("Fix #50: nothing below the writing inside the header (greet line is the last element)",
+        /id="greet-line"[^>]*><\/div>\s*$/.test(_hdr50), "header ends at the greet line");
+    }
+
+    // ---- Fix #51 (28 Nov 2026, sunrise/sunset chip): "৭:০৭ সকাল •
+    // ৭:০০ দুপুর/রাত" → "সূর্যোদয় ৭:০৭ • সূর্যাস্ত ৭:০০". Times
+    // unchanged (same timings source); only the labels change. ----
+    {
+      check("Fix #51: fmtTimeNoSuffix drops the সকাল/দুপুর/রাত suffix (same HH:MM source)",
+        fmtTimeNoSuffix("07:07")==="৭:০৭" && fmtTimeNoSuffix("19:00")==="৭:০০", `${fmtTimeNoSuffix("07:07")} / ${fmtTimeNoSuffix("19:00")}`);
+      check("Fix #51: fmtTime itself is untouched (still adds the suffix everywhere else)",
+        fmtTime("07:07")==="৭:০৭ সকাল" && fmtTime("19:00")==="৭:০০ দুপুর/রাত", fmtTime("07:07"));
+      check("Fix #51: the chip uses the labels + the no-suffix helper on the same timings source",
+        src.includes('Lb("সূর্যোদয়", "Sunrise")') && src.includes('Lb("সূর্যাস্ত", "Sunset")') &&
+        src.includes("fmtTimeNoSuffix(timings.Sunrise)") && src.includes("fmtTimeNoSuffix(timings.Sunset)") &&
+        !src.includes("fmtTime(timings.Sunrise)"), "pill-sun line");
+      // The new chip fits the screen: text ~150px at 13px semibold
+      // (PIL measured 146–154px without the two emojis) + emojis +
+      // padding/border ≈ 202px < 379px content width.
+      const _chip51 = "🌅 সূর্যোদয় ৭:০৭ • 🌇 সূর্যাস্ত ৭:০০";
+      const _w51 = [..._chip51].reduce((a, c) => a + (c.codePointAt(0) > 0xFFFF ? 14 : 8), 0) + 22;
+      check("Fix #51: the relabelled chip fits within the screen width",
+        _w51 < 379, `${Math.round(_w51)}px < 379px`);
+    }
+
+    // ---- Fix #52 (28 Nov 2026, Muslims Day video): in the morning
+    // nafl window the circle name rotates ইশরাক → চাশত → দুহা →
+    // ইশরাক, ~2 s per name, while the countdown is ONE (same end). ----
+    {
+      const _t52 = ms => new Date(ms);
+      check("Fix #52: rotation order ইশরাক → চাশত → দুহা → ইশরাক, ~2 s per name",
+        naflRotateName(_t52(0))==="ইশরাক" && naflRotateName(_t52(2000))==="চাশত" &&
+        naflRotateName(_t52(4000))==="দুহা" && naflRotateName(_t52(6000))==="ইশরাক",
+        [0, 2000, 4000, 6000].map(m => naflRotateName(_t52(m))).join(" → "));
+      check("Fix #52: rotation is derived from the clock only (same instant → same name, no state)",
+        naflRotateName(_t52(2000))===naflRotateName(_t52(2000)) && naflRotateName(_t52(5999))==="দুহা", "pure function");
+      const _saved52 = __getTimings();
+      __setTimings({Fajr:"05:45", Sunrise:"07:07", Dhuhr:"13:03", Asr:"16:27", Maghrib:"19:02", Isha:"20:16", Imsak:"05:35", Firstthird:"23:02", Lastthird:"03:04"});
+      try {
+        const _at52 = (h, m, s=0) => { const d = new Date(); d.setHours(h, m, s, 0); return d; };
+        const _e1 = nextEvent(_at52(8, 0, 0)), _e2 = nextEvent(_at52(8, 0, 2));
+        check("Fix #52: the countdown end stays fixed across a name change (same at, same prev)",
+          _e1.kind==="nafl" && _e2.kind==="nafl" && _e1.at.getTime()===_e2.at.getTime() && _e1.prev.getTime()===_e2.prev.getTime(),
+          `${_e1.id} → ${_e1.at.getHours()}:${String(_e1.at.getMinutes()).padStart(2, "0")}`);
+        check("Fix #52: the displayed name DOES change across the 2 s boundary (rotation is real)",
+          naflRotateName(_at52(8, 0, 0))!==naflRotateName(_at52(8, 0, 2)),
+          `${naflRotateName(_at52(8, 0, 0))} → ${naflRotateName(_at52(8, 0, 2))}`);
+        check("Fix #52: forbidden windows never rotate (07:10 is forbidden, not a nafl name)",
+          nextEvent(_at52(7, 10)).kind==="forbidden", nextEvent(_at52(7, 10)).kind);
+      } finally { __setTimings(_saved52); }
+      check("Fix #52: renderPrayers rotates only the nafl name; forbidden keeps its message first",
+        src.includes('ev.kind==="nafl" ? naflRotateName(now) : ev.name'), "ring-name line");
+    }
+
+    // ---- Fix #53 (28 Nov 2026, unlock-durood audit): no definite
+    // code hole was found — the chain is pinned here so it cannot
+    // silently regress: receiver registered, ✅ path has no toggle
+    // gate, the player opens the bundled clip. ----
+    {
+      const _man53 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/AndroidManifest.xml", "utf8");
+      check("Fix #53: DuroodUnlockReceiver is registered, exported, USER_PRESENT",
+        /<receiver android:name=".DuroodUnlockReceiver" android:exported="true">[\s\S]*?android.intent.action.USER_PRESENT/.test(_man53), "manifest");
+      check("Fix #53: DuroodPlayReceiver is registered (explicit, not exported — ✅ only)",
+        _man53.includes('<receiver android:name=".DuroodPlayReceiver" android:exported="false" />'), "manifest");
+      check("Fix #53: BootReceiver (BOOT_COMPLETED) + UnlockKeepAliveService (specialUse) registered",
+        _man53.includes("android.intent.action.BOOT_COMPLETED") && _man53.includes('android:name=".UnlockKeepAliveService"') && _man53.includes('foregroundServiceType="specialUse"'), "manifest");
+      check("Fix #53: foreground-service + notification + boot permissions declared",
+        _man53.includes("FOREGROUND_SERVICE\"") && _man53.includes("FOREGROUND_SERVICE_SPECIAL_USE\"") &&
+        _man53.includes("POST_NOTIFICATIONS\"") && _man53.includes("RECEIVE_BOOT_COMPLETED\""), "permissions");
+      const _play53 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodPlayReceiver.java", "utf8");
+      check("Fix #53: the ✅ replay has NO toggle check (it must play even if the toggle is off)",
+        !_play53.includes("durood_on_unlock") && !_play53.includes("getBoolean"), "no gate");
+      const _player53 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodPlayer.java", "utf8");
+      check("Fix #53: DuroodPlayer opens the bundled res/raw/durood.mp3",
+        _player53.includes("R.raw.durood"), "player source");
+      check("Fix #53: the bundled durood clip exists in the repo (audio + www + res/raw)",
+        fs.existsSync("/home/hatch/workspace/deen-day/audio/durood.mp3") &&
+        fs.existsSync("/home/hatch/workspace/deen-day/www/audio/durood.mp3") &&
+        fs.existsSync("/home/hatch/workspace/deen-day/android/app/src/main/res/raw/durood.mp3"), "durood.mp3");
+    }
+
+    // ---- Fix #54 (28 Nov 2026, spelling): ফজর, যোহর, আসর, মাগরিব,
+    // ইশা + ইশরাক, চাশত, দুহা — everywhere. "জোহর" is gone from the
+    // display names; PREAZAN_TEXTS / AZAN_SPEAK_TEXTS are verbatim
+    // (they already said যোহর) and untouched. ----
+    {
+      const _bn54 = PRAYER_NAMES.bn;
+      check("Fix #54: PRAYER_NAMES bn spellings (ফজর/যোহর/আসর/মাগরিব/ইশা)",
+        _bn54.Fajr==="ফজর" && _bn54.Dhuhr==="যোহর" && _bn54.Asr==="আসর" && _bn54.Maghrib==="মাগরিব" && _bn54.Isha==="ইশা",
+        JSON.stringify(_bn54));
+      const _list54 = Object.fromEntries(PRAYERS.map(p => [p.id, p.bn]));
+      check("Fix #54: prayer-list bn spellings match (Dhuhr is যোহর)",
+        _list54.Fajr==="ফজর" && _list54.Dhuhr==="যোহর" && _list54.Asr==="আসর" && _list54.Maghrib==="মাগরিব" && _list54.Isha==="ইশা",
+        JSON.stringify(_list54));
+      check("Fix #54: no 'জোহর' anywhere in the app source or HTML",
+        !src.includes("জোহর") && !html.includes("জোহর"), "জোহর gone");
+      check("Fix #54: nafl names stay correct (ইশরাক/চাশত/দুহা)",
+        src.includes('Lb("ইশরাক", "Ishraq")') && src.includes('Lb("চাশত", "Chasht")') && src.includes('Lb("দুহা", "Duha")'), "nafl names");
+      check("Fix #54: AZAN_SPEAK_TEXTS Dhuhr is verbatim (already যোহর — not edited)",
+        AZAN_SPEAK_TEXTS.Dhuhr === "যোহরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন", "azan text");
+      check("Fix #54: PREAZAN_TEXTS Dhuhr is verbatim (already যোহর — not edited)",
+        PREAZAN_TEXTS.Dhuhr === "যোহরের নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের প্রস্তুতি নিন", "pre-azan text");
+    }
+
+    // ---- Fix #55 (28 Nov 2026, ring fit): the "০৪:০২:৫৭" text at
+    // 34px measured 155.7px wide — wider than the 180px ring's 149.7px
+    // inner diameter, so the digits touched the ring. Home ring 192px
+    // + countdown 28px: text 129.5px vs 159.7px inner diameter ≈ 15px
+    // clear margin each side. Width model from PIL on Noto Sans
+    // Bengali Bold (conservative proxy for Hind Siliguri Bold):
+    // Bengali digit 0.62em, colon 0.32em, letter-spacing 1px/gap. ----
+    {
+      const _ring55 = (()=>{ const m = css.match(/\.ring-hero \.ring-wrap\{[^}]*width:(\d+)px/); return m ? parseFloat(m[1]) : NaN; })();
+      const _svg55 = (()=>{ const m = css.match(/\.ring-hero \.ring-svg\{[^}]*width:(\d+)px/); return m ? parseFloat(m[1]) : NaN; })();
+      const _fs55 = (()=>{ const m = css.match(/\.ring-hero \.ring-count\{[^}]*font-size:(\d+)px/); return m ? parseFloat(m[1]) : NaN; })();
+      const _ls55 = (()=>{ const m = css.match(/\.ring-count\{[^}]*letter-spacing:(\d+)px/); return m ? parseFloat(m[1]) : NaN; })();
+      const _stroke55 = (()=>{ const m = css.match(/\.ring-fg\{[^}]*stroke-width:(\d+)/); return m ? parseFloat(m[1]) : NaN; })();
+      // SVG geometry from the Home ring markup: viewBox 220, r=96.
+      const _r55 = 96, _vb55 = 220;
+      const _inner55 = 2 * (_r55 - _stroke55 / 2) * (_ring55 / _vb55);
+      const _textW55 = fs => 6 * 0.62 * fs + 2 * 0.32 * fs + 7 * _ls55;
+      check("Fix #55: Home ring 192px, hero SVG 192px, hero countdown 28px",
+        _ring55===192 && _svg55===192 && _fs55===28, `ring ${_ring55}, svg ${_svg55}, font ${_fs55}`);
+      check("Fix #55: the timer text is comfortably inside the ring (≤85% of inner diameter)",
+        _textW55(_fs55) <= 0.85 * _inner55, `${_textW55(_fs55).toFixed(1)}px ≤ ${(0.85 * _inner55).toFixed(1)}px of ${_inner55.toFixed(1)}px`);
+      check("Fix #55: clear margin on each side (≥10px)",
+        (_inner55 - _textW55(_fs55)) / 2 >= 10, `${((_inner55 - _textW55(_fs55)) / 2).toFixed(1)}px/side`);
+      check("Fix #55: the OLD sizes really did overflow (34px text 155.2px > 149.7px inner diameter at 180px)",
+        _textW55(34) > 2 * (_r55 - _stroke55 / 2) * (180 / _vb55), `${_textW55(34).toFixed(1)}px > ${(2 * (_r55 - _stroke55 / 2) * (180 / _vb55)).toFixed(1)}px`);
+    }
+
+    // ---- Fix #56 (28 Nov 2026, unlock-durood diagnostic): a
+    // "দরুদ পরীক্ষা করুন" button in Durood settings that plays the
+    // durood through the SAME DuroodPlayer path the unlock uses, plus
+    // an honest status (toggle / unlock listener / keep-alive / last
+    // unlock play) built only from real native state. ----
+    {
+      check("Fix #56: diagnostic button + status + battery hint exist in Settings HTML",
+        html.includes('id="btn-durood-test"') && html.includes('id="durood-unlock-status"') && html.includes('id="durood-battery-hint"'), "settings markup");
+      check("Fix #56: battery hint is the plain Realme instruction (Don't optimize + autostart)",
+        html.includes("Don't optimize") && html.includes("অটোস্টার্ট"), "battery hint");
+      const _st56a = {toggleOn:true, receiverEnabled:true, keepAliveRunning:true, lastUnlockPlay:1794000000000, lastUnlockAttempt:1794000000000};
+      const _txt56a = duroodUnlockStatusText(_st56a);
+      check("Fix #56: status shows all-on state with a real last-play time (never 'এখনো হয়নি')",
+        _txt56a.includes("দরুদ চালু: চালু") && _txt56a.includes("আনলক শোনা: চালু") && _txt56a.includes("অ্যাপ চালু রাখা: চালু") &&
+        _txt56a.includes("শেষবার আনলক-দরুদ বেজেছে:") && !_txt56a.includes("এখনো হয়নি"), _txt56a.replace(/<br>/g, " | "));
+      const _st56b = {toggleOn:false, receiverEnabled:false, keepAliveRunning:false, lastUnlockPlay:0, lastUnlockAttempt:0};
+      const _txt56b = duroodUnlockStatusText(_st56b);
+      check("Fix #56: status shows all-off state with 'এখনো হয়নি' when nothing ever played",
+        _txt56b.includes("দরুদ চালু: বন্ধ") && _txt56b.includes("আনলক শোনা: বন্ধ") && _txt56b.includes("শেষবার আনলক-দরুদ বেজেছে: এখনো হয়নি"), _txt56b.replace(/<br>/g, " | "));
+      const _st56c = {toggleOn:true, receiverEnabled:true, keepAliveRunning:false, lastUnlockPlay:1000, lastUnlockAttempt:2000};
+      check("Fix #56: a newer failed attempt is shown honestly ('শেষ চেষ্টা … বাজেনি')",
+        duroodUnlockStatusText(_st56c).includes("শেষ চেষ্টা:") && duroodUnlockStatusText(_st56c).includes("বাজেনি"), "attempt line");
+      // The button calls the plugin's playTest (same DuroodPlayer path)
+      // — driven here with a mock plugin, as the harness has no Capacitor.
+      globalThis.Capacitor = {Plugins:{DuroodUnlock:{
+        playTest: async()=>({played:true}),
+        getUnlockStatus: async()=>({toggleOn:true, receiverEnabled:true, keepAliveRunning:true, lastUnlockPlay:0, lastUnlockAttempt:0}),
+        getDuroodStats: async()=>({today:1, total:5}),
+      }}};
+      try {
+        const _ok56 = await playDuroodTest();
+        check("Fix #56: the test button plays via the plugin and reports success",
+          _ok56===true, "playTest → played:true");
+        check("Fix #56: after the test play the status row shows the real state",
+          els["#durood-unlock-status"].innerHTML.includes("দরুদ চালু: চালু") && els["#durood-unlock-status"].style.display==="",
+          els["#durood-unlock-status"].innerHTML.replace(/<br>/g, " | "));
+        globalThis.Capacitor.Plugins.DuroodUnlock.playTest = async()=>({played:false});
+        const _no56 = await playDuroodTest();
+        check("Fix #56: a failed test play reports failure (no false 'fixed')",
+          _no56===false, "playTest → played:false");
+      } finally { delete globalThis.Capacitor; }
+      const _plug56 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodUnlockPlugin.java", "utf8");
+      check("Fix #56: the plugin exposes getUnlockStatus + playTest (real state, same player)",
+        _plug56.includes("getUnlockStatus") && _plug56.includes("playTest") && _plug56.includes("DuroodPlayer.playOnce(ctx)") &&
+        _plug56.includes("isReceiverEnabled") && _plug56.includes("isKeepAliveRunning"), "plugin methods");
+      const _recv56 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodUnlockReceiver.java", "utf8");
+      check("Fix #56: the receiver records unlock attempt + success timestamps",
+        _recv56.includes("KEY_LAST_UNLOCK_ATTEMPT") && _recv56.includes("KEY_LAST_UNLOCK_PLAY") &&
+        _recv56.includes("recordUnlockAttempt(context)") && _recv56.includes("recordUnlockPlay(context)"), "timestamps");
+      check("Fix #56: fillSettings wires the test button and refreshes the status",
+        src.includes('$("#btn-durood-test")') && src.includes("refreshDuroodStatus()"), "wiring");
+    }
+
+    // ---- Fix #57 (28 Nov 2026, unlock-durood DELAY): the durood DID
+    // play on unlock, but long after — and the ✅ replay was silent
+    // too. The delay is the dead-process path: with the keep-alive
+    // killed, every unlock cold-starts the app (and ColorOS defers
+    // the broadcast). Two code fixes: (a) the redundant
+    // ensureChannels() no longer sits on the playback-start path
+    // (postReminder creates the channels after playback anyway);
+    // (b) every unlock + ✅ replay re-arms the keep-alive, so a
+    // service Realme killed is restarted — the NEXT unlock finds a
+    // warm process. No audio change (the parent replaces the clips
+    // with male-voice versions separately); the azan path is untouched
+    // (a foreground button click has no cold-process mechanism). ----
+    {
+      const _recv57 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodUnlockReceiver.java", "utf8");
+      check("Fix #57: no ensureChannels() on the playback-start path (postReminder does it after playback)",
+        !_recv57.includes("ensureChannels(context);"), "receiver onReceive");
+      check("Fix #57: the unlock path re-arms the keep-alive after every play",
+        _recv57.includes("UnlockKeepAliveService.start(context);"), "self-heal");
+      const _play57 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodPlayReceiver.java", "utf8");
+      check("Fix #57: the ✅ replay path re-arms the keep-alive too",
+        _play57.includes("UnlockKeepAliveService.start(context);"), "self-heal");
+      const _plug57 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodUnlockPlugin.java", "utf8");
+      check("Fix #57: the diagnostic status exposes the keep-alive state (the delay suspect)",
+        _plug57.includes("keepAliveRunning") && _plug57.includes("isKeepAliveRunning"), "status field");
+      const _player57 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodPlayer.java", "utf8");
+      check("Fix #57: the audio path is unchanged (same player, same notification usage, same clip)",
+        _player57.includes("USAGE_NOTIFICATION") && _player57.includes("R.raw.durood"), "player untouched");
     }
 
     // ---- Fix #48 (28 Nov 2026, user order): shorten the notification

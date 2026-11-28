@@ -1785,7 +1785,7 @@ const PHRASE = {
   "h": {"ar":" س", "de":" Std.", "es":" h", "fa":" ساعت", "fr":" h", "ha":" awa", "hi":" घंटा", "id":" jam", "ms":" jam", "ps":" ساعته", "ru":" ч", "sw":" saa", "tr":" sa", "ur":" گھنٹہ"},
   "m": {"ar":" د", "de":" Min.", "es":" min", "fa":" دقیقه", "fr":" min", "ha":" minti", "hi":" मिनट", "id":" mnt", "ms":" min", "ps":" دقیقې", "ru":" мин", "sw":" dak", "tr":" dk", "ur":" منٹ"},
 };
-const PRAYER_NAMES = {"en": {"Fajr": "Fajr", "Sunrise": "Sunrise", "Dhuhr": "Dhuhr", "Asr": "Asr", "Maghrib": "Maghrib", "Isha": "Isha"}, "ar": {"Fajr": "الفجر", "Sunrise": "الشروق", "Dhuhr": "الظهر", "Asr": "العصر", "Maghrib": "المغرب", "Isha": "العشاء"}, "bn": {"Fajr": "ফজর", "Sunrise": "সূর্যোদয়", "Dhuhr": "জোহর", "Asr": "আসর", "Maghrib": "মাগরিব", "Isha": "ইশা"}, "ur": {"Fajr": "فجر", "Sunrise": "طلوع آفتاب", "Dhuhr": "ظہر", "Asr": "عصر", "Maghrib": "مغرب", "Isha": "عشاء"}, "ms": {"Fajr": "Subuh", "Sunrise": "Syuruk", "Dhuhr": "Zuhur", "Asr": "Asar", "Maghrib": "Maghrib", "Isha": "Isyak"}, "id": {"Fajr": "Subuh", "Sunrise": "Syuruk", "Dhuhr": "Zuhur", "Asr": "Asar", "Maghrib": "Maghrib", "Isha": "Isya"}, "tr": {"Fajr": "Sabah", "Sunrise": "Güneş", "Dhuhr": "Öğle", "Asr": "İkindi", "Maghrib": "Akşam", "Isha": "Yatsı"}, "fa": {"Fajr": "فجر", "Sunrise": "طلوع آفتاب", "Dhuhr": "ظهر", "Asr": "عصر", "Maghrib": "مغرب", "Isha": "عشاء"}, "fr": {"Fajr": "Fajr", "Sunrise": "Lever du soleil", "Dhuhr": "Dhohr", "Asr": "Asr", "Maghrib": "Maghrib", "Isha": "Icha"}, "hi": {"Fajr": "फ़ज्र", "Sunrise": "सूर्योदय", "Dhuhr": "ज़ुहर", "Asr": "अस्र", "Maghrib": "मग़रिब", "Isha": "इशा"}, "ps": {"Fajr": "فجر", "Sunrise": "لمر خاته", "Dhuhr": "ماسپښین", "Asr": "مازیګر", "Maghrib": "ماښام", "Isha": "ماسختن"}, "ha": {"Fajr": "Asuba", "Sunrise": "Fitowar rana", "Dhuhr": "Azahar", "Asr": "La'asar", "Maghrib": "Magriba", "Isha": "Isha'i"}, "sw": {"Fajr": "Alfajiri", "Sunrise": "Jua", "Dhuhr": "Adhuhuri", "Asr": "Alasiri", "Maghrib": "Magharibi", "Isha": "Isha"}, "ru": {"Fajr": "Фаджр", "Sunrise": "Восход", "Dhuhr": "Зухр", "Asr": "Аср", "Maghrib": "Магриб", "Isha": "Иша"}, "es": {"Fajr": "Fajr", "Sunrise": "Amanecer", "Dhuhr": "Dhuhr", "Asr": "Asr", "Maghrib": "Magrib", "Isha": "Isha"}, "de": {"Fajr": "Fajr", "Sunrise": "Sonnenaufgang", "Dhuhr": "Dhuhr", "Asr": "Asr", "Maghrib": "Maghrib", "Isha": "Ischa"}};
+const PRAYER_NAMES = {"en": {"Fajr": "Fajr", "Sunrise": "Sunrise", "Dhuhr": "Dhuhr", "Asr": "Asr", "Maghrib": "Maghrib", "Isha": "Isha"}, "ar": {"Fajr": "الفجر", "Sunrise": "الشروق", "Dhuhr": "الظهر", "Asr": "العصر", "Maghrib": "المغرب", "Isha": "العشاء"}, "bn": {"Fajr": "ফজর", "Sunrise": "সূর্যোদয়", "Dhuhr": "যোহর", "Asr": "আসর", "Maghrib": "মাগরিব", "Isha": "ইশা"}, "ur": {"Fajr": "فجر", "Sunrise": "طلوع آفتاب", "Dhuhr": "ظہر", "Asr": "عصر", "Maghrib": "مغرب", "Isha": "عشاء"}, "ms": {"Fajr": "Subuh", "Sunrise": "Syuruk", "Dhuhr": "Zuhur", "Asr": "Asar", "Maghrib": "Maghrib", "Isha": "Isyak"}, "id": {"Fajr": "Subuh", "Sunrise": "Syuruk", "Dhuhr": "Zuhur", "Asr": "Asar", "Maghrib": "Maghrib", "Isha": "Isya"}, "tr": {"Fajr": "Sabah", "Sunrise": "Güneş", "Dhuhr": "Öğle", "Asr": "İkindi", "Maghrib": "Akşam", "Isha": "Yatsı"}, "fa": {"Fajr": "فجر", "Sunrise": "طلوع آفتاب", "Dhuhr": "ظهر", "Asr": "عصر", "Maghrib": "مغرب", "Isha": "عشاء"}, "fr": {"Fajr": "Fajr", "Sunrise": "Lever du soleil", "Dhuhr": "Dhohr", "Asr": "Asr", "Maghrib": "Maghrib", "Isha": "Icha"}, "hi": {"Fajr": "फ़ज्र", "Sunrise": "सूर्योदय", "Dhuhr": "ज़ुहर", "Asr": "अस्र", "Maghrib": "मग़रिब", "Isha": "इशा"}, "ps": {"Fajr": "فجر", "Sunrise": "لمر خاته", "Dhuhr": "ماسپښین", "Asr": "مازیګر", "Maghrib": "ماښام", "Isha": "ماسختن"}, "ha": {"Fajr": "Asuba", "Sunrise": "Fitowar rana", "Dhuhr": "Azahar", "Asr": "La'asar", "Maghrib": "Magriba", "Isha": "Isha'i"}, "sw": {"Fajr": "Alfajiri", "Sunrise": "Jua", "Dhuhr": "Adhuhuri", "Asr": "Alasiri", "Maghrib": "Magharibi", "Isha": "Isha"}, "ru": {"Fajr": "Фаджр", "Sunrise": "Восход", "Dhuhr": "Зухр", "Asr": "Аср", "Maghrib": "Магриб", "Isha": "Иша"}, "es": {"Fajr": "Fajr", "Sunrise": "Amanecer", "Dhuhr": "Dhuhr", "Asr": "Asr", "Maghrib": "Magrib", "Isha": "Isha"}, "de": {"Fajr": "Fajr", "Sunrise": "Sonnenaufgang", "Dhuhr": "Dhuhr", "Asr": "Asr", "Maghrib": "Maghrib", "Isha": "Ischa"}};
 const pname = id => (PRAYER_NAMES[settings.lang] || PRAYER_NAMES.en)[id] || PRAYER_NAMES.en[id];
 const DIRS = {"en": ["North", "North-East", "East", "South-East", "South", "South-West", "West", "North-West"], "ar": ["الشمال", "الشمال الشرقي", "الشرق", "الجنوب الشرقي", "الجنوب", "الجنوب الغربي", "الغرب", "الشمال الغربي"], "bn": ["উত্তর", "উত্তর-পূর্ব", "পূর্ব", "দক্ষিণ-পূর্ব", "দক্ষিণ", "দক্ষিণ-পশ্চিম", "পশ্চিম", "উত্তর-পশ্চিম"], "ur": ["شمال", "شمال مشرق", "مشرق", "جنوب مشرق", "جنوب", "جنوب مغرب", "مغرب", "شمال مغرب"], "fa": ["شمال", "شمال شرقی", "شرق", "جنوب شرقی", "جنوب", "جنوب غربی", "غرب", "شمال غربی"], "ms": ["Utara", "Timur Laut", "Timur", "Tenggara", "Selatan", "Barat Daya", "Barat", "Barat Laut"], "id": ["Utara", "Timur Laut", "Timur", "Tenggara", "Selatan", "Barat Daya", "Barat", "Barat Laut"], "tr": ["Kuzey", "Kuzeydoğu", "Doğu", "Güneydoğu", "Güney", "Güneybatı", "Batı", "Kuzeybatı"], "fr": ["Nord", "Nord-Est", "Est", "Sud-Est", "Sud", "Sud-Ouest", "Ouest", "Nord-Ouest"], "hi": ["उत्तर", "उत्तर-पूर्व", "पूर्व", "दक्षिण-पूर्व", "दक्षिण", "दक्षिण-पश्चिम", "पश्चिम", "उत्तर-पश्चिम"], "ru": ["Север", "Северо-восток", "Восток", "Юго-восток", "Юг", "Юго-запад", "Запад", "Северо-запад"], "es": ["Norte", "Noreste", "Este", "Sureste", "Sur", "Suroeste", "Oeste", "Noroeste"], "de": ["Norden", "Nordosten", "Osten", "Südosten", "Süden", "Südwesten", "Westen", "Nordwesten"]};
 const dirName = idx => (DIRS[settings.lang] || DIRS.en)[idx];
@@ -1987,7 +1987,7 @@ function banglaDate(d){
 const PRAYERS = [
   {id:"Fajr", bn:"ফজর", en:"Fajr"},
   {id:"Sunrise", bn:"সূর্যোদয়", en:"Sunrise"},
-  {id:"Dhuhr", bn:"জোহর", en:"Dhuhr"},
+  {id:"Dhuhr", bn:"যোহর", en:"Dhuhr"},
   {id:"Asr", bn:"আসর", en:"Asr"},
   {id:"Maghrib", bn:"মাগরিব", en:"Maghrib"},
   {id:"Isha", bn:"ইশা", en:"Isha"}
@@ -2001,6 +2001,14 @@ function fmtTime(hhmm){ if(!hhmm) return "—"; const m = hhmm.match(/(\d+):(\d+
   const h=+m[1], mm=m[2]; const h12 = h%12===0?12:h%12; const ap = h<12 ? "AM":"PM";
   if (settings.lang==="bn") return `${num(h12)}:${num(mm)} ${h<12?"সকাল":"দুপুর/রাত"}`;
   return `${num(h12)}:${num(mm)} ${ap}`; }
+/* Fix #51 (28 Nov 2026): sunrise/sunset chip time WITHOUT the
+   সকাল/দুপুর/রাত suffix — fmtTime adds it and is used everywhere
+   else, so this local helper formats the same "HH:MM" source the
+   same way, minus the suffix. The chip labels the times itself
+   ("সূর্যোদয় ৭:০৭ • সূর্যাস্ত ৭:০০"). */
+function fmtTimeNoSuffix(hhmm){ if(!hhmm) return "—"; const m = hhmm.match(/(\d+):(\d+)/); if(!m) return hhmm;
+  const h=+m[1], mm=m[2]; const h12 = h%12===0?12:h%12;
+  return `${num(h12)}:${num(mm)}`; }
 /* Compact 24-hour time with locale digits — used by the Nafl card, whose
    design (like the reference) shows plain HH:MM values. */
 function fmt24(mins){ if (mins==null || !isFinite(mins)) return "—";
@@ -2452,6 +2460,17 @@ function nextEvent(now=locNow()){
   return next;
 }
 const PRAYER_ICONS = {Fajr:"🌅", Dhuhr:"☀️", Asr:"🌤️", Maghrib:"🌇", Isha:"🌙"};
+/* Fix #52 (28 Nov 2026, Muslims Day video): in the morning nafl
+   window the circle name rotates ইশরাক → চাশত → দুহা → ইশরাক, ~2 s
+   per name, looping — while the countdown is ONE, ticking to the
+   same end (zawal). Derived from the clock only (no timer, no
+   re-render, no reset): renderPrayers already runs every second, so
+   the name swaps while ev.at/ev.prev — the countdown and the ring
+   progress — never change. Forbidden windows never rotate. */
+function naflRotateName(now=locNow()){
+  const names = [Lb("ইশরাক", "Ishraq"), Lb("চাশত", "Chasht"), Lb("দুহা", "Duha")];
+  return names[Math.floor(now.getTime()/2000)%3];
+}
 function renderPrayers(){
   const list = $("#prayer-list");
   if(!timings){
@@ -2501,7 +2520,7 @@ function renderPrayers(){
     const isForbidNow = ev.kind==="forbidden" && ev.state==="current";
     ringName.textContent = isForbidNow
       ? Lb("এখন সালাতের নিষিদ্ধ সময়, এই সময়ে নামাজ পড়া নিষিদ্ধ", "It is now a forbidden time for prayer; praying is forbidden at this time")
-      : ev.name;
+      : ev.kind==="nafl" ? naflRotateName(now) : ev.name;
     ringName.classList.toggle("forbid-msg", isForbidNow);
   }
   if (ringCount) ringCount.textContent = `${num(pad2(h))}:${num(pad2(m))}:${num(pad2(s))}`;
@@ -2523,7 +2542,10 @@ function renderPrayers(){
   const pl = $("#pill-loc");
   if (pl) pl.textContent = hasLocation() ? `📍 ${settings.city}, ${settings.country} ⌄` : `📍 ${Lb("অবস্থান সেট করুন", "Set location")}`;
   const ps = $("#pill-sun");
-  if (ps) ps.textContent = `🌅 ${fmtTime(timings.Sunrise)} • 🌇 ${fmtTime(timings.Sunset)}`;
+  /* Fix #51: clear labels for sunrise and sunset — the times are
+     unchanged (same timings.Sunrise/Sunset source as before), only
+     the labels change. Icons and styling stay. */
+  if (ps) ps.textContent = `🌅 ${Lb("সূর্যোদয়", "Sunrise")} ${fmtTimeNoSuffix(timings.Sunrise)} • 🌇 ${Lb("সূর্যাস্ত", "Sunset")} ${fmtTimeNoSuffix(timings.Sunset)}`;
   renderNafl();
   renderForbidden();
   updateNaflStrip();
@@ -2642,7 +2664,11 @@ function renderDates(){
   const g = Lb(`${bnNum(now.getDate())} ${["জানুয়ারি","ফেব্রুয়ারি","মার্চ","এপ্রিল","মে","জুন","জুলাই","আগস্ট","সেপ্টেম্বর","অক্টোবর","নভেম্বর","ডিসেম্বর"][now.getMonth()]} ${bnNum(now.getFullYear())}, ${["রবিবার","সোমবার","মঙ্গলবার","বুধবার","বৃহস্পতিবার","শুক্রবার","শনিবার"][now.getDay()]}`, now.toDateString());
   const h = hijriInfo ? (Lb(`${bnNum(hijriInfo.day)} ${escHtml(hijriInfo.month.en)} ${bnNum(hijriInfo.year)} হিজরি`, `${hijriInfo.day} ${escHtml(hijriInfo.month.en)} ${hijriInfo.year} AH`)) : "…";
   const b = banglaDate(now);
-  $("#date-line").innerHTML = `📅 ${g}<br>🌙 <b>${h}</b> &nbsp;•&nbsp; 🇧🇩 ${Lb(b.text, b.textEn)}`;
+  /* Fix #50 (28 Nov 2026): Hijri + Bengali dates each on their own
+     line — the old two-line layout wrapped the Bengali year ("১৪৩৩")
+     onto an orphaned third line below the dates. Three short lines,
+     each fitting on one line, so nothing wraps below the writing. */
+  $("#date-line").innerHTML = `📅 ${g}<br>🌙 <b>${h}</b><br>🇧🇩 ${Lb(b.text, b.textEn)}`;
   /* Build #19, Fix #1: the home date row is gone — the header date
      line above is the only date on Home. */
 }
@@ -4301,6 +4327,63 @@ async function refreshDuroodStats(){
   } catch(e){ if (row) row.style.display = "none"; }
 }
 
+/* Fix #56 (28 Nov 2026): unlock-durood diagnostic — an honest status
+   display in Settings, in simple Bengali, built ONLY from real native
+   state (never hardcoded): whether the durood toggle is on, whether
+   the unlock receiver is enabled, whether the keep-alive service is
+   running, and the last time an unlock play actually happened
+   ("এখনো হয়নি" if never). If a recent unlock attempt failed to
+   play, that is shown too — so the next report pinpoints the cause:
+   button plays + count rises = audio path good, fault is the unlock
+   signal; button silent + count stuck = audio path at fault. */
+function duroodUnlockStatusText(st){
+  if (!st) return "";
+  const onOff = v => v ? Lb("চালু", "On") : Lb("বন্ধ", "Off");
+  const fmtTs = ts => { if (!ts) return Lb("এখনো হয়নি", "Not yet");
+    const d = new Date(ts);
+    return `${bnNum(d.getDate())}/${bnNum(d.getMonth()+1)} ${num(pad2(d.getHours()))}:${num(pad2(d.getMinutes()))}`; };
+  const lines = [
+    `${Lb("দরুদ চালু: ", "Durood on: ")}${onOff(st.toggleOn)}`,
+    `${Lb("আনলক শোনা: ", "Unlock listener: ")}${onOff(st.receiverEnabled)}`,
+  ];
+  if (st.keepAliveRunning !== undefined) lines.push(`${Lb("অ্যাপ চালু রাখা: ", "Keep-alive: ")}${onOff(st.keepAliveRunning)}`);
+  lines.push(`${Lb("শেষবার আনলক-দরুদ বেজেছে: ", "Last unlock durood played: ")}${fmtTs(st.lastUnlockPlay)}`);
+  if (st.lastUnlockAttempt && (!st.lastUnlockPlay || st.lastUnlockAttempt > st.lastUnlockPlay))
+    lines.push(`${Lb("শেষ চেষ্টা: ", "Last attempt: ")}${fmtTs(st.lastUnlockAttempt)} — ${Lb("বাজেনি", "did not play")}`);
+  return lines.join("<br>");
+}
+async function refreshDuroodStatus(){
+  const row = $("#durood-unlock-status"), btnRow = $("#durood-test-row"), hint = $("#durood-battery-hint");
+  try {
+    const P = (typeof window.Capacitor !== "undefined" && window.Capacitor.Plugins)
+      ? window.Capacitor.Plugins.DuroodUnlock : null;
+    if (!P || !P.getUnlockStatus || !row) { if (row) row.style.display = "none"; if (btnRow) btnRow.style.display = "none"; if (hint) hint.style.display = "none"; return; }
+    const st = await P.getUnlockStatus();
+    row.innerHTML = duroodUnlockStatusText(st);
+    row.style.display = "";
+    if (btnRow) btnRow.style.display = "";
+    if (hint) hint.style.display = "";
+  } catch(e){ if (row) row.style.display = "none"; if (btnRow) btnRow.style.display = "none"; if (hint) hint.style.display = "none"; }
+}
+/* Fix #56: "দুরুদ পরীক্ষা করুন" — plays the durood immediately
+   through the SAME native DuroodPlayer path the unlock uses
+   (DuroodUnlockPlugin.playTest → DuroodPlayer.playOnce), so a tap
+   proves whether the audio path works on this phone. The count and
+   the status refresh after the play, so the result is visible. */
+async function playDuroodTest(){
+  const P = (typeof window.Capacitor !== "undefined" && window.Capacitor.Plugins)
+    ? window.Capacitor.Plugins.DuroodUnlock : null;
+  if (!P || !P.playTest) { toast(Lb("এই ফোনে পরীক্ষা করা যাবে না", "Test is not available on this device")); return false; }
+  toast(Lb("দরুদ বাজছে…", "Playing the durood…"));
+  try {
+    const r = await P.playTest();
+    const ok = !!(r && r.played);
+    toast(ok ? Lb("দরুদ বেজেছে ✓", "Durood played ✓") : Lb("দরুদ বাজেনি — আবার চেষ্টা করুন", "Durood did not play — try again"));
+    await refreshDuroodStats(); await refreshDuroodStatus();
+    return ok;
+  } catch(e){ toast(Lb("দরুদ বাজেনি — আবার চেষ্টা করুন", "Durood did not play — try again")); return false; }
+}
+
 /* Fix #42 (27 Nov 2026 voice call): brand-neutral replacement for the
    Fix #41 Xiaomi autostart button. The old button opened MIUI's
    autostart page — useless on the user's Realme (and on every
@@ -5581,9 +5664,16 @@ function fillSettings(){
   const ar = $("#durood-appsettings-row");
   if (ar) ar.style.display = permPA() ? "" : "none";
   const ah = $("#durood-appsettings-hint");
-  if (ah) ah.textContent = Lb("আনলক করলে দরুদের রিমাইন্ডার আসবে — ✅ চাপলে দরুদ বাজবে। অ্যাপটি নিজে থেকেই চালু থাকে — নিচের বোতামে অ্যাপের সেটিংস খুলতে পারবেন।", "On unlock a durood reminder appears — press ✅ to play the durood. The app keeps itself running — the button below opens the app settings.");
+  /* Fix #56: the old wording described the Build 26 reminder + ✅
+     design — the durood auto-plays on unlock since Fix #45. */
+  if (ah) ah.textContent = Lb("আনলক করলে দরুদ নিজে থেকেই বাজবে — ✅ চাপলে আবার বাজবে। অ্যাপটি নিজে থেকেই চালু থাকে — নিচের বোতামে অ্যাপের সেটিংস খুলতে পারবেন।", "On unlock the durood plays by itself — press ✅ to play it again. The app keeps itself running — the button below opens the app settings.");
   renderDuroodSoundSelect();
   refreshDuroodStats();
+  refreshDuroodStatus();
+  /* Fix #56: the diagnostic test button — wired here (fillSettings
+     runs whenever Settings is shown), like the app-settings button. */
+  const dt = $("#btn-durood-test");
+  if (dt) dt.onclick = ()=>{ playDuroodTest(); };
   const pn = $("#set-profile-name"); if (pn) pn.value = settings.profileName || "";
   renderGreet(); renderLoginState();
   const sl0 = $("#set-lang");

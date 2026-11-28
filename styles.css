@@ -32,7 +32,7 @@ input,select{font-family:inherit}
 /* ---------- header ---------- */
 header{
   background:linear-gradient(135deg,var(--emerald-d),var(--emerald) 60%,var(--emerald-l));
-  color:#fff; padding:12px 16px 14px; border-radius:0 0 22px 22px;
+  color:#fff; padding:12px 16px 8px; border-radius:0 0 22px 22px;
   box-shadow:var(--shadow); position:sticky; top:0; z-index:20;
 }
 .head-row{display:flex; align-items:center; justify-content:space-between; gap:8px}
@@ -404,6 +404,15 @@ hr.sep{border:none; border-top:1px solid var(--line); margin:14px 0}
 /* Fix #19: azan alarm status — warning banner on Home + status line on the Alarm page */
 .alarm-status{font-size:13px; color:#666; margin-top:8px}
 .ring-count{font-size:34px; font-weight:700; letter-spacing:1px; margin:2px 0}
+/* Fix #55 (28 Nov 2026): the Home countdown text ("০৪:০২:৫৭") at
+   34px measured 155.7px wide — wider than the 180px ring's 149.7px
+   inner diameter, so the digits touched the ring. The Home ring is
+   192px and its countdown is 28px: text 129.5px vs 159.7px inner
+   diameter ≈ 15px clear margin on each side, like Muslims Day.
+   Scoped to .ring-hero only — the fasting ring keeps 180px/34px. */
+.ring-hero .ring-wrap{width:192px; height:192px}
+.ring-hero .ring-svg{width:192px; height:192px}
+.ring-hero .ring-count{font-size:28px}
 .ring-sub{font-size:13px; opacity:.92}
 .pills{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:12px}
 .pill{background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.35); color:#fff;
