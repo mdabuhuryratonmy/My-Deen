@@ -74,7 +74,7 @@ globalThis.fmtTime=fmtTime; globalThis.fmtTimeNoSuffix=fmtTimeNoSuffix;
 globalThis.naflRotateName=naflRotateName;
 globalThis.duroodUnlockStatusText=duroodUnlockStatusText; globalThis.refreshDuroodStatus=refreshDuroodStatus; globalThis.playDuroodTest=playDuroodTest;
 globalThis.DUROOD_REMIND_SOUNDS=DUROOD_REMIND_SOUNDS; globalThis.duroodRemindSoundName=duroodRemindSoundName;
-globalThis.preazanText=preazanText; globalThis.JUMUAH_PREAZAN_TEXT=JUMUAH_PREAZAN_TEXT;
+globalThis.preazanText=preazanText; globalThis.preazanType=preazanType; globalThis.JUMUAH_PREAZAN_TEXT=JUMUAH_PREAZAN_TEXT;
 globalThis.azanSpeakText=azanSpeakText; globalThis.JUMUAH_AZAN_SPEAK_TEXT=JUMUAH_AZAN_SPEAK_TEXT;
 globalThis.villageNameOf=villageNameOf; globalThis.normalizeCityName=normalizeCityName;
 globalThis.permStepsAsked=permStepsAsked; globalThis.permMarkAsked=permMarkAsked; globalThis.permTimeout=permTimeout;
@@ -239,10 +239,11 @@ globalThis.Date = RealDate16; settings.tzName = _tz16;
 // channel is created its sound can never be changed — the old
 // dhikr-durood/dhikr-istighfar channels on the user's phone were
 // created without a working sound, so every reminder arrived silent.
-// (The MP3s themselves are fine — Fix #48 shortened them: durood
-// 2.68 s / mean −18.5 dB, istighfar 1.38 s / mean −20.5 dB, normal
-// audible speech; the plugin resolves "durood.mp3" correctly by
-// stripping the extension.)
+// (The MP3s themselves are fine — Fix #48 shortened them, and Fix #59
+// replaced them with the one Helio male voice: durood 1.5 s / mean
+// −23.5 dB, istighfar 1.0 s / mean −24.2 dB (short form, slower +
+// louder; final decision 28 Nov 12:55); the plugin resolves "durood.mp3"
+// correctly by stripping the extension.)
 // Fix: fresh v2 channel IDs in both the native ensureChannels (with
 // R.raw.durood/istighfar + HIGH importance) and the JS scheduler,
 // and the old channels are deleted. The old IDs must not appear as a
@@ -302,12 +303,12 @@ Object.assign(settings, _savedS);
 
 // ---- Alarm list ----
 let list = buildPrayerAlarmList();
-check("alarm list has 5 azan + 10 pre-azan by default", list.length===15 && list.filter(a=>a.type==="azan-v2").length===5 && list.filter(a=>a.type==="preazan-v2").length===10, String(list.length));
+check("alarm list has 5 azan + 10 pre-azan by default", list.length===15 && list.filter(a=>a.type==="azan-v2").length===5 && list.filter(a=>a.type.startsWith("preazan")).length===10, String(list.length));
 const fajrAzan = list.find(a=>a.prayerId==="Fajr" && a.type==="azan-v2");
-const fajrPres = list.filter(a=>a.prayerId==="Fajr" && a.type==="preazan-v2");
+const fajrPres = list.filter(a=>a.prayerId==="Fajr" && a.type.startsWith("preazan"));
 const fajrDiffs = fajrPres.map(a=>(fajrAzan.at - a.at + 86400000) % 86400000);
 check("pre-azan is twice: 5 and 2 min before azan", fajrAzan && fajrPres.length===2 && fajrDiffs.includes(300000) && fajrDiffs.includes(120000));
-check("pre-azan ids 31–35 and 51–55", list.filter(a=>a.type==="preazan-v2").map(a=>a.id).sort((x,y)=>x-y).join(",")==="31,32,33,34,35,51,52,53,54,55");
+check("pre-azan ids 31–35 and 51–55", list.filter(a=>a.type.startsWith("preazan")).map(a=>a.id).sort((x,y)=>x-y).join(",")==="31,32,33,34,35,51,52,53,54,55");
 check("no tahajjud alarm when its toggle is off", !list.some(a=>a.type==="tahajjud"));
 settings.alarmOn.Tahajjud = true; settings.alarmOn.Sehri = true; settings.alarmOn.Iftar = true; settings.alarmOn.Duha = true;
 list = buildPrayerAlarmList();
@@ -474,7 +475,7 @@ check("no hurry/check wording left anywhere in the app",
 __setTimings({Fajr:"05:42", Dhuhr:"13:04", Asr:"16:24", Maghrib:"18:58", Isha:"20:11", Sunrise:"07:03", Sunset:"18:58", Imsak:"05:32", Lastthird:"02:03"});
 settings.alarmOn = {...settings.alarmOn, Fajr:true, Dhuhr:true, Asr:true, Maghrib:true, Isha:true, Tahajjud:true, Sehri:false, Iftar:false, Duha:false};
 const alarmList = buildPrayerAlarmList();
-const preList = alarmList.filter(a=>a.type==="preazan-v2");
+const preList = alarmList.filter(a=>a.type.startsWith("preazan"));
 check("each prayer gets two pre-azan reminders (5 min + 2 min before)",
   preList.length === 10 && ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>{
     const az = alarmList.find(a=>a.type==="azan-v2" && a.prayerId===pid);
@@ -482,7 +483,7 @@ check("each prayer gets two pre-azan reminders (5 min + 2 min before)",
     if (!az || pres.length!==2) return false;
     const diffs = pres.map(a=>(az.at - a.at + 86400000) % 86400000);
     return diffs.includes(5*60000) && diffs.includes(2*60000) &&
-      pres.every(a=>a.body===PREAZAN_TEXTS[pid] && a.sound==="none");
+      pres.every(a=>a.body===PREAZAN_TEXTS[pid] && a.sound==="none" && a.type===preazanType(pid, locNow(a.at)));
   }));
 check("pre-azan ids are 31-35 (2 min) and 51-55 (5 min)",
   preList.map(a=>a.id).sort((x,y)=>x-y).join(",") === [...PREAZAN_IDS, ...PREAZAN5_IDS].sort((x,y)=>x-y).join(","));
@@ -545,9 +546,9 @@ settings.alarmSound.Fajr = ["name"];
 settings.alarmOn = {...settings.alarmOn, Fajr:false, Dhuhr:false, Asr:false, Maghrib:false, Isha:false, Tahajjud:false, Sehri:false, Iftar:false, Duha:false};
 const alarmListOff = buildPrayerAlarmList();
 check("pre-azan stays on even when every prayer alarm is off",
-  alarmListOff.filter(a=>a.type==="preazan-v2").length===10 &&
+  alarmListOff.filter(a=>a.type.startsWith("preazan")).length===10 &&
   alarmListOff.filter(a=>a.type.startsWith("azan-v2")).length===0 &&
-  ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>alarmListOff.filter(a=>a.type==="preazan-v2" && a.prayerId===pid).length===2));
+  ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>alarmListOff.filter(a=>a.type.startsWith("preazan") && a.prayerId===pid).length===2));
 settings.alarmOn = {...settings.alarmOn, Fajr:true, Dhuhr:true, Asr:true, Maghrib:true, Isha:true};
 
 // ---- Fix #12: timezone — device clock vs location timezone ----
@@ -592,7 +593,7 @@ const maghAzan = buildPrayerAlarmList().find(a=>a.type.startsWith("azan-v2") && 
 check("Fix #12: Maghrib alarm fires at 17:17 Jashore wall-clock (absolute instant)",
   maghAzan && dhakaWall(maghAzan.at.getTime()).join(":")==="17:17",
   maghAzan ? dhakaWall(maghAzan.at.getTime()).join(":") : "none");
-const maghPres = buildPrayerAlarmList().filter(a=>a.type==="preazan-v2" && a.prayerId==="Maghrib")
+const maghPres = buildPrayerAlarmList().filter(a=>a.type.startsWith("preazan") && a.prayerId==="Maghrib")
   .map(a=>dhakaWall(a.at.getTime()).join(":")).sort();
 check("Fix #12: Maghrib pre-azan alarms fire at 17:12 and 17:15 Jashore wall-clock",
   maghPres.join(",")==="17:12,17:15", maghPres.join(","));
@@ -1024,20 +1025,20 @@ Object.assign(settings, _savedTz);
       ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(p=>_at26(p,"azan-v2")===_jakim[p]),
       ["Fajr","Dhuhr","Asr","Maghrib","Isha"].map(p=>p+" "+_at26(p,"azan-v2")).join(" "));
     check("Fix #26: T-5 notifications (ids 51–55) come 5 min before every prayer",
-      list26.filter(a=>a.type==="preazan-v2" && [51,52,53,54,55].includes(a.id)).length===5 &&
+      list26.filter(a=>a.type.startsWith("preazan") && [51,52,53,54,55].includes(a.id)).length===5 &&
       ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(p=>{
-        const five = list26.find(a=>a.prayerId===p && a.type==="preazan-v2" && a.id>=51);
+        const five = list26.find(a=>a.prayerId===p && a.type.startsWith("preazan") && a.id>=51);
         return five && (_at26(p,"azan-v2") - _wall26(five.at))===5;
       }), "T-5 ok");
     check("Fix #26: T-2 notifications (ids 31–35) come 2 min before every prayer",
-      list26.filter(a=>a.type==="preazan-v2" && [31,32,33,34,35].includes(a.id)).length===5 &&
+      list26.filter(a=>a.type.startsWith("preazan") && [31,32,33,34,35].includes(a.id)).length===5 &&
       ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(p=>{
-        const two = list26.find(a=>a.prayerId===p && a.type==="preazan-v2" && a.id<40);
+        const two = list26.find(a=>a.prayerId===p && a.type.startsWith("preazan") && a.id<40);
         return two && (_at26(p,"azan-v2") - _wall26(two.at))===2;
       }), "T-2 ok");
     check("Fix #26: every pre-azan carries the exact Bengali text (not one word changed)",
       ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(p=>
-        list26.filter(a=>a.prayerId===p && a.type==="preazan-v2").every(a=>a.body===((p==="Dhuhr" && locNow(a.at).getDay()===5)?JUMUAH_PREAZAN_TEXT:PREAZAN_TEXTS[p]))), "texts exact");
+        list26.filter(a=>a.prayerId===p && a.type.startsWith("preazan")).every(a=>a.body===((p==="Dhuhr" && locNow(a.at).getDay()===5)?JUMUAH_PREAZAN_TEXT:PREAZAN_TEXTS[p]))), "texts exact");
     // Ring sweep: inside each waqt the ring shows that prayer, counting to
     // the end of its window (the next prayer start); before Fajr it shows
     // Fajr upcoming; overnight Isha counts to tomorrow's Fajr.
@@ -1362,7 +1363,7 @@ Object.assign(settings, _savedTz);
     // re-arm a fired alarm that is no longer stored.
     check("Fix #39: the exact pre-azan texts (his words) ride BOTH the T-5 and T-2 entries",
       ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>{
-        const pres = buildPrayerAlarmList().filter(a=>a.type==="preazan-v2" && a.prayerId===pid);
+        const pres = buildPrayerAlarmList().filter(a=>a.type.startsWith("preazan") && a.prayerId===pid);
         return pres.length===2 && pres.every(a=>a.body===((pid==="Dhuhr" && locNow(a.at).getDay()===5)?JUMUAH_PREAZAN_TEXT:PREAZAN_TEXTS[pid]));
       }),
       "both times, same text");
@@ -1427,24 +1428,30 @@ Object.assign(settings, _savedTz);
       javaSched.includes('deleteNotificationChannel("dhikr-durood-v2-silent")') && javaSched.includes('deleteNotificationChannel("dhikr-istighfar-v2-silent")'),
       "v2 deleted");
 
-    // Fix #5: spoken pre-azan reminders.
-    check("Build #19 Fix #5: both pre-azan entries carry speak:true (T-5 and T-2, every fard prayer)",
+    // Fix #5 (UPDATED Fix #59): spoken pre-azan reminders are GONE —
+    // the bundled per-waqt clip on the reminder channel IS the
+    // announcement now, so the entries carry speak:false (the phone's
+    // Bengali TTS voice is female, and speaking the same sentence
+    // after the clip would play it twice).
+    check("Build #19 Fix #5 (UPDATED Fix #59): both pre-azan entries carry speak:false (T-5 and T-2, every fard prayer)",
       ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>{
-        const pres = buildPrayerAlarmList().filter(a=>a.type==="preazan-v2" && a.prayerId===pid);
-        return pres.length===2 && pres.every(a=>a.speak===true && a.body===((pid==="Dhuhr" && locNow(a.at).getDay()===5)?JUMUAH_PREAZAN_TEXT:PREAZAN_TEXTS[pid]));
+        const pres = buildPrayerAlarmList().filter(a=>a.type.startsWith("preazan") && a.prayerId===pid);
+        return pres.length===2 && pres.every(a=>a.speak===false && a.body===((pid==="Dhuhr" && locNow(a.at).getDay()===5)?JUMUAH_PREAZAN_TEXT:PREAZAN_TEXTS[pid]));
       }), "speak flag");
     check("Build #19 Fix #5: syncPrayerAlarms passes speak through to the native plugin",
       src.includes("speak: !!a.speak"), "passthrough");
-    check("Build #19 Fix #5: foreground voice check exists, speaks the exact Fix #8 text in Bengali, and is wired into the 1 s tick",
-      src.includes("function checkPreAzanVoice()") && src.includes('speakText(preazanText(p, locNow()), "bn-BD")') &&
-      src.includes("checkAzan(); checkPreAzanVoice();"), "foreground voice");
+    check("Build #19 Fix #5 (UPDATED Fix #59): foreground voice check is a no-op now — the clip is the announcement, and it is still wired into the 1 s tick",
+      src.includes("function checkPreAzanVoice()") && src.includes("checkAzan(); checkPreAzanVoice();") && !src.includes('speakText(preazanText(p, locNow()), "bn-BD")'), "foreground voice off");
     check("Build #19 Fix #5: native pending intent carries speak + the reschedule keeps it",
       javaSched.includes('i.putExtra("speak", alarm.optBoolean("speak", false))') &&
       javaReceiver.includes('alarm.put("speak", intent.getBooleanExtra("speak", false))'), "native carry");
     check("Build #19 Fix #5: native AlarmReceiver speaks the body with Bengali TTS (goAsync, best-effort)",
       javaReceiver.includes('tts.setLanguage(new Locale("bn"))') && javaReceiver.includes('tts.speak(text, TextToSpeech.QUEUE_FLUSH') &&
       javaReceiver.includes("goAsync()") && javaReceiver.includes("speakViaTts"), "native TTS");
-    // Functional: at Fajr-5 the foreground voice speaks the exact Fajr text once.
+    // Functional (UPDATED Fix #59): at Fajr-5 and Fajr-2 the foreground
+    // voice speaks NOTHING any more — the bundled per-waqt clip on the
+    // reminder channel is the announcement. The mock speechSynthesis
+    // must stay empty at both slots.
     {
       const _tzB19 = settings.tzName; settings.tzName = "";
       const _spoken = [];
@@ -1458,21 +1465,19 @@ Object.assign(settings, _savedTz);
         static now(){ return _t5.getTime(); }
       };
       checkPreAzanVoice();
-      check("Build #19 Fix #5: at Fajr-5 the voice speaks the exact Fajr pre-azan text in Bengali, once",
-        _spoken.length === 1 && _spoken[0].text === PREAZAN_TEXTS.Fajr && _spoken[0].lang === "bn-BD",
-        _spoken.length ? _spoken[0].text.slice(0, 40) : "nothing spoken");
+      check("Build #19 Fix #5 (UPDATED Fix #59): at Fajr-5 the foreground voice speaks nothing (the clip is the announcement)",
+        _spoken.length === 0, _spoken.length ? _spoken[0].text.slice(0, 40) : "nothing spoken");
       checkPreAzanVoice();
-      check("Build #19 Fix #5: the same minute does not speak twice (once-per-day guard)",
-        _spoken.length === 1, "spoken once");
+      check("Build #19 Fix #5 (UPDATED Fix #59): calling again still speaks nothing",
+        _spoken.length === 0, "still silent");
       const _t2 = new Date(); _t2.setHours(5,40,0,0);
       globalThis.Date = class extends _RealDateB19 {
         constructor(...a){ super(...(a.length ? a : [_t2.getTime()])); }
         static now(){ return _t2.getTime(); }
       };
       checkPreAzanVoice();
-      check("Build #19 Fix #5: at Fajr-2 the voice speaks the same exact text again",
-        _spoken.length === 2 && _spoken[1].text === PREAZAN_TEXTS.Fajr && _spoken[1].lang === "bn-BD",
-        "T-2 spoken");
+      check("Build #19 Fix #5 (UPDATED Fix #59): at Fajr-2 the foreground voice speaks nothing either",
+        _spoken.length === 0, "T-2 silent");
       globalThis.Date = _RealDateB19; settings.tzName = _tzB19;
       delete globalThis.speechSynthesis; delete globalThis.SpeechSynthesisUtterance;
     }
@@ -2210,19 +2215,19 @@ Object.assign(settings, _savedTz);
       try {
         _fake42(2026, 10, 20); // Friday
         const _fri = buildPrayerAlarmList();
-        const _friDhuhr = _fri.filter(a=>a.prayerId==="Dhuhr" && a.type==="preazan-v2");
+        const _friDhuhr = _fri.filter(a=>a.prayerId==="Dhuhr" && a.type.startsWith("preazan"));
         check("Fix #42: on Friday the Dhuhr pre-azan (T-5 and T-2) says 'জুম্মার নামাজ পড়ার প্রস্তুতি নিন'",
-          _friDhuhr.length===2 && _friDhuhr.every(a=>a.body===JUMUAH_PREAZAN_TEXT), _friDhuhr.map(a=>a.body).join(" | "));
-        const _friFajr = _fri.filter(a=>a.prayerId==="Fajr" && a.type==="preazan-v2");
+          _friDhuhr.length===2 && _friDhuhr.every(a=>a.body===JUMUAH_PREAZAN_TEXT && a.type==="preazan-jumuah"), _friDhuhr.map(a=>a.body).join(" | "));
+        const _friFajr = _fri.filter(a=>a.prayerId==="Fajr" && a.type.startsWith("preazan"));
         check("Fix #42: on Friday Fajr pre-azan is unchanged (normal Fajr text)",
-          _friFajr.length===2 && _friFajr.every(a=>a.body===PREAZAN_TEXTS.Fajr), "Fajr unchanged");
+          _friFajr.length===2 && _friFajr.every(a=>a.body===PREAZAN_TEXTS.Fajr && a.type==="preazan-fajr"), "Fajr unchanged");
         check("Fix #49 (UPDATED Fix #42): AZAN_SPEAK_TEXTS table unchanged (still == PREAZAN_TEXTS) — the Friday Jumu'ah azan-time text comes from azanSpeakText, not the table",
           AZAN_SPEAK_TEXTS.Dhuhr === PREAZAN_TEXTS.Dhuhr, "azan table unchanged");
         _fake42(2026, 10, 19); // Thursday
         const _thu = buildPrayerAlarmList();
-        const _thuDhuhr = _thu.filter(a=>a.prayerId==="Dhuhr" && a.type==="preazan-v2");
+        const _thuDhuhr = _thu.filter(a=>a.prayerId==="Dhuhr" && a.type.startsWith("preazan"));
         check("Fix #42: on Thursday the Dhuhr pre-azan says the normal Dhuhr text (no Jumu'ah text)",
-          _thuDhuhr.length===2 && _thuDhuhr.every(a=>a.body===PREAZAN_TEXTS.Dhuhr), "Thursday normal");
+          _thuDhuhr.length===2 && _thuDhuhr.every(a=>a.body===PREAZAN_TEXTS.Dhuhr && a.type==="preazan-dhuhr"), "Thursday normal");
       } finally {
         globalThis.Date = _RealDate42;
         Object.assign(settings, _saved42j);
@@ -2322,9 +2327,9 @@ Object.assign(settings, _savedTz);
         const _fajrAzan43 = _al43.find(a=>a.type==="azan-v2" && a.prayerId==="Fajr");
         check("Fix #43: Notification + Azan selected → the azan entry still plays the azan (sound 'azan')",
           _fajrAzan43 && _fajrAzan43.sound==="azan", "azan wins");
-        const _pres43 = _al43.filter(a=>a.type==="preazan-v2");
+        const _pres43 = _al43.filter(a=>a.type.startsWith("preazan"));
         check("Fix #43: every pre-azan entry (T-5 and T-2, all 5 prayers) carries speakText equal to its body — the waqt-name sentence",
-          _pres43.length===10 && _pres43.every(a=>a.speak===true && typeof a.speakText==="string" && a.speakText.length>0 && a.speakText===a.body),
+          _pres43.length===10 && _pres43.every(a=>a.speak===false && typeof a.speakText==="string" && a.speakText.length>0 && a.speakText===a.body),
           "speakText explicit");
         check("Fix #43: every pre-azan speakText is its prayer's Fix #8 sentence (Friday Dhuhr: the Jumu'ah sentence)",
           ["Fajr","Dhuhr","Asr","Maghrib","Isha"].every(pid=>{
@@ -2368,7 +2373,7 @@ Object.assign(settings, _savedTz);
         check("Fix #43: when the native plugin is down, the LN fallback schedules NO sounding azan (no azan-v2 channel, no azan.mp3)",
           _all43.length>0 && _all43.every(n=>n.channelId!=="azan-v2" && n.sound!=="azan.mp3"), "fallback never azan");
         check("Fix #43: ... but pre-azan reminders and silent azan visuals still schedule (the fallback is not dead)",
-          _all43.filter(n=>n.channelId==="preazan-v2").length===10 &&
+          _all43.filter(n=>n.channelId.startsWith("preazan")).length===10 &&
           _all43.filter(n=>n.channelId==="azan-v2-silent").length===5, "fallback alive");
         check("Fix #43: the fallback cancels the stale native azan-family alarms through the plugin (old wording can never fire again)",
           _paCancel43.some(a=>{ const ids=(a.ids||[]); return [1,2,3,4,5,31,32,33,34,35,51,52,53,54,55,36,37,38,41,42,43,44].every(id=>ids.includes(id)); }),
@@ -2935,24 +2940,28 @@ Object.assign(settings, _savedTz);
 
     // ---- Fix #48 (28 Nov 2026, user order): shorten the notification
     // durood + istighfar audio. Istighfar was 6.17 s (two phrases) —
-    // now just "আস্তাগফিরুল্লাহ" once (~1.4 s). Durood was 3.72 s
+    // now just "আস্তাগফিরুল্লাহ" once. Durood was 3.72 s
     // ("আল্লাহুম্মা সাল্লি ওয়া সাল্লিম আলা নাবিয়্যিনা মুহাম্মাদ") —
-    // now the shortest form "সাল্লাল্লাহু আলাইহি ওয়াসাল্লাম" (~2.7 s).
-    // Same Google Translate TTS voice (bn), same 24 kHz mono 64 kbps
-    // format; silence trimmed at both ends. The wait is dynamic
-    // (DuroodPlayer blocks on MediaPlayer completion, 10 s cap), so no
-    // timing constant changes — only the comments pinning the old
-    // durations. Istighfar travels as base64 text (assets/istighfar.b64,
-    // decoded by the workflow at build time); durood is a binary in the
-    // repo (www/audio + res/raw).
+    // now the shortest form "সাল্লাল্লাহু আলাইহি ওয়াসাল্লাম".
+    // Fix #59 (28 Nov 2026, his decision — ALL audio in the one Helio
+    // male voice): the Pradeep clips (durood 2.68 s, istighfar 1.38 s)
+    // were replaced by the Helio clips (durood 1.5 s; istighfar the
+    // SHORT form 1.0 s, slower + louder — final decision 28 Nov
+    // 12:55; the full-form 6.7 s clip was dropped).
+    // Same 24 kHz mono 64 kbps format; silence trimmed at both ends.
+    // The wait is dynamic (DuroodPlayer blocks on MediaPlayer
+    // completion, 10 s cap), so no timing constant changes — only the
+    // comments pinning the old durations. Istighfar travels as base64
+    // text (assets/istighfar.b64, decoded by the workflow at build
+    // time); durood is a binary in the repo (www/audio + res/raw).
     {
       const _cp48 = require("child_process");
       const _durFn48 = f => parseFloat(_cp48.execSync(`ffprobe -v error -show_entries format=duration -of csv=p=0 "${f}"`, {encoding:"utf8"}).trim());
       const _d48 = "/home/hatch/workspace/deen-day/audio/durood.mp3";
       const _i48 = "/home/hatch/workspace/deen-day/audio/istighfar.mp3";
       const _dd48 = _durFn48(_d48), _di48 = _durFn48(_i48);
-      check("Fix #48: new durood clip is the short form (~2.7 s, was 3.72 s)", _dd48 > 2.0 && _dd48 < 3.2, `${_dd48} s`);
-      check("Fix #48: new istighfar clip is one 'আস্তাগফিরুল্লাহ' (~1.4 s, was 6.17 s)", _di48 > 1.0 && _di48 < 2.0, `${_di48} s`);
+      check("Fix #48: new durood clip is the short form (~1.5 s Helio, was 2.68 s Pradeep)", _dd48 > 1.0 && _dd48 < 2.0, `${_dd48} s`);
+      check("Fix #48: new istighfar clip is the short form (~1.0 s Helio, final — slower + louder)", _di48 > 0.5 && _di48 < 1.5, `${_di48} s`);
       const _same48 = (a, b) => fs.readFileSync(a).equals(fs.readFileSync(b));
       check("Fix #48: all 4 durood.mp3 copies byte-identical",
         _same48(_d48, "/home/hatch/workspace/deen-day/www/audio/durood.mp3") &&
@@ -2968,12 +2977,14 @@ Object.assign(settings, _savedTz);
       const _dp48 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodPlayer.java", "utf8");
       const _duroodRcv48 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodUnlockReceiver.java", "utf8");
       const _dpr48 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodPlayReceiver.java", "utf8");
-      check("Fix #48: Java comments pin the new durations (2.68 s / 1.4 s)",
-        _dp48.includes("2.68 s") && _dp48.includes("istighfar 1.4 s") &&
-        _duroodRcv48.includes("2.68 s") && _duroodRcv48.includes("istighfar 1.4 s") && _dpr48.includes("2.68 s"), "new durations");
+      check("Fix #48: Java comments pin the new durations (1.5 s / 1.0 s)",
+        _dp48.includes("1.5 s") && _dp48.includes("istighfar 1.0 s") &&
+        _duroodRcv48.includes("1.5 s") && _duroodRcv48.includes("istighfar 1.0 s") && _dpr48.includes("1.5 s"), "new durations");
       check("Fix #48: old durations gone from the player/receiver comments + app.js",
         !/3\.72 s/.test(_dp48 + _duroodRcv48 + _dpr48) && !/6\.2 s/.test(_dp48 + _duroodRcv48 + _dpr48) &&
-        src.includes("istighfar.mp3 (1.4 s)") && !src.includes("istighfar.mp3 (6.2 s)"), "old durations gone");
+        !/2\.68 s/.test(_dp48 + _duroodRcv48 + _dpr48) && !/1\.4 s/.test(_dp48 + _duroodRcv48 + _dpr48) &&
+        !/6\.7 s/.test(_dp48 + _duroodRcv48 + _dpr48) &&
+        src.includes("istighfar.mp3 (1.0 s)") && !src.includes("istighfar.mp3 (0.8 s)") && !src.includes("istighfar.mp3 (6.7 s)") && !src.includes("istighfar.mp3 (1.4 s)") && !src.includes("istighfar.mp3 (6.2 s)"), "old durations gone");
     }
 
     // ---- Fix #49 (28 Nov 2026, user report): Friday Dhuhr azan-time
@@ -3061,10 +3072,10 @@ Object.assign(settings, _savedTz);
       // (same IDs kept, so stored alarms keep working).
       const _sched58 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AlarmScheduler.java", "utf8");
       const _recv58 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodUnlockReceiver.java", "utf8");
-      check("Fix #58: CHANNEL_VERSION is recorded in one place (5) with the bump rule in the comment",
-        _sched58.includes("public static final int CHANNEL_VERSION = 5;") &&
+      check("Fix #58: CHANNEL_VERSION is recorded in one place (6 — bumped by Fix #59) with the bump rule in the comment",
+        _sched58.includes("public static final int CHANNEL_VERSION = 6;") &&
         _sched58.includes("bump CHANNEL_VERSION whenever a channel's sound or importance") &&
-        _sched58.includes('private static final String KEY_CHANNEL_VERSION = "channel_version";'), "v5 marker");
+        _sched58.includes('private static final String KEY_CHANNEL_VERSION = "channel_version";'), "v6 marker");
       const _arr58 = _sched58.slice(_sched58.indexOf("SOUNDING_CHANNEL_IDS = {"), _sched58.indexOf("};", _sched58.indexOf("SOUNDING_CHANNEL_IDS = {")));
       check("Fix #58: the migration list holds exactly the six sounding channels (preazan-v2, duha, dhikr v4 pair, unlock reminder pair)",
         _arr58.includes('"preazan-v2"') && _arr58.includes('"duha"') &&
@@ -3099,6 +3110,81 @@ Object.assign(settings, _savedTz);
       check("Fix #58: JS schedule path unchanged — dhikr still schedules into the v4 channels (no rename to chase in JS)",
         src.includes('settings.duroodRemSound !== false ? "dhikr-durood-v4" : "dhikr-durood-v4-silent"') &&
         src.includes('settings.astaghRemSound !== false ? "dhikr-istighfar-v4" : "dhikr-istighfar-v4-silent"'), "JS v4");
+
+      // Fix #59 (28 Nov 2026, his decision — ALL audio in the one Helio
+      // male voice): the Pradeep clips are dropped; durood + istighfar
+      // swap to the Helio clips (durood 1.5 s; istighfar the short form
+      // 1.0 s, slower + louder — final decision 28 Nov 12:55; full form
+      // dropped), six per-waqt
+      // reminder clips are bundled, and the pre-azan announcement is
+      // the channel clip now — the phone's TTS (female voice) is off
+      // for pre-azan, so the sentence is heard once, in the one voice,
+      // offline. PREAZAN_TEXTS / AZAN_SPEAK_TEXTS verbatim, never
+      // edited. CHANNEL_VERSION 5 → 6 so the Fix #58 migration
+      // re-runs. The generic reminder tone stays bundled (duha +
+      // unlock-reminder + settings select still use it) — only the
+      // pre-azan reminders stop using it; no 9th audio is added.
+      const _recv59 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AlarmReceiver.java", "utf8");
+      const _crypto59 = require("crypto");
+      const _md559 = f => _crypto59.createHash("md5").update(fs.readFileSync(f)).digest("hex");
+      check("Fix #59: CHANNEL_VERSION bumped 5 → 6 with the Fix #59 note in the comment",
+        _sched58.includes("public static final int CHANNEL_VERSION = 6;") &&
+        _sched58.includes("Fix #59 (28 Nov 2026): bumped 5 → 6"), "v6 marker");
+      const _arr59 = _sched58.slice(_sched58.indexOf("SOUNDING_CHANNEL_IDS = {"), _sched58.indexOf("};", _sched58.indexOf("SOUNDING_CHANNEL_IDS = {")));
+      check("Fix #59: the migration list holds the six new per-waqt channels plus the old six (12 sounding)",
+        ["preazan-fajr", "preazan-dhuhr", "preazan-asr", "preazan-maghrib", "preazan-isha", "preazan-jumuah",
+         "preazan-v2", "duha", "dhikr-durood-v4", "dhikr-istighfar-v4"].every(id => _arr59.includes('"' + id + '"')) &&
+        _arr59.includes("DuroodUnlockReceiver.CHANNEL_REMINDER") && _arr59.includes("DuroodUnlockReceiver.CHANNEL_ISTIGHFAR"), "12 sounding");
+      check("Fix #59: the six per-waqt channels are created HIGH importance with their own Helio clip",
+        ["fajr", "dhuhr", "asr", "maghrib", "isha", "jumuah"].every(w =>
+          _sched58.includes('createChannel(nm, ctx, "preazan-' + w + '"') &&
+          _sched58.includes("IMPORTANCE_HIGH, R.raw.reminder_" + w)), "6 channels");
+      check("Fix #59: preazanType maps each waqt to its channel, Friday Dhuhr to preazan-jumuah (same check as preazanText)",
+        src.includes("function preazanType(id, locDate)") &&
+        src.includes('if (id === "Dhuhr" && locDate && locDate.getDay() === 5) return "preazan-jumuah";') &&
+        src.includes('return "preazan-" + id.toLowerCase();'), "per-waqt type");
+      check("Fix #59: pre-azan entries use preazanType and never speak via TTS (speak: false)",
+        src.includes("type: preazanType(id, locNow(preAt))") &&
+        src.includes("prayerId: id, speak: false,"), "clip only");
+      check("Fix #59: foreground pre-azan speech is off — checkPreAzanVoice is a no-op, no speakText(preazanText call left",
+        src.includes("function checkPreAzanVoice(){\n  return;\n}") && !src.includes("speakText(preazanText"), "no foreground TTS");
+      check("Fix #59: LN fallback creates the six per-waqt channels with the right sound files (channelId: a.type picks them up)",
+        ["fajr", "dhuhr", "asr", "maghrib", "isha", "jumuah"].every(w =>
+          src.includes('id: "preazan-' + w + '"') && src.includes('sound: "reminder_' + w + '.mp3"')) &&
+        src.includes("channelId: a.type,"), "LN per-waqt");
+      check("Fix #59: rescheduleNextDay recomputes the Dhuhr pre-azan channel on re-arm (Friday ↔ Saturday) and clears speak",
+        _sched58.includes('alarm.put("type", friday ? "preazan-jumuah" : "preazan-dhuhr");') &&
+        _sched58.includes('alarm.put("speak", false);'), "re-arm type");
+      check("Fix #59: AlarmReceiver never TTS-speaks a pre-azan type (gate on the type, not the stored flag)",
+        _recv59.includes('if (type.startsWith("preazan")) toSpeak = null;'), "TTS gate");
+      check("Fix #59: azan path untouched — azan entries still speak, checkAzan still speaks the announcement",
+        src.includes('speak: snd!=="none"') && src.includes('speakText(azanSpeakText(p, now), "bn-BD")'), "azan speaks");
+      check("Fix #59: istighfar.b64 decodes to the final short-form Helio clip (md5 331cdfba…, slower + louder)",
+        _md559("/home/hatch/workspace/deen-day/audio/istighfar.mp3") === "331cdfba89c988b84e2f9f90a7072d64" &&
+        Buffer.from(fs.readFileSync("/home/hatch/workspace/deen-day/assets/istighfar.b64", "utf8").trim(), "base64").equals(fs.readFileSync("/home/hatch/workspace/deen-day/audio/istighfar.mp3")), "final short istighfar");
+      check("Fix #59: durood is the Helio clip in all 4 local copies (md5 5f0e80c2…)",
+        _md559("/home/hatch/workspace/deen-day/audio/durood.mp3") === "5f0e80c2d735926904e835df0b12cfdd" &&
+        ["www/audio/durood.mp3", "android/app/src/main/res/raw/durood.mp3", "android/app/src/main/assets/public/audio/durood.mp3"].every(p =>
+          _md559("/home/hatch/workspace/deen-day/" + p) === "5f0e80c2d735926904e835df0b12cfdd"), "Helio durood");
+      check("Fix #59: the six reminder clips exist in all 4 copies, byte-identical, right md5s and durations",
+        [["fajr", "4c718c698915f37d83f9ff292753b788", 6.0, 7.5], ["dhuhr", "dbdd3c2390ae20ba4e2b31ea564ceb61", 4.5, 6.0],
+         ["asr", "b3dceea14908655b720af057e115ba97", 6.0, 7.5], ["maghrib", "a0547e01296c862dd22d2ac783985dd3", 5.0, 6.5],
+         ["isha", "af0405012296b3de9c5253ffeaa80355", 4.0, 5.5], ["jumuah", "fe927aa2ad485336d6e6b361f94e6389", 5.5, 7.0]].every(([w, md5, lo, hi]) => {
+          const base = "/home/hatch/workspace/deen-day/audio/reminder_" + w + ".mp3";
+          if (_md559(base) !== md5) return false;
+          const dur = parseFloat(require("child_process").execSync(`ffprobe -v error -show_entries format=duration -of csv=p=0 "${base}"`, {encoding:"utf8"}).trim());
+          if (!(dur > lo && dur < hi)) return false;
+          return ["www/audio/reminder_" + w + ".mp3", "android/app/src/main/res/raw/reminder_" + w + ".mp3",
+                  "android/app/src/main/assets/public/audio/reminder_" + w + ".mp3"].every(p =>
+            _md559("/home/hatch/workspace/deen-day/" + p) === md5);
+        }), "6 reminders");
+      check("Fix #59: the generic reminder tone stays bundled and in use (duha + unlock reminder + settings select) — only pre-azan stops using it",
+        _sched58.includes('createChannel(nm, ctx, "duha"') && _sched58.includes("IMPORTANCE_DEFAULT, R.raw.reminder") &&
+        _recv58.includes("createChannel(nm, ctx, CHANNEL_REMINDER,") && _recv58.includes("IMPORTANCE_HIGH, R.raw.reminder") &&
+        src.includes('{id:"reminder", bn:"রিমাইন্ডার টোন"') && !src.includes("reminder_tone"), "tone kept");
+      check("Fix #59: package.json build:www copies the six reminder clips so a local rebuild regenerates www/",
+        fs.readFileSync("/home/hatch/workspace/deen-day/package.json", "utf8").includes("audio/reminder_fajr.mp3") &&
+        fs.readFileSync("/home/hatch/workspace/deen-day/package.json", "utf8").includes("audio/reminder_jumuah.mp3"), "build:www");
     }
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);

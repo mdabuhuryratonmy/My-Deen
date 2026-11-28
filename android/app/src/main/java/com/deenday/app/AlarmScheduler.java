@@ -31,6 +31,12 @@ public final class AlarmScheduler {
        THE ONE PLACE that records which channel generation is current —
        bump CHANNEL_VERSION whenever a channel's sound or importance
        changes (the next audio change bumps this number, nothing else).
+       Fix #59 (28 Nov 2026): bumped 5 → 6 — the six per-waqt pre-azan
+       channels are new, and the dhikr channels' sounds changed to the
+       Helio clips (durood 1.5 s, istighfar 0.8 s). The v5 migration
+       already ran on his phone for Build 30, so v6 re-runs and
+       recreates the new per-waqt channels plus the dhikr channels
+       with the new sounds.
 
        Why a version gate instead of yet another fresh channel ID
        (the v2 → v3 → v4 pattern): Android never updates an existing
@@ -70,14 +76,18 @@ public final class AlarmScheduler {
        the same tradeoff every previous v-bump made, and the app's
        own sound toggle (sound channel vs silent twin) stays the
        user's control. */
-    public static final int CHANNEL_VERSION = 5;
+    public static final int CHANNEL_VERSION = 6;
     private static final String KEY_CHANNEL_VERSION = "channel_version";
     /** Every channel that carries a sound. Deleting + recreating these
         — and only these — is what heals a backup-restored silent
         channel. Keep in sync with the createChannel calls below and
-        with DuroodUnlockReceiver.ensureChannels. */
+        with DuroodUnlockReceiver.ensureChannels. Fix #59: the six
+        per-waqt pre-azan channels join the list (their sounds are the
+        new Helio clips); preazan-v2 stays for stale alarms. */
     private static final String[] SOUNDING_CHANNEL_IDS = {
-        "preazan-v2", "duha", "dhikr-durood-v4", "dhikr-istighfar-v4",
+        "preazan-v2", "preazan-fajr", "preazan-dhuhr", "preazan-asr",
+        "preazan-maghrib", "preazan-isha", "preazan-jumuah",
+        "duha", "dhikr-durood-v4", "dhikr-istighfar-v4",
         DuroodUnlockReceiver.CHANNEL_REMINDER, DuroodUnlockReceiver.CHANNEL_ISTIGHFAR
     };
 
@@ -199,6 +209,20 @@ public final class AlarmScheduler {
                         alarm.put("body", t);
                         alarm.put("speakText", t);
                     }
+                    // Fix #59: the channel is part of the Dhuhr Friday
+                    // state — a Friday pre-azan-jumuah alarm re-armed
+                    // for Saturday must move to preazan-dhuhr (and vice
+                    // versa), or Saturday would play the Jumu'ah clip
+                    // with Saturday's text. A legacy preazan-v2 Dhuhr
+                    // alarm migrates onto its per-waqt channel the same
+                    // way. And the re-armed alarm must not speak via
+                    // TTS any more (the channel clip is the
+                    // announcement), even if the stored alarm predates
+                    // Fix #59 with speak=true.
+                    if ("preazan-dhuhr".equals(rtype) || "preazan-jumuah".equals(rtype) || "preazan-v2".equals(rtype)) {
+                        alarm.put("type", friday ? "preazan-jumuah" : "preazan-dhuhr");
+                    }
+                    alarm.put("speak", false);
                 } else if (rtype.startsWith("azan")) {
                     String st = alarm.optString("speakText", "");
                     if (JUMUAH_AZAN_SPEAK_TEXT.equals(st) || DHUHR_SPEAK_TEXT.equals(st)) {
@@ -288,6 +312,24 @@ public final class AlarmScheduler {
             createChannel(nm, ctx, "preazan-v2", "Pre-azan reminders", "Waqt announcement 5 and 2 minutes before each prayer",
                     NotificationManager.IMPORTANCE_HIGH, R.raw.reminder);
             nm.deleteNotificationChannel("preazan");
+            // Fix #59: per-waqt pre-azan channels — each waqt's T-5/T-2
+            // reminders post on their own HIGH-importance channel whose
+            // sound is that waqt's bundled Helio clip (the clip IS the
+            // announcement now; the phone TTS is off for pre-azan).
+            // Friday Dhuhr posts on preazan-jumuah. preazan-v2 above
+            // stays for stale alarms until the JS re-sync replaces them.
+            createChannel(nm, ctx, "preazan-fajr", "Pre-azan reminders (Fajr)", "Fajr reminder 5 and 2 minutes before prayer time",
+                    NotificationManager.IMPORTANCE_HIGH, R.raw.reminder_fajr);
+            createChannel(nm, ctx, "preazan-dhuhr", "Pre-azan reminders (Dhuhr)", "Dhuhr reminder 5 and 2 minutes before prayer time",
+                    NotificationManager.IMPORTANCE_HIGH, R.raw.reminder_dhuhr);
+            createChannel(nm, ctx, "preazan-asr", "Pre-azan reminders (Asr)", "Asr reminder 5 and 2 minutes before prayer time",
+                    NotificationManager.IMPORTANCE_HIGH, R.raw.reminder_asr);
+            createChannel(nm, ctx, "preazan-maghrib", "Pre-azan reminders (Maghrib)", "Maghrib reminder 5 and 2 minutes before prayer time",
+                    NotificationManager.IMPORTANCE_HIGH, R.raw.reminder_maghrib);
+            createChannel(nm, ctx, "preazan-isha", "Pre-azan reminders (Isha)", "Isha reminder 5 and 2 minutes before prayer time",
+                    NotificationManager.IMPORTANCE_HIGH, R.raw.reminder_isha);
+            createChannel(nm, ctx, "preazan-jumuah", "Pre-azan reminders (Jumu'ah)", "Friday Jumu'ah reminder 5 and 2 minutes before prayer time",
+                    NotificationManager.IMPORTANCE_HIGH, R.raw.reminder_jumuah);
             createChannel(nm, ctx, "tahajjud", "Tahajjud", "Tahajjud notification (no azan)",
                     NotificationManager.IMPORTANCE_DEFAULT, -1);
             createChannel(nm, ctx, "sehri", "Sehri", "Sehri alarm",

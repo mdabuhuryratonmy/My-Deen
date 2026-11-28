@@ -10,7 +10,7 @@ import android.content.Intent;
  * unlock (DuroodUnlockReceiver). Nothing else can fire this receiver —
  * it has no intent-filter and no other caller; the PendingIntent is
  * explicit and created only by DuroodUnlockReceiver.postReminder().
- * Each press replays the bundled res/raw/durood.mp3 (2.68 s, one
+ * Each press replays the bundled res/raw/durood.mp3 (1.5 s, one
  * recitation) exactly once via the shared DuroodPlayer, counts it and
  * refreshes the reminder notification with the new count — the
  * notification posts AFTER playback finishes, so the chosen reminder

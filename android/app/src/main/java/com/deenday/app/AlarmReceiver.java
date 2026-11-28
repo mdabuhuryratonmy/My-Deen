@@ -29,6 +29,13 @@ import org.json.JSONObject;
  * breaks. Pre-azan entries speak their speakText (same sentence as the
  * body, set explicitly since Fix #43); azan entries speak their
  * speakText announcement. Tahajjud stays a silent notification.
+ * Fix #59 (28 Nov 2026): pre-azan entries NO LONGER speak via TTS —
+ * the bundled per-waqt clip on the reminder channel IS the
+ * announcement (one Helio male voice, offline; the phone's Bengali
+ * TTS voice is female, and speaking the same sentence after the clip
+ * would play it twice). The gate below is on the alarm type, not the
+ * stored speak flag, so even a stale pre-azan alarm from an older
+ * build stays silent. Azan entries still speak their announcement.
  *
  * Fix #42 (27 Nov 2026): the azan NO LONGER plays as the notification
  * channel sound. Android plays only one notification sound at a time,
@@ -42,9 +49,12 @@ import org.json.JSONObject;
  * channel fallback any more (a channel sound is cut dead by the next
  * notification). If the service cannot start, the azan is visual-only.
  * Silent azans (type "azan-v2-silent") are unchanged: notification
- * only, no service. Pre-azan reminders (type "preazan-v2") are also
- * unchanged apart from the BigTextStyle below, which shows the full
- * Fix #8 sentence instead of truncating it to one line.
+ * only, no service. Pre-azan reminders (per-waqt types "preazan-fajr"
+ * etc., Friday Dhuhr "preazan-jumuah", legacy "preazan-v2") post on
+ * their own channel whose sound is that waqt's bundled clip, and
+ * never speak via TTS (Fix #59) — apart from the BigTextStyle below,
+ * which shows the full Fix #8 sentence instead of truncating it to
+ * one line.
  */
 public class AlarmReceiver extends BroadcastReceiver {
     @Override
@@ -90,14 +100,15 @@ public class AlarmReceiver extends BroadcastReceiver {
                     context.getResources(), R.drawable.ic_notification_large);
             if (largeIcon != null) builder.setLargeIcon(largeIcon);
             NotificationManagerCompat.from(context).notify(id, builder.build());
-            // Build #19, Fix #5: speak the pre-azan text aloud. The
+            // Build #19, Fix #5: speak the azan announcement aloud. The
             // notification above already posted; speaking runs on its
             // own thread with goAsync so the broadcast stays alive
             // while TTS finishes (or the 25 s safety net fires).
             // Fix #40: an azan entry carries speakText (the announcement
             // "[Waqt] নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে নামাজের
             // প্রস্তুতি নিন"); pre-azan entries carry speakText too
-            // (Fix #43 — the same Fix #8 sentence as their body).
+            // (Fix #43 — the same Fix #8 sentence as their body) but
+            // never speak it any more (Fix #59 gate below).
             // Silent entries never carry speak=true.
             String speakText = intent.getStringExtra("speakText");
             String toSpeak = (speakText != null && !speakText.isEmpty()) ? speakText : body;
@@ -107,6 +118,15 @@ public class AlarmReceiver extends BroadcastReceiver {
             // speaking it would announce the prayer without naming it.
             // A stale alarm with an empty speakText stays silent instead.
             if ("azan-v2".equals(type) && (speakText == null || speakText.isEmpty())) toSpeak = null;
+            // Fix #59: pre-azan reminders NEVER speak via the phone's
+            // TTS any more — the bundled per-waqt clip on the reminder
+            // channel IS the announcement (one male voice, offline).
+            // The phone's Bengali TTS voice is female, and speaking
+            // the same sentence after the clip would play it twice.
+            // The gate is on the type, not the stored speak flag, so
+            // even a stale pre-azan alarm from an older build stays
+            // silent here; the JS re-sync replaces it on next app open.
+            if (type.startsWith("preazan")) toSpeak = null;
             if (intent.getBooleanExtra("speak", false) && toSpeak != null && !toSpeak.isEmpty()) {
                 final String text = toSpeak;
                 final Context appCtx = context.getApplicationContext();

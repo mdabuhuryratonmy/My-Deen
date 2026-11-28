@@ -4164,27 +4164,16 @@ function speakText(text, lang){
     window.speechSynthesis.speak(u);
   } catch(e){}
 }
-/* Build #19, Fix #5 — spoken pre-azan reminders, foreground path: when
-   the app is open, at T-5 and T-2 before every fard prayer, SPEAK the
-   exact Fix #8 text (verbatim) with the phone's Bengali voice. Always
-   on, like the pre-azan reminders themselves — even when a prayer's
-   azan alarm is off (Fix #9 §3). The background path is the native
-   AlarmReceiver TTS (the "speak" flag on the pre-azan alarm entries).
-   Tahajjud has no azan, so it gets no voice. Once per day per slot. */
+/* Fix #59 (28 Nov 2026, his decision — ALL audio in the one Helio male
+   voice): the foreground pre-azan speech is OFF. It used to speak the
+   exact Fix #8 text with the phone's Bengali voice (female) when the
+   app was open at T-5/T-2 — but the bundled per-waqt clip on the
+   reminder channel IS the announcement now, and speaking the same
+   sentence again would play it twice, in the wrong voice. The native
+   alarm still fires (channel clip) whether the app is open or not, so
+   nothing is lost. Kept as a no-op because the 1 s tick calls it. */
 function checkPreAzanVoice(){
-  if (!timings) return;
-  const now = locNow();
-  const mins = now.getHours()*60 + now.getMinutes();
-  for (const p of PRAYER_IDS){
-    const base = toMin(timings[p]); if (base == null) continue;
-    const at = base + (settings.offsets[p] || 0);
-    for (const before of [5, 2]){
-      if (at - before === mins && !rungToday[`${todayKey()}_${p}_pre${before}`]){
-        rungToday[`${todayKey()}_${p}_pre${before}`] = true;
-        speakText(preazanText(p, locNow()), "bn-BD"); // Fix #42: Friday Dhuhr speaks the Jumu'ah sentence
-      }
-    }
-  }
+  return;
 }
 function saveDetailPage(){
   if (!detailId || !detailDraft) return;
@@ -4281,7 +4270,7 @@ function syncDuroodToggleNative(){
    the chosen sound, so the tone never overlaps the durood — and the
    ✅ button on the notification replays the durood (native
    DuroodPlayReceiver). Sounds are our own bundled files:
-   reminder.mp3 (2.2 s tone), istighfar.mp3 (1.4 s), or silent. */
+   reminder.mp3 (2.2 s tone), istighfar.mp3 (1.0 s), or silent. */
 const DUROOD_REMIND_SOUNDS = [
   {id:"reminder", bn:"রিমাইন্ডার টোন", en:"Reminder tone"},
   {id:"istighfar", bn:"ইস্তিগফার", en:"Istighfar"},
@@ -4859,6 +4848,19 @@ function preazanText(id, locDate){
   if (id === "Dhuhr" && locDate && locDate.getDay() === 5) return JUMUAH_PREAZAN_TEXT;
   return PREAZAN_TEXTS[id];
 }
+/* Per-waqt reminder channels (Fix #59, 28 Nov 2026 — his decision:
+   ALL audio in the one Helio male voice; the six per-waqt reminder
+   clips replace the phone's TTS for the pre-azan announcement, so the
+   sentence is heard once, in that voice, offline). Each waqt's
+   pre-azan reminders post on their own channel, whose sound is that
+   waqt's bundled clip; Friday Dhuhr posts on the Jumu'ah channel.
+   Same Friday check as preazanText/azanSpeakText (locDate.getDay()
+   === 5), judged on the prayer's own day. PREAZAN_TEXTS and
+   AZAN_SPEAK_TEXTS are NEVER altered. */
+function preazanType(id, locDate){
+  if (id === "Dhuhr" && locDate && locDate.getDay() === 5) return "preazan-jumuah";
+  return "preazan-" + id.toLowerCase();
+}
 /* Friday Jumu'ah azan-time speech (Fix #49, 28 Nov 2026 — the user's
    words, same check as the pre-azan reminders): on Fridays the Dhuhr
    azan-time announcement says "জুম্মার নামাজের সময় হয়েছে, মিসওয়াক
@@ -4911,25 +4913,30 @@ function buildPrayerAlarmList(){
     // pre-azan (Fix #8 + #9): the same text twice — 5 minutes before
     // and 2 minutes before the azan. ALWAYS on: no toggle, no option,
     // even when this prayer's azan alarm is off.
-    // Build #19, Fix #5: the reminder is also SPOKEN — the alarm
-    // carries speak:true, and the native AlarmReceiver reads the body
-    // aloud with the phone's Bengali TTS voice (the foreground path in
-    // checkPreAzanVoice speaks it when the app is open). The body is
-    // the exact Fix #8 text, verbatim — never altered.
+    // Fix #59 (28 Nov 2026, his decision — ALL audio in the one Helio
+    // male voice): the reminder is NO LONGER spoken by the phone's
+    // Bengali TTS (female voice, and it would say the same sentence
+    // twice — once as the channel clip, once as TTS). The bundled
+    // per-waqt clip on the reminder channel IS the announcement now:
+    // speak is false, and the native AlarmReceiver never TTS-speaks a
+    // pre-azan type. The body is the exact Fix #8 text, verbatim —
+    // never altered. The foreground checkPreAzanVoice is a no-op for
+    // the same reason (it used the phone's voice too).
     [5, 2].forEach((mins, j)=>{
       const preAt = new Date(at.getTime() - mins*60000);
       if (preAt <= now) preAt.setDate(preAt.getDate()+1);
-      /* Fix #42: the pre-azan channel is preazan-v2 (HIGH importance +
-         reminder sound) — the old "preazan" channel was silent and
-         DEFAULT importance, and Android never updates an existing
-         channel, so the reminder never announced itself. The body is
-         the exact Fix #8 sentence (Friday Dhuhr: the Jumu'ah sentence
-         via preazanText) and the native receiver speaks it. */
-      list.push({ id: (j===0 ? PREAZAN5_IDS : PREAZAN_IDS)[i], at: preAt, type: "preazan-v2",
-        title: "My Deen — " + name, body: preazanText(id, locNow(preAt)), sound: "none", prayerId: id, speak: true,
-        /* Fix #43: speakText is set EXPLICITLY (the same sentence as the
-           body) — the native receiver speaks speakText, so the waqt name
-           is always spoken even if the body is ever stale or empty. The
+      /* Fix #59: each waqt posts on its own per-waqt channel
+         (preazanType — Friday Dhuhr on preazan-jumuah), whose sound
+         is that waqt's bundled Helio clip. The old preazan-v2 channel
+         (generic reminder tone) stays only for stale alarms until the
+         re-sync replaces them. The body is the exact Fix #8 sentence
+         (Friday Dhuhr: the Jumu'ah sentence via preazanText). */
+      list.push({ id: (j===0 ? PREAZAN5_IDS : PREAZAN_IDS)[i], at: preAt, type: preazanType(id, locNow(preAt)),
+        title: "My Deen — " + name, body: preazanText(id, locNow(preAt)), sound: "none", prayerId: id, speak: false,
+        /* Fix #43: speakText is set EXPLICITLY (the same sentence as
+           the body) so a stale body can never lose the waqt name —
+           but with speak:false (Fix #59) the native receiver does
+           not speak it; the channel clip is the announcement. The
            sentence itself is unchanged (Fix #8, verbatim). */
         speakText: preazanText(id, locNow(preAt)) });
     });
@@ -5096,7 +5103,18 @@ async function scheduleNativeAzan(){
     // with the reminder sound, so the reminder actually announces itself
     // (the old "preazan" channel was silent + DEFAULT importance, and
     // Android never updates an existing channel's sound/importance).
+    // Fix #59: each waqt has its OWN channel now, whose sound is that
+    // waqt's bundled Helio clip (Friday Dhuhr: preazan-jumuah). The
+    // schedule below uses channelId: a.type, so the per-waqt type
+    // picks the right channel automatically. preazan-v2 stays for
+    // stale alarms until the re-sync replaces them.
     await LN.createChannel({ id: "preazan-v2", name: "Pre-azan reminders", description: "5 and 2 minutes before prayer time", sound: "reminder.mp3", importance: 5, vibration: true });
+    await LN.createChannel({ id: "preazan-fajr", name: "Pre-azan reminders (Fajr)", description: "Fajr reminder 5 and 2 minutes before prayer time", sound: "reminder_fajr.mp3", importance: 5, vibration: true });
+    await LN.createChannel({ id: "preazan-dhuhr", name: "Pre-azan reminders (Dhuhr)", description: "Dhuhr reminder 5 and 2 minutes before prayer time", sound: "reminder_dhuhr.mp3", importance: 5, vibration: true });
+    await LN.createChannel({ id: "preazan-asr", name: "Pre-azan reminders (Asr)", description: "Asr reminder 5 and 2 minutes before prayer time", sound: "reminder_asr.mp3", importance: 5, vibration: true });
+    await LN.createChannel({ id: "preazan-maghrib", name: "Pre-azan reminders (Maghrib)", description: "Maghrib reminder 5 and 2 minutes before prayer time", sound: "reminder_maghrib.mp3", importance: 5, vibration: true });
+    await LN.createChannel({ id: "preazan-isha", name: "Pre-azan reminders (Isha)", description: "Isha reminder 5 and 2 minutes before prayer time", sound: "reminder_isha.mp3", importance: 5, vibration: true });
+    await LN.createChannel({ id: "preazan-jumuah", name: "Pre-azan reminders (Jumu'ah)", description: "Friday Jumu'ah reminder 5 and 2 minutes before prayer time", sound: "reminder_jumuah.mp3", importance: 5, vibration: true });
     await LN.createChannel({ id: "tahajjud", name: "Tahajjud", description: "Tahajjud notification (no azan)", importance: 4, vibration: true });
     await LN.createChannel({ id: "sehri", name: "Sehri", description: "Sehri alarm", importance: 4, vibration: true });
     await LN.createChannel({ id: "iftar", name: "Iftar", description: "Iftar alarm", importance: 4, vibration: true });
