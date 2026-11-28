@@ -110,6 +110,10 @@ public class DuroodUnlockReceiver extends BroadcastReceiver {
     public static void ensureChannels(Context ctx) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         try {
+            // Fix #58: same version-gated channel migration as
+            // AlarmScheduler — heal a backup-restored silent reminder
+            // channel once per channel version, before recreating.
+            AlarmScheduler.migrateChannelsIfNeeded(ctx);
             NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm == null) return;
             createChannel(nm, ctx, CHANNEL_REMINDER, "দরুদের রিমাইন্ডার", NotificationManager.IMPORTANCE_HIGH, R.raw.reminder);

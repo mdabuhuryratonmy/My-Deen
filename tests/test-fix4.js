@@ -3044,6 +3044,61 @@ Object.assign(settings, _savedTz);
       check("Fix #49: rescheduleNextDay recomputes the Dhuhr Friday sentences for the new day (no Saturday leak)",
         _sched49.includes("JUMUAH_AZAN_SPEAK_TEXT") && _sched49.includes("DAY_OF_WEEK") &&
         _sched49.includes("Calendar.FRIDAY") && _sched49.includes("JUMUAH_PREAZAN_TEXT"), "re-arm guard");
+
+      // Fix #58 (28 Nov 2026): reminder notification sounds do not play
+      // on his phone. The user confirmed he DID fully clean-install
+      // Build 28 (Clear storage + Clear data + uninstall) and the phone
+      // is NOT on silent — so dirty install and silent mode are ruled
+      // out, and the stuck-channel hypothesis stands on the 24 Nov
+      // Auto Backup finding: a channel once created silent stays
+      // silent through every "clean" install because Auto Backup
+      // (allowBackup=true) restores channel settings. The resource
+      // IDs are proven stable across Builds 23/26/28/29 (azan
+      // 0x7f0d0000, durood 0x7f0d0001, istighfar 0x7f0d0002, reminder
+      // 0x7f0d0003), so the channel sound URIs still resolve — the
+      // channels themselves carry the stale silent state. Fix: a
+      // version-gated delete + recreate of the six sounding channels
+      // (same IDs kept, so stored alarms keep working).
+      const _sched58 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AlarmScheduler.java", "utf8");
+      const _recv58 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodUnlockReceiver.java", "utf8");
+      check("Fix #58: CHANNEL_VERSION is recorded in one place (5) with the bump rule in the comment",
+        _sched58.includes("public static final int CHANNEL_VERSION = 5;") &&
+        _sched58.includes("bump CHANNEL_VERSION whenever a channel's sound or importance") &&
+        _sched58.includes('private static final String KEY_CHANNEL_VERSION = "channel_version";'), "v5 marker");
+      const _arr58 = _sched58.slice(_sched58.indexOf("SOUNDING_CHANNEL_IDS = {"), _sched58.indexOf("};", _sched58.indexOf("SOUNDING_CHANNEL_IDS = {")));
+      check("Fix #58: the migration list holds exactly the six sounding channels (preazan-v2, duha, dhikr v4 pair, unlock reminder pair)",
+        _arr58.includes('"preazan-v2"') && _arr58.includes('"duha"') &&
+        _arr58.includes('"dhikr-durood-v4"') && _arr58.includes('"dhikr-istighfar-v4"') &&
+        _arr58.includes("DuroodUnlockReceiver.CHANNEL_REMINDER") && _arr58.includes("DuroodUnlockReceiver.CHANNEL_ISTIGHFAR"), "6 sounding");
+      check("Fix #58: the migration list holds NO silent channel and NO azan channel (silent twins carry no sound; azan plays as media, untouched)",
+        !_arr58.includes("silent") && !_arr58.includes('"azan-v2"') && !_arr58.includes('"azan"') && !_arr58.includes("keepalive"), "sound-only");
+      check("Fix #58: migrateChannelsIfNeeded returns early when the stored version is current, else deletes each sounding channel and stores the new version",
+        _sched58.includes("public static void migrateChannelsIfNeeded(Context ctx)") &&
+        _sched58.includes("prefs.getInt(KEY_CHANNEL_VERSION, 0) == CHANNEL_VERSION") &&
+        _sched58.includes("for (String id : SOUNDING_CHANNEL_IDS) nm.deleteNotificationChannel(id);") &&
+        _sched58.includes("prefs.edit().putInt(KEY_CHANNEL_VERSION, CHANNEL_VERSION).apply();"), "gate + delete + stamp");
+      check("Fix #58: the migration runs at the start of AlarmScheduler.ensureChannels, before any channel is created",
+        _sched58.indexOf("migrateChannelsIfNeeded(ctx);", _sched58.indexOf("public static void ensureChannels")) <
+        _sched58.indexOf('createChannel(nm, ctx, "azan-v2-silent"', _sched58.indexOf("public static void ensureChannels")), "scheduler first");
+      check("Fix #58: the migration runs at the start of DuroodUnlockReceiver.ensureChannels, before its channels are created",
+        _recv58.indexOf("AlarmScheduler.migrateChannelsIfNeeded(ctx);") <
+        _recv58.indexOf('createChannel(nm, ctx, CHANNEL_REMINDER', _recv58.indexOf("public static void ensureChannels")), "receiver first");
+      check("Fix #58: channel IDs are NOT renamed — the v4 dhikr, preazan-v2, duha and unlock channels are still created with the same sounds",
+        _sched58.includes('createChannel(nm, ctx, "dhikr-durood-v4"') && _sched58.includes("IMPORTANCE_HIGH, R.raw.durood") &&
+        _sched58.includes('createChannel(nm, ctx, "dhikr-istighfar-v4"') && _sched58.includes("IMPORTANCE_HIGH, R.raw.istighfar") &&
+        _sched58.includes('createChannel(nm, ctx, "preazan-v2"') && _sched58.includes("IMPORTANCE_HIGH, R.raw.reminder") &&
+        _sched58.includes('createChannel(nm, ctx, "duha"') &&
+        _recv58.includes("createChannel(nm, ctx, CHANNEL_REMINDER,") && _recv58.includes("IMPORTANCE_HIGH, R.raw.reminder") &&
+        _recv58.includes("createChannel(nm, ctx, CHANNEL_ISTIGHFAR,") && _recv58.includes("IMPORTANCE_HIGH, R.raw.istighfar"), "same IDs + sounds");
+      check("Fix #58: the marker lives in the same \"mydeen\" prefs Auto Backup restores (a pre-fix backup has no marker, so the migration runs)",
+        _sched58.includes('ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)') &&
+        _sched58.includes('public static final String PREFS = "mydeen";'), "prefs");
+      check("Fix #58: azan path untouched — no azan channel is deleted by the migration and the sounding azan-v2 channel stays deleted",
+        !_arr58.includes('"azan-v2"') && _sched58.includes('nm.deleteNotificationChannel("azan-v2");') &&
+        !_sched58.includes('createChannel(nm, ctx, "azan-v2"'), "azan untouched");
+      check("Fix #58: JS schedule path unchanged — dhikr still schedules into the v4 channels (no rename to chase in JS)",
+        src.includes('settings.duroodRemSound !== false ? "dhikr-durood-v4" : "dhikr-durood-v4-silent"') &&
+        src.includes('settings.astaghRemSound !== false ? "dhikr-istighfar-v4" : "dhikr-istighfar-v4-silent"'), "JS v4");
     }
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);

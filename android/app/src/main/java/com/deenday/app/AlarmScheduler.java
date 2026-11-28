@@ -27,6 +27,82 @@ public final class AlarmScheduler {
     public static final String PREFS = "mydeen";
     public static final String KEY_ALARMS = "prayer_alarms";
 
+    /* Fix #58 (28 Nov 2026): notification-channel schema version.
+       THE ONE PLACE that records which channel generation is current —
+       bump CHANNEL_VERSION whenever a channel's sound or importance
+       changes (the next audio change bumps this number, nothing else).
+
+       Why a version gate instead of yet another fresh channel ID
+       (the v2 → v3 → v4 pattern): Android never updates an existing
+       channel's sound, and Android Auto Backup (manifest
+       android:allowBackup="true") restores notification-channel
+       settings across uninstall/reinstall — so a channel once created
+       silent stays silent through every "clean" install, and the
+       user confirmed (28 Nov) he DID fully clean-install Build 28
+       (Clear storage + Clear data + uninstall) with the phone NOT on
+       silent, yet the reminder tones still do not play. The resource
+       IDs are proven stable across Builds 23/26/28/29 (azan
+       0x7f0d0000, durood 0x7f0d0001, istighfar 0x7f0d0002, reminder
+       0x7f0d0003), so the stored channel sound URIs still resolve to
+       the right files — the channels themselves carry the stale
+       (silent) state, restored by backup. Deleting the sounding
+       channels once on a version change and letting the normal
+       creation code recreate them heals exactly that state, on a
+       dirty update AND on a clean install with a backup restore.
+
+       Same IDs are kept on purpose (no v5 rename): the stored alarms
+       in SharedPreferences carry the channel as their "type" string
+       (preazan-v2, duha, dhikr-durood-v4, ...) — renaming the IDs
+       would orphan every stored alarm until it was re-armed, while
+       delete + recreate of the SAME id gives the same fresh channel
+       state with zero reference changes. Only the six SOUNDING
+       channels are deleted: the silent twins and the silent azan
+       channel carry no sound, so nothing in them can go stale, and
+       the azan path is untouched (the azan plays as media from
+       AzanPlaybackService, never as a channel sound).
+
+       The marker lives in the same "mydeen" SharedPreferences that
+       Auto Backup restores: a backup from before this fix has no
+       marker (stored 0 ≠ 5) so the migration runs; a backup taken
+       after the migration already carries 5 and the (sounding)
+       channels, so it is a no-op. A channel the user deliberately
+       muted in system Settings is only reset on a version bump —
+       the same tradeoff every previous v-bump made, and the app's
+       own sound toggle (sound channel vs silent twin) stays the
+       user's control. */
+    public static final int CHANNEL_VERSION = 5;
+    private static final String KEY_CHANNEL_VERSION = "channel_version";
+    /** Every channel that carries a sound. Deleting + recreating these
+        — and only these — is what heals a backup-restored silent
+        channel. Keep in sync with the createChannel calls below and
+        with DuroodUnlockReceiver.ensureChannels. */
+    private static final String[] SOUNDING_CHANNEL_IDS = {
+        "preazan-v2", "duha", "dhikr-durood-v4", "dhikr-istighfar-v4",
+        DuroodUnlockReceiver.CHANNEL_REMINDER, DuroodUnlockReceiver.CHANNEL_ISTIGHFAR
+    };
+
+    /** Delete the sounding channels once when the channel schema
+        changes, so ensureChannels recreates them with the current
+        sounds. No-op when the stored version is already current.
+        Safe to call from every ensureChannels — whichever runs first
+        migrates, the rest are no-ops. If the process died between the
+        delete and the recreate, the next ensureChannels recreates the
+        missing channels anyway (creation is unconditional when a
+        channel is absent). */
+    public static void migrateChannelsIfNeeded(Context ctx) {
+        try {
+            SharedPreferences prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            if (prefs.getInt(KEY_CHANNEL_VERSION, 0) == CHANNEL_VERSION) return;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+                if (nm != null) {
+                    for (String id : SOUNDING_CHANNEL_IDS) nm.deleteNotificationChannel(id);
+                }
+            }
+            prefs.edit().putInt(KEY_CHANNEL_VERSION, CHANNEL_VERSION).apply();
+        } catch (Exception ignored) {}
+    }
+
     /* Fix #49: Friday Jumu'ah sentences (verbatim from the JS tables —
        AZAN_SPEAK_TEXTS.Dhuhr == PREAZAN_TEXTS.Dhuhr). The stored
        speakText/body was baked for the day the alarm was built;
@@ -176,6 +252,9 @@ public final class AlarmScheduler {
         notification sound. */
     public static void ensureChannels(Context ctx) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+        // Fix #58: heal backup-restored silent channels once per
+        // channel version, before the creation code below runs.
+        migrateChannelsIfNeeded(ctx);
         try {
             NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm == null) return;
