@@ -10,7 +10,16 @@ globalThis.localStorage = { _s:{}, getItem(k){return this._s[k]??null}, setItem(
 const els = {};
 function mkEl(){ const _cls = new Set(); const _at = {}; return {textContent:"", innerHTML:"", value:"", checked:false, style:{}, options:[], classList:{add(c){_cls.add(c)},remove(c){_cls.delete(c)},toggle(c,f){ if(f===undefined) f=!_cls.has(c); if(f)_cls.add(c); else _cls.delete(c); },contains(c){return _cls.has(c)}}, dataset:{}, onclick:null, onchange:null, oninput:null, onkeydown:null, querySelector(){ return mkEl(); }, querySelectorAll(){ return [] }, setAttribute(k,v){ _at[k]=v; }, getAttribute(k){ return k in _at ? _at[k] : null; }, addEventListener(){}, removeEventListener(){}, appendChild(){}, scrollIntoView(){}}; }
 globalThis.document = { addEventListener(){}, querySelector(s){ return els[s] || (els[s]=mkEl()); },
-  querySelectorAll(){ return [] }, getElementById(id){ return els["#"+id] || (els["#"+id]=mkEl()); }, documentElement:{ setAttribute(){}, lang:"bn" } };
+  querySelectorAll(){ return [] }, getElementById(id){ return els["#"+id] || (els["#"+id]=mkEl()); }, documentElement:{ setAttribute(){}, lang:"bn" },
+  /* Fix #61: loadQuranFull() injects assets/quran-full.js via a script
+     tag — without createElement/head the harness threw inside the
+     promise executor, leaving an unhandled rejection that crashed the
+     run the first time any later test yielded to the event loop (the
+     baseline only survived because process.exit beat the detection).
+     The stub script never fires onload here, so the load stays pending
+     (harmless — the feed render just never finishes in Node). */
+  createElement(tag){ const el = mkEl(); el.tagName = String(tag).toUpperCase(); return el; },
+  head: mkEl() };
 globalThis.window = globalThis;
 globalThis.scrollTo = ()=>{};
 globalThis.navigator = {};
@@ -80,6 +89,16 @@ globalThis.PRAYER_NAMES=PRAYER_NAMES; globalThis.PRAYERS=PRAYERS;
 globalThis.fmtTime=fmtTime; globalThis.fmtTimeNoSuffix=fmtTimeNoSuffix;
 globalThis.naflRotateName=naflRotateName;
 globalThis.duroodUnlockStatusText=duroodUnlockStatusText; globalThis.refreshDuroodStatus=refreshDuroodStatus; globalThis.playDuroodTest=playDuroodTest;
+// Fix #61: audio diagnostic + defensive preview
+globalThis.previewAlarmSound=previewAlarmSound; globalThis.playPreviewAudio=playPreviewAudio; globalThis.playPreviewEl=playPreviewEl;
+globalThis.resetPreviewAudio=resetPreviewAudio; globalThis.renderAudioDiag=renderAudioDiag; globalThis.audioDiagText=audioDiagText;
+globalThis.logAudioEvent=logAudioEvent; globalThis.onPreviewMediaEvent=onPreviewMediaEvent; globalThis.bindPreviewAudioEvents=bindPreviewAudioEvents;
+globalThis.previewWatchdogTick=previewWatchdogTick; globalThis.previewElId=previewElId; globalThis.previewSoundLabel=previewSoundLabel;
+globalThis.audioStateText=audioStateText; globalThis.refreshAudioState=refreshAudioState; globalThis.playDurood=playDurood;
+globalThis.fireDhikrReminder=fireDhikrReminder; globalThis.__getAudioDiag=()=>AUDIO_DIAG;
+globalThis.__setPreviewAttempt=v=>{ previewAttempt=v; }; globalThis.__getPreviewAttempt=()=>previewAttempt;
+globalThis.__getDhikrScheduleState=()=>dhikrScheduleState; globalThis.__getPreviewPlayingSound=()=>previewPlayingSound;
+globalThis.__getAudioState=()=>audioState;
 globalThis.DUROOD_REMIND_SOUNDS=DUROOD_REMIND_SOUNDS; globalThis.duroodRemindSoundName=duroodRemindSoundName;
 globalThis.preazanText=preazanText; globalThis.preazanType=preazanType; globalThis.JUMUAH_PREAZAN_TEXT=JUMUAH_PREAZAN_TEXT;
 globalThis.azanSpeakText=azanSpeakText; globalThis.JUMUAH_AZAN_SPEAK_TEXT=JUMUAH_AZAN_SPEAK_TEXT;
@@ -87,6 +106,8 @@ globalThis.villageNameOf=villageNameOf; globalThis.normalizeCityName=normalizeCi
 globalThis.permStepsAsked=permStepsAsked; globalThis.permMarkAsked=permMarkAsked; globalThis.permTimeout=permTimeout;
 globalThis.detectLocation=detectLocation; globalThis.locPermStatus=locPermStatus; globalThis.saveSettingsFromUI=saveSettingsFromUI;
 globalThis.runPermChain=runPermChain; globalThis.permRequestStep=permRequestStep; globalThis.permStatus=permStatus; globalThis.resumePermChain=resumePermChain;
+globalThis.maybeAskPermissions=maybeAskPermissions; globalThis.permStepExplain=permStepExplain;
+globalThis.permStatusText=permStatusText; globalThis.refreshPermStatus=refreshPermStatus; globalThis.askPermStep=askPermStep;
 globalThis.__permChainState=()=>({running:permChainRunning, waiting:permChainWaiting, idx:permChainIdx}); // Fix #41 Step 1 hole: the chain flags are let-bindings, invisible to the test scope — read them through this hook
 globalThis.qiblaBearing=qiblaBearing; globalThis.updateNeedle=updateNeedle;
 globalThis.__setQiblaDeg=v=>{ qiblaDeg=v; }; globalThis.__setHeading=v=>{ heading=v; };
@@ -103,6 +124,8 @@ const sw = fs.readFileSync("/home/hatch/workspace/deen-day/www/sw.js", "utf8");
 const css = fs.readFileSync("/home/hatch/workspace/deen-day/www/styles.css", "utf8");
 const javaSched = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AlarmScheduler.java", "utf8");
 const javaPlugin = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/PrayerAlarmPlugin.java", "utf8");
+const javaDurood = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodPlayer.java", "utf8");
+const javaDuroodPlugin = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodUnlockPlugin.java", "utf8");
 __setTimings({Fajr:"05:42", Sunrise:"07:03", Dhuhr:"13:00", Asr:"16:24", Maghrib:"18:58", Isha:"20:10", Imsak:"05:32", Firstthird:"22:59", Lastthird:"03:01"});
 settings.lang = "bn";
 
@@ -369,7 +392,8 @@ check("HTML has alarm + detail + calendar views", html.includes('id="view-alarm"
 check("HTML has detail slider −30..+30 step 1", html.includes('id="detail-slider"') && html.includes('min="-30"') && html.includes('max="30"') && html.includes('step="1"'));
 check("HTML has istighfar audio element", html.includes('id="audio-istighfar"') && html.includes("audio/istighfar.mp3"));
 check("Build #19 Fix #2: share button is GONE from the HTML (header + home row + calendar cells)", !html.includes('id="btn-share"') && !html.includes('id="btn-home-share"') && !html.includes("data-cal-share") && !html.includes("share")); 
-check("sw.js cache v20 + istighfar cached", sw.includes("my-deen-v20") && sw.includes("audio/istighfar.mp3"));
+check("Fix #61 (UPDATED): sw.js cache stays v20 (no bump — the bypass makes stale audio entries unreachable) and no audio is cached any more",
+  sw.includes("my-deen-v20") && !sw.includes("audio/istighfar.mp3"), "v20, no audio cache");
 check("no ads anywhere in source", !src.includes("admob") && !src.includes("AdMob") && !src.includes("adsbygoogle"));
 
 // ---- Fix #5: manual location removed, profile form hides after save ----
@@ -979,9 +1003,9 @@ Object.assign(settings, _savedTz);
       _pa.includes('ret.put("batteryExempt"'), "batteryExempt");
     check("Fix #25: manifest declares the battery-optimisation request permission",
       _mf.includes("REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"), "manifest");
-    check("Fix #32: first launch runs the direct chain (still 2.5 s after open, still once)",
-      src.includes("function maybeAskPermissions(){\n  if (settings.onboarded) return;") &&
-      src.includes("setTimeout(()=>runPermChain(), 2500)"), "chain on first launch");
+    check("Fix #61 (UPDATED Fix #32): the onboarded gate is gone — every launch runs the chain, which only opens UI for a step that is BOTH ungranted AND never asked (a decline is still never nagged)",
+      src.includes("function maybeAskPermissions(){") && !src.includes("function maybeAskPermissions(){\n  if (settings.onboarded) return;") &&
+      src.includes("setTimeout(()=>runPermChain(), 2500)"), "chain on launch, missing only");
     check("Fix #32: the chain pauses after a Settings page opens and resumes on foreground return",
       src.includes("permChainWaiting = true") && src.includes("resumePermChain()") &&
       src.includes('document.addEventListener("visibilitychange"'), "pause/resume");
@@ -1334,9 +1358,9 @@ Object.assign(settings, _savedTz);
     check("Fix #37: startup kicks off loading both sounds so the first tap plays at once",
       src.includes('["audio-azan","audio-reminder"]') && src.includes("el.load()"),
       "load at startup");
-    check("Fix #37: the azan preview still plays the local azan file on tap",
-      src.includes('if (sound==="azan"){ const a = $("#audio-azan")') && src.includes("a.play().catch(()=>{})"),
-      "preview plays");
+    check("Fix #37 (UPDATED Fix #61): the azan preview plays through the guarded playPreviewAudio — no swallowed play() rejection anywhere",
+      src.includes('if (sound==="azan"){ playPreviewAudio("azan"); return; }') && !src.includes("a.play().catch(()=>{})"),
+      "guarded preview");
 
     // ---- Fix #38: "ওয়াক্তের নাম (ডিফল্ট)" — say plainly what plays ----
     // The truth: "name" adds no separate sound (spoken only in the ▶
@@ -2993,11 +3017,11 @@ Object.assign(settings, _savedTz);
       const _dp48 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodPlayer.java", "utf8");
       const _duroodRcv48 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodUnlockReceiver.java", "utf8");
       const _dpr48 = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/DuroodPlayReceiver.java", "utf8");
-      check("Fix #48: Java comments pin the new durations (1.5 s / 1.0 s)",
-        _dp48.includes("1.5 s") && _dp48.includes("istighfar 1.0 s") &&
-        _duroodRcv48.includes("1.5 s") && _duroodRcv48.includes("istighfar 1.0 s") && _dpr48.includes("1.5 s"), "new durations");
-      check("Fix #48: old durations gone from the player/receiver comments + app.js",
-        !/3\.72 s/.test(_dp48 + _duroodRcv48 + _dpr48) && !/6\.2 s/.test(_dp48 + _duroodRcv48 + _dpr48) &&
+      check("Fix #48 (UPDATED Fix #61): Java comments pin the FINAL durations (durood 3.72 s original / istighfar 1.0 s Helio)",
+        _dp48.includes("3.72 s") && _dp48.includes("istighfar 1.0 s") &&
+        _duroodRcv48.includes("3.72 s") && _duroodRcv48.includes("istighfar 1.0 s") && _dpr48.includes("3.72 s"), "final durations");
+      check("Fix #48 (UPDATED Fix #61): superseded durations gone from the player/receiver comments + app.js (1.5 s short durood, 6.2/2.68/1.4/6.7 s old clips — 3.72 s is the FINAL durood, not an old duration)",
+        !/1\.5 s/.test(_dp48 + _duroodRcv48 + _dpr48) && !/6\.2 s/.test(_dp48 + _duroodRcv48 + _dpr48) &&
         !/2\.68 s/.test(_dp48 + _duroodRcv48 + _dpr48) && !/1\.4 s/.test(_dp48 + _duroodRcv48 + _dpr48) &&
         !/6\.7 s/.test(_dp48 + _duroodRcv48 + _dpr48) &&
         src.includes("istighfar.mp3 (1.0 s)") && !src.includes("istighfar.mp3 (0.8 s)") && !src.includes("istighfar.mp3 (6.7 s)") && !src.includes("istighfar.mp3 (1.4 s)") && !src.includes("istighfar.mp3 (6.2 s)"), "old durations gone");
@@ -3226,12 +3250,15 @@ Object.assign(settings, _savedTz);
       playAzan();
       check("Fix #60: repeating playAzan with a2 does not reassign src again", _srcSets===1, "still 1");
       settings.adhan = "a1";
-      // (a2) The service worker answers Range requests with 206, so a seek
-      // no longer forces a full re-stream of the 3.4 MB azan file.
-      check("Fix #60: sw.js answers a ranged request with 206 + Content-Range (no full re-stream on seek)",
-        fs.readFileSync("/home/hatch/workspace/deen-day/www/sw.js", "utf8").includes("function rangeResponse") &&
-        fs.readFileSync("/home/hatch/workspace/deen-day/www/sw.js", "utf8").includes("206") &&
-        fs.readFileSync("/home/hatch/workspace/deen-day/www/sw.js", "utf8").includes("Content-Range"), "sw range");
+      // (a2) Fix #61: the service worker does NOT intercept audio any
+      // more — the Fix #60 Range/206 answer did not fix the preview
+      // on his phone (53 s of silence), so media goes direct to
+      // Capacitor's local asset server, which handles Range natively.
+      // rangeResponse is retired; the behavioural proof is
+      // tests/test-sw-range.js (rewritten as the bypass test).
+      check("Fix #61: sw.js bypasses audio (no respondWith, no rangeResponse) and keeps no audio in the shell cache",
+        sw.includes('url.pathname.indexOf("/audio/")') && !sw.includes("function rangeResponse") &&
+        !sw.includes("Content-Range"), "sw bypass");
     }
     // (b) Forbidden ring name fits inside the ring now.
     check("Fix #60: the forbidden ring name is the short 'এখন নিষিদ্ধ সময়' (the old 2-line sentence crossed the ring stroke; it survives only in the history comment)",
@@ -3377,6 +3404,297 @@ Object.assign(settings, _savedTz);
     // (p) 'সাহরি' is gone everywhere; 'সেহরি' is the one spelling.
     check("Fix #60: 'সাহরি' appears nowhere in the shipped JS/HTML any more",
       !src.includes("সাহরি") && !html.includes("সাহরি"), "সেহরি only");
+
+    // ---- Fix #61 (28 Nov 2026): all audio dead on Build 32 — preview + native paths ----
+    // The azan ▶ preview did NOTHING for 53 s (video audio: no sound at
+    // all), the unlock durood stopped playing entirely (it played late
+    // on Build 28/29), and the istighfar + notification sounds died
+    // too. No local browser exists on this VM, so the runtime cause is
+    // proven on his phone via the diagnostic — these tests pin the
+    // code the diagnostic and the robust play path rely on.
+    // Fake media element: the mkEl stub has no media props, so give the
+    // preview elements real ones (readyState / error / play / load /
+    // buffered / event listeners) for the behavioural checks.
+    function fakeMedia61(srcUrl){
+      const listeners = {};
+      const el = {
+        readyState: 0, networkState: 0, error: null, currentTime: 0, duration: 0, paused: true,
+        buffered: { length: 0, end(i){ return 0; } },
+        _src: srcUrl, _attrs: { src: srcUrl }, _loadCalls: 0, _playCalls: 0, _rejectNext: null,
+        get src(){ return this._src; }, set src(v){ this._src = v; },
+        getAttribute(k){ return k in this._attrs ? this._attrs[k] : null; },
+        setAttribute(k, v){ this._attrs[k] = v; },
+        removeAttribute(k){ delete this._attrs[k]; },
+        load(){ this._loadCalls++; },
+        pause(){ this.paused = true; },
+        play(){ this._playCalls++; this.paused = false;
+          if (this._rejectNext){ const e = this._rejectNext; this._rejectNext = null; return Promise.reject(e); }
+          return Promise.resolve(); },
+        addEventListener(t, fn){ (listeners[t] = listeners[t] || []).push(fn); },
+        _fire(t){ (listeners[t] || []).forEach(fn=>fn()); },
+        _listeners: listeners
+      };
+      return el;
+    }
+    function clearPreviewTimer61(){
+      const at = __getPreviewAttempt();
+      if (at && at.timer && typeof clearTimeout === "function"){ try { clearTimeout(at.timer); } catch(e){} }
+      __setPreviewAttempt(null);
+    }
+    // (1) SW bypass: string-level pins (behavioural proof is tests/test-sw-range.js).
+    {
+      const _shell61 = sw.slice(sw.indexOf("const SHELL"), sw.indexOf("];", sw.indexOf("const SHELL")));
+      check("Fix #61: sw.js returns early (no respondWith) for same-origin audio/*.mp3, and rangeResponse is retired",
+        sw.includes('url.pathname.indexOf("/audio/")') && sw.includes('".mp3"') &&
+        !sw.includes("function rangeResponse") && !sw.includes("Content-Range"), "sw bypass");
+      check("Fix #61: no audio entry in the SW shell cache list (a failed 3.4 MB audio fetch used to fail the whole install)",
+        !_shell61.includes("audio"), "shell clean");
+      check("Fix #61: the non-audio branches are untouched (app shell cache-first, API network-first)",
+        sw.includes("caches.match(e.request)") && sw.includes("aladhan.com"), "branches kept");
+    }
+    // (2) Metadata guard: no seek before metadata; seek once metadata is there.
+    {
+      const _az61 = fakeMedia61("audio/azan.mp3"); _az61.currentTime = 7; _az61.readyState = 0;
+      els["#audio-azan"] = _az61;
+      playPreviewEl(_az61, "azan", "preview"); clearPreviewTimer61();
+      check("Fix #61: no seek before metadata (readyState 0 — currentTime stays 7, play still called)",
+        _az61.currentTime === 7 && _az61._playCalls === 1, "no seek, played");
+      _az61.currentTime = 7; _az61.readyState = 4;
+      playPreviewEl(_az61, "azan", "preview"); clearPreviewTimer61();
+      check("Fix #61: with metadata (readyState 4) the element seeks to 0 before playing",
+        _az61.currentTime === 0 && _az61._playCalls === 2, "seek to 0");
+    }
+    // (3) Poisoned element: an error resets it (remove src → load → re-set → load) before playing.
+    {
+      const _az61 = fakeMedia61("audio/azan.mp3"); _az61.error = { code: 4 }; _az61.readyState = 4;
+      els["#audio-azan"] = _az61;
+      playPreviewEl(_az61, "azan", "preview"); clearPreviewTimer61();
+      check("Fix #61: an element with an error is reset before playing (2 loads, src restored, play called)",
+        _az61._loadCalls === 2 && _az61.getAttribute("src") === "audio/azan.mp3" && _az61._playCalls === 1, "reset + play");
+    }
+    // (4) A play() rejection is logged in the diagnostic, never swallowed.
+    {
+      const _az61 = fakeMedia61("audio/azan.mp3"); _az61.readyState = 4;
+      const _rej = new Error("blocked"); _rej.name = "NotAllowedError"; _az61._rejectNext = _rej;
+      els["#audio-azan"] = _az61;
+      playPreviewEl(_az61, "azan", "preview"); clearPreviewTimer61();
+      await new Promise(r=>setTimeout(r, 0));
+      check("Fix #61: a play() rejection is logged in the diagnostic (not swallowed like before)",
+        audioDiagText().includes("play() ব্যর্থ") && audioDiagText().includes("NotAllowedError"), "rejection logged");
+    }
+    // (5) Playing state: the tapped ▶ becomes ⏸ while playing, back to ▶ on ended.
+    {
+      const _az61 = fakeMedia61("audio/azan.mp3"); _az61.readyState = 4;
+      els["#audio-azan"] = _az61;
+      onPreviewMediaEvent("azan", "playing");
+      const _btn61 = els['#detail-sounds [data-preview="azan"]'];
+      check("Fix #61: on playing, the preview state is azan and the button shows ⏸",
+        __getPreviewPlayingSound() === "azan" && _btn61 && _btn61.textContent === "⏸", "⏸ while playing");
+      onPreviewMediaEvent("azan", "ended");
+      check("Fix #61: on ended, the preview state clears and the button is ▶ again",
+        __getPreviewPlayingSound() === null && _btn61.textContent === "▶", "▶ on ended");
+    }
+    // (6) Diagnostic text: both elements, SW status, attempt log — with networkState + buffered.
+    {
+      const _az61 = fakeMedia61("audio/azan.mp3"); _az61.readyState = 4; _az61.networkState = 2; _az61.duration = 200.5; _az61.currentTime = 10; _az61.paused = true;
+      _az61.buffered = { length: 1, end(i){ return 200.5; } };
+      const _rm61 = fakeMedia61("audio/reminder.mp3"); _rm61.readyState = 1; _rm61.networkState = 1; _rm61.duration = 2.2; _rm61.currentTime = 0;
+      els["#audio-azan"] = _az61; els["#audio-reminder"] = _rm61;
+      const _t61 = audioDiagText();
+      check("Fix #61: the diagnostic shows readyState + networkState + error + time/duration + buffered + paused for BOTH elements",
+        _t61.includes("আজান: ") && _t61.includes("তৈরি") && _t61.includes("নেট: লোড হচ্ছে") && _t61.includes("ত্রুটি নেই") &&
+        _t61.includes("0:10/3:20") && _t61.includes("বাফার: 3:20") && _t61.includes("থেমে আছে") &&
+        _t61.includes("নোটিফিকেশন: ") && _t61.includes("মেটাডেটা") && _t61.includes("নেট: আইডল"),
+        _t61.split("\n").slice(0, 4).join(" | "));
+      check("Fix #61: the diagnostic shows the service-worker status line (Node harness has no SW — 'নেই')",
+        (_t61.split("\n").find(l=>l.includes("সার্ভিস ওয়ার্কার")) || "").includes("নেই"), "sw line");
+    }
+    // (7) The preview routes: notification ▶ plays the reminder tone (no words), azan ▶ the azan file.
+    check("Fix #61: previewAlarmSound sends notification → playPreviewAudio(notification) and azan → playPreviewAudio(azan)",
+      src.includes('if (sound==="notification"){ playPreviewAudio("notification"); return; }') &&
+      src.includes('if (sound==="azan"){ playPreviewAudio("azan"); return; }'), "preview routes");
+    check("Fix #61: no swallowed play() rejection remains anywhere in the shipped JS",
+      !src.includes("a.play().catch(()=>{})"), "no silent swallow");
+    // (8) The web reminder audios use the same guarded path.
+    check("Fix #61: playDurood + the istighfar reminder play through playPreviewEl (same guard + logging)",
+      src.includes('playPreviewEl(a, "durood", "durood-reminder")') &&
+      src.includes('playPreviewEl(a, "istighfar", "istighfar-reminder")'), "reminders guarded");
+    {
+      const _du61 = fakeMedia61("audio/durood.mp3"); _du61.readyState = 4;
+      els["#audio-durood"] = _du61;
+      playDurood(true); clearPreviewTimer61();
+      check("Fix #61: playDurood(true) plays the durood element through the guarded path",
+        _du61._playCalls === 1, "durood played");
+      const _is61 = fakeMedia61("audio/istighfar.mp3"); _is61.readyState = 4;
+      els["#audio-istighfar"] = _is61;
+      const _saved61 = { astaghRemSound: settings.astaghRemSound };
+      settings.astaghRemSound = true;
+      fireDhikrReminder("istighfar"); clearPreviewTimer61();
+      settings.astaghRemSound = _saved61.astaghRemSound;
+      check("Fix #61: fireDhikrReminder(istighfar) plays the istighfar element through the guarded path",
+        _is61._playCalls === 1, "istighfar played");
+    }
+    // (9) DND / volume / channel diagnostic text (pure function — no native needed).
+    {
+      const _off61 = audioStateText({dnd:"off", notifVolume:5, notifMax:7, mediaVolume:8, mediaMax:15, notificationsEnabled:true, channelVersion:6});
+      check("Fix #61: audioStateText with DND off shows বন্ধ + both volumes + notifications on + channel version 6",
+        _off61.includes("ডু নট ডিস্টার্ব: বন্ধ") && _off61.includes("৫/৭") && _off61.includes("৮/১৫") &&
+        _off61.includes("নোটিফিকেশন চালু: চালু") && _off61.includes("চ্যানেল সংস্করণ: ৬"), "dnd off");
+      check("Fix #61: audioStateText with DND fully on says চালু (সব বন্ধ) — the native-silence suspect",
+        audioStateText({dnd:"none", notifVolume:0, notifMax:7, mediaVolume:0, mediaMax:15, notificationsEnabled:true, channelVersion:6}).includes("ডু নট ডিস্টার্ব: চালু (সব বন্ধ)"), "dnd none");
+      check("Fix #61: audioStateText with unreadable values never fakes them (জানা যায়নি)",
+        audioStateText({}).includes("জানা যায়নি"), "unknown honest");
+    }
+    check("Fix #61: the audio-state + dhikr-state rows exist in the Settings HTML/CSS",
+      html.includes('id="audio-state"') && html.includes('id="audio-diag"') && css.includes("#audio-state"), "rows exist");
+    // (10) Dhikr schedule state: what scheduleNativeDhikr actually armed (or the error it hit).
+    {
+      const _saved61 = { duroodRemOn: settings.duroodRemOn, duroodRemMin: settings.duroodRemMin, duroodRemSound: settings.duroodRemSound,
+        astaghRemOn: settings.astaghRemOn, astaghRemMin: settings.astaghRemMin, astaghRemSound: settings.astaghRemSound };
+      settings.duroodRemOn = true; settings.duroodRemMin = 10; settings.duroodRemSound = true;
+      settings.astaghRemOn = true; settings.astaghRemMin = 2; settings.astaghRemSound = true;
+      globalThis.Capacitor = { Plugins: { LocalNotifications: { cancel: async()=>({}), schedule: async()=>({}) } } };
+      await scheduleNativeDhikr();
+      const _st61 = __getDhikrScheduleState();
+      check("Fix #61: scheduleNativeDhikr records 24 durood + 24 istighfar armed (was silently swallowed before)",
+        _st61.durood === 24 && _st61.istighfar === 24 && _st61.error === null && _st61.at > 0, "24 + 24 armed");
+      check("Fix #61: the diagnostic shows the armed reminder counts",
+        audioDiagText().includes("রিমাইন্ডার সেট: দরুদ ২৪টি") && audioDiagText().includes("ইস্তিগফার ২৪টি"), "counts shown");
+      globalThis.Capacitor = { Plugins: { LocalNotifications: { cancel: async()=>{ throw new Error("LN down"); }, schedule: async()=>({}) } } };
+      await scheduleNativeDhikr();
+      const _st61e = __getDhikrScheduleState();
+      check("Fix #61: when the LN schedule throws, the error is recorded instead of swallowed",
+        typeof _st61e.error === "string" && _st61e.error.includes("LN down"), "error recorded");
+      delete globalThis.Capacitor;
+      Object.assign(settings, _saved61);
+    }
+    // (11) Native: a player error is no longer counted as a play; the DND/volume state is readable.
+    check("Fix #61: DuroodPlayer returns false when the player errors (an error no longer counts as 'played')",
+      javaDurood.includes("errored[0] = true") && javaDurood.includes("if (errored[0]) { safeRelease(mp); return false; }") &&
+      javaDurood.includes("return !errored[0];"), "honest player");
+    check("Fix #61: DuroodUnlockPlugin exposes getAudioState (DND filter + stream volumes + notifications + channel version)",
+      javaDuroodPlugin.includes("getAudioState") && javaDuroodPlugin.includes("getCurrentInterruptionFilter") &&
+      javaDuroodPlugin.includes("getStreamVolume") && javaDuroodPlugin.includes("areNotificationsEnabled") &&
+      javaDuroodPlugin.includes('"channel_version"'), "audio state native");
+    check("Fix #61: duration comments are the FINAL audio set (durood 3.72 s original, istighfar 1.0 s Helio)",
+      javaDurood.includes("3.72 s") && javaSched.includes("durood 3.72 s original clip, istighfar 1.0 s Helio"), "durations final");
+    // (12) Permission chain (user complaint 28 Nov 17:56): first open
+    // did not ask for ALL permissions together — some never asked at
+    // all. Audit: maybeAskPermissions() returned early whenever
+    // settings.onboarded was true, so the chain ran ONCE on the very
+    // first install and never again (a step added later, backed out
+    // of, or revoked since was never re-asked; the only re-ask was the
+    // Settings button). The gate is dropped — the chain itself already
+    // skips granted steps and steps asked before, so a decline is
+    // still never nagged on launch.
+    check("Fix #61: maybeAskPermissions has no onboarded early-return (the gate was the bug)",
+      !src.includes("function maybeAskPermissions(){\n  if (settings.onboarded) return;"), "gate gone");
+    check("Fix #61: one plain-Bengali explanation exists per permission step",
+      ["location", "notifications", "exact", "battery", "appsettings"].every(id=>src.includes(`if (id === "${id}") return Lb(`)), "5 explanations");
+    check("Fix #61: the chain toasts the explanation before each prompt, and a manual-path toast is never overwritten by a later one-liner in the same run",
+      src.includes("if (!_manualToasted) toast(permStepExplain(id));") && src.includes("_manualToasted = true;"), "explained, sticky manual");
+    check("Fix #61: resuming the chain after a Settings page toasts visibly",
+      src.includes('toast(Lb("ফিরে এসেছেন — বাকি অনুমতি চাওয়া হচ্ছে"'), "resume toast");
+    // Behavioural: drive the chain with a stubbed plugin.
+    {
+      const _saved61p = {...settings};
+      const _savedAsked61p = {...(settings.permStepsAsked || {})};
+      let _req61p = [];
+      let _geo61p = "granted";
+      let _st61p = {notificationsGranted:false, exactAlarmGranted:true, alarmsScheduled:0, batteryExempt:true};
+      const _setup61p = () => {
+        globalThis.Capacitor = { Plugins: {
+          Geolocation: {
+            checkPermissions: async()=>({location: _geo61p}),
+            getCurrentPosition: async()=>({coords:{latitude:4.72, longitude:101.12, accuracy:10}}),
+          },
+          PrayerAlarm: {
+            scheduleAlarms: async()=>({scheduled:0, skipped:0}),
+            getStatus: async()=>({..._st61p}),
+            requestStep: async(a)=>{ _req61p.push(a.step); return {opened:false, granted:false}; },
+          },
+          LocalNotifications: { cancel: async()=>({}), requestPermissions: async()=>({display:"granted"}), schedule: async()=>({}) },
+        }};
+        els["#toast"].textContent = "";
+      };
+      try {
+        // (a) onboarded=true, notifications never asked + ungranted →
+        // the chain asks it (the old gate would have asked nothing).
+        _req61p = []; _setup61p();
+        settings.onboarded = true; settings.permStepsAsked = {};
+        settings.locPermGranted = false; settings.locManual = false; settings.autoLoc = true;
+        const _realST61p = globalThis.setTimeout;
+        let _cb61p = null;
+        globalThis.setTimeout = (fn)=>{ _cb61p = fn; return 0; };
+        maybeAskPermissions();
+        globalThis.setTimeout = _realST61p;
+        await _cb61p();
+        check("Fix #61: onboarded=true no longer blocks the chain — a never-asked, ungranted step IS asked",
+          _req61p.includes("notifications"), "asked: " + _req61p.join(","));
+        // (b) the same step asked before + still ungranted → NOT re-asked on launch (no nag).
+        _req61p = []; _setup61p();
+        settings.onboarded = true;
+        settings.permStepsAsked = {location:true, notifications:true, exact:true, battery:true, appsettings:true};
+        await runPermChain(false);
+        check("Fix #61: a step asked before and still ungranted is NOT re-asked by the launch chain (no nag)",
+          !_req61p.includes("notifications") && _req61p.length === 0, "asked: " + _req61p.join(","));
+        // (c) force (the Settings button) DOES re-ask it.
+        _req61p = []; _setup61p();
+        await runPermChain(true);
+        check("Fix #61: force re-asks the missing step (the Settings button path)",
+          _req61p.includes("notifications"), "asked: " + _req61p.join(","));
+      } finally {
+        Object.assign(settings, _saved61p);
+        settings.permStepsAsked = _savedAsked61p;
+        if (__permChainState().waiting){ resumePermChain(); await new Promise(r=>setTimeout(r, 50)); }
+        delete globalThis.Capacitor;
+      }
+    }
+    // (13) Settings permission-status rows (real native state, never hardcoded).
+    {
+      const _all61 = permStatusText({location:true, notifications:true, exact:true, battery:true, appsettings:false});
+      check("Fix #61: all-granted status shows চালু on every row and no re-ask button — except autostart, which is undetectable",
+        _all61.includes("অবস্থান (নামাজের সময়): চালু") && _all61.includes("নোটিফিকেশন: চালু") &&
+        _all61.includes("সঠিক সময়ে অ্যালার্ম: চালু") && _all61.includes("ফোন ঘুমালেও আজান: চালু") &&
+        !_all61.includes("চালু করুন") && _all61.includes("অটোস্টার্ট: নিজে দেখুন") && _all61.includes("সেটিংস খুলুন"), "all on");
+      const _one61 = permStatusText({location:true, notifications:false, exact:true, battery:true, appsettings:false});
+      check("Fix #61: a missing permission shows বন্ধ + a one-tap re-ask button for just that step",
+        _one61.includes("নোটিফিকেশন: বন্ধ") && _one61.includes('data-perm-ask="notifications"') && _one61.includes("চালু করুন"), "one missing");
+      check("Fix #61: the permission-status row exists in the Settings HTML and its buttons have a small style",
+        html.includes('id="perm-status"') && css.includes(".btn.small"), "row + style");
+    }
+    // (14) refreshPermStatus renders + wires the per-item button; askPermStep asks just that step.
+    {
+      const _saved61p = {...settings};
+      let _req61p = [];
+      globalThis.Capacitor = { Plugins: {
+        Geolocation: { checkPermissions: async()=>({location:"granted"}) },
+        PrayerAlarm: {
+          scheduleAlarms: async()=>({scheduled:0, skipped:0}),
+          getStatus: async()=>({notificationsGranted:false, exactAlarmGranted:true, alarmsScheduled:0, batteryExempt:true}),
+          requestStep: async(a)=>{ _req61p.push(a.step); return {opened:false, granted:false}; },
+        },
+        LocalNotifications: { cancel: async()=>({}), schedule: async()=>({}) },
+      }};
+      try {
+        const _btn61p = { _ask: null, onclick: null, getAttribute(k){ return k === "data-perm-ask" ? this._ask : null; } };
+        const _row61p = { innerHTML: "", style: {}, querySelectorAll(){ return _btn61p._ask ? [_btn61p] : []; } };
+        els["#perm-status"] = _row61p;
+        _btn61p._ask = "notifications";
+        await refreshPermStatus();
+        check("Fix #61: refreshPermStatus renders the real status (notifications বন্ধ) into #perm-status",
+          _row61p.innerHTML.includes("নোটিফিকেশন: বন্ধ") && _row61p.style.display === "", "rendered");
+        check("Fix #61: the per-item button is wired to its step",
+          typeof _btn61p.onclick === "function", "wired");
+        _req61p = [];
+        await _btn61p.onclick();
+        check("Fix #61: tapping the row button asks JUST that permission, then refreshes",
+          _req61p.length === 1 && _req61p[0] === "notifications", "asked: " + _req61p.join(","));
+      } finally {
+        Object.assign(settings, _saved61p);
+        delete globalThis.Capacitor;
+      }
+    }
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);

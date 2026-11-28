@@ -346,6 +346,12 @@
         <!-- Fix #38: say plainly what plays at prayer time for the
              selection above (filled by renderDetailSounds). -->
         <p class="muted small" id="detail-sound-explain"></p>
+        <!-- Fix #61: live audio diagnostic — the azan ▶ preview was dead
+             on the phone with no error visible, so this shows the real
+             state of both preview sounds + the service worker + the last
+             tap attempts (filled by renderAudioDiag). -->
+        <div id="audio-diag" class="muted small"></div>
+        <div id="audio-state" class="muted small"></div>
       </div>
       <div class="row mt"><button class="btn gold block" id="btn-detail-save">সংরক্ষণ করুন</button></div>
     </section>
@@ -432,6 +438,11 @@
           <label class="switch"><input type="checkbox" id="set-notif"><span class="slider"></span></label></div>
         <div class="row mt"><button class="btn block" id="btn-permissions">🔔 সব অনুমতি দিন — নোটিফিকেশন ও সঠিক সময়ে অ্যালার্ম</button></div>
         <p class="muted small">অ্যাপ নিজেই একটা একটা করে অনুমতি চাইবে — Settings-এ ঘুরতে হবে না। সঠিক সময়ে আজান বাজাতে এগুলো লাগে।</p>
+        <!-- Fix #61: permission status (real native state) — one row per
+             permission with চালু/বন্ধ and a one-tap re-ask for each
+             missing one; autostart cannot be detected, so its row says
+             "নিজে দেখুন" with a button that opens the app Settings. -->
+        <div id="perm-status" class="muted small" style="display:none"></div>
         <div class="switch-row"><span id="daily-label">🌅 প্রতিদিন সকালে হাদিস ও আয়াত</span>
           <label class="switch"><input type="checkbox" id="set-daily" checked><span class="slider"></span></label></div>
         <p class="muted small" id="daily-desc"></p>

@@ -1,9 +1,13 @@
-// My Deen Fix #60 — service-worker Range test (Node).
+// My Deen Fix #61 — service-worker audio-bypass test (Node).
 // Loads the real www/sw.js with stubbed ServiceWorker globals, captures
-// the fetch handler, and asserts media Range requests get 206 Partial
-// Content (the azan-button delay: the old worker answered every Range
-// with the whole file as 200, so Chromium re-streamed azan.mp3 on
-// every tap). Also asserts the no-Range path is unchanged (200, full).
+// the fetch handler, and asserts media requests are NEVER intercepted:
+// the worker returns early with NO respondWith, so audio goes direct to
+// Capacitor's local asset server (native Range support). Fix #60's
+// Range/206 answer did NOT fix the preview on the phone (53 s of
+// silence, not even the 17 KB reminder tone), so the worker is out of
+// the audio path entirely. Also asserts the non-audio branches are
+// unchanged (app shell cache-first, API network-first) and no audio
+// entry sits in the shell cache list.
 const fs = require("fs");
 
 let passed = 0, failed = 0;
@@ -40,12 +44,9 @@ globalThis.self = {
 globalThis.location = { origin: "https://localhost" };
 globalThis.Response = R;
 globalThis.Headers = H;
-// Cache Storage stub: one pre-filled cache holding a fake 10,000-byte azan.mp3.
-const FAKE_TOTAL = 10000;
-const fakeMp3 = new Uint8Array(FAKE_TOTAL);
-for (let i = 0; i < FAKE_TOTAL; i++) fakeMp3[i] = i % 256;
-const cacheStore = new Map([["https://localhost/audio/azan.mp3",
-  new R(fakeMp3, { status: 200, headers: { "Content-Type": "audio/mpeg" } })]]);
+// Cache Storage stub: the shell cache holds app.js only.
+const cacheStore = new Map([["https://localhost/app.js",
+  new R("/* app */", { status: 200, headers: { "Content-Type": "application/javascript" } })]]);
 const cacheApi = {
   match(req) { return Promise.resolve(cacheStore.get(typeof req === "string" ? req : req.url) || undefined); },
   put(req, res) { cacheStore.set(typeof req === "string" ? req : req.url, res); return Promise.resolve(); },
@@ -53,55 +54,54 @@ const cacheApi = {
 };
 globalThis.caches = { open() { return Promise.resolve(cacheApi); }, match(req) { return cacheApi.match(req); }, keys() { return Promise.resolve([]); }, delete() { return Promise.resolve(true); } };
 let fetchCalls = 0;
-globalThis.fetch = async () => { fetchCalls++; return new R(fakeMp3, { status: 200, headers: { "Content-Type": "audio/mpeg" } }); };
+globalThis.fetch = async () => { fetchCalls++; return new R("net", { status: 200 }); };
 
-eval(fs.readFileSync("/home/hatch/workspace/deen-day/www/sw.js", "utf8"));
+const swSrc = fs.readFileSync("/home/hatch/workspace/deen-day/www/sw.js", "utf8");
+eval(swSrc);
 
-function fakeEvent(range) {
+function fireFetch(url, range) {
   const ev = {
     request: {
-      url: "https://localhost/audio/azan.mp3", method: "GET",
+      url, method: "GET",
       headers: new H(range ? { range } : {})
     },
     respondWith(p) { this._p = p; }
   };
   handlers.fetch[0](ev);
-  return ev._p;
+  return ev._p; // undefined when the worker did not intercept
 }
+
 (async () => {
-  // 1. Range bytes=0-1023 → 206, Content-Range, exactly 1024 bytes.
-  const r1 = await fakeEvent("bytes=0-1023");
-  const b1 = new Uint8Array(await r1.arrayBuffer());
-  check("Range 0-1023 returns 206", r1.status === 206, "status=" + r1.status);
-  check("Range 0-1023 Content-Range is bytes 0-1023/10000",
-    r1.headers.get("Content-Range") === "bytes 0-1023/10000", r1.headers.get("Content-Range"));
-  check("Range 0-1023 body is exactly 1024 bytes", b1.length === 1024, "len=" + b1.length);
-  check("Range 0-1023 body is the head of the file", b1[0] === 0 && b1[1023] === 1023 % 256, "head bytes wrong");
-  check("Range response carries Accept-Ranges: bytes", r1.headers.get("Accept-Ranges") === "bytes", r1.headers.get("Accept-Ranges"));
-  // 2. Open-ended range bytes=5000- → 206, 5000 bytes to the end.
-  const r2 = await fakeEvent("bytes=5000-");
-  const b2 = new Uint8Array(await r2.arrayBuffer());
-  check("Open-ended range returns 206 with the tail",
-    r2.status === 206 && r2.headers.get("Content-Range") === "bytes 5000-9999/10000" && b2.length === 5000,
-    r2.status + " " + r2.headers.get("Content-Range") + " len=" + b2.length);
-  // 3. Suffix range bytes=-100 → 206, last 100 bytes.
-  const r3 = await fakeEvent("bytes=-100");
-  const b3 = new Uint8Array(await r3.arrayBuffer());
-  check("Suffix range returns 206 with the last 100 bytes",
-    r3.status === 206 && r3.headers.get("Content-Range") === "bytes 9900-9999/10000" && b3.length === 100,
-    r3.status + " " + r3.headers.get("Content-Range") + " len=" + b3.length);
-  // 4. No Range header → unchanged behaviour: 200, full file, no network fetch (cache hit).
+  // 1. Audio URL, with a Range header (the old failure: the worker
+  // answered 200 + full file) → NO respondWith at all.
+  check("Audio /audio/azan.mp3 WITH Range is not intercepted (no respondWith)",
+    fireFetch("https://localhost/audio/azan.mp3", "bytes=0-1023") === undefined, "respondWith called");
+  // 2. Audio URL, no Range → still not intercepted.
+  check("Audio /audio/azan.mp3 without Range is not intercepted",
+    fireFetch("https://localhost/audio/azan.mp3", null) === undefined, "respondWith called");
+  // 3. The reminder tone too (17 KB — the video had no tone either, so
+  // the shared path, not the file size, is the suspect).
+  check("Audio /audio/reminder.mp3 is not intercepted",
+    fireFetch("https://localhost/audio/reminder.mp3", null) === undefined, "respondWith called");
+  // 4. A bare .mp3 path outside /audio/ (the backstop) → not intercepted.
+  check("Bare .mp3 URL is not intercepted (backstop)",
+    fireFetch("https://localhost/sounds/durood.mp3", "bytes=0-99") === undefined, "respondWith called");
+  // 5. App shell still cache-first: app.js gets a respondWith that
+  // resolves to the cached 200.
+  const r5 = await fireFetch("https://localhost/app.js", null);
+  check("App shell app.js is still intercepted (cache-first)",
+    r5 !== undefined && r5.status === 200, "no respondWith or wrong status");
+  // 6. API still network-first with cache fallback.
   fetchCalls = 0;
-  const r4 = await fakeEvent(null);
-  const b4 = new Uint8Array(await r4.arrayBuffer());
-  check("No Range header returns 200 with the full file",
-    r4.status === 200 && b4.length === FAKE_TOTAL && fetchCalls === 0,
-    "status=" + r4.status + " len=" + b4.length + " fetchCalls=" + fetchCalls);
-  // 5. Unsatisfiable range → 416 with bytes */total.
-  const r5 = await fakeEvent("bytes=20000-30000");
-  check("Unsatisfiable range returns 416",
-    r5.status === 416 && r5.headers.get("Content-Range") === "bytes */10000",
-    "status=" + r5.status + " " + r5.headers.get("Content-Range"));
+  const r6 = await fireFetch("https://api.aladhan.com/v1/timings", null);
+  check("API aladhan.com is still intercepted (network-first)",
+    r6 !== undefined && fetchCalls === 1, "no respondWith or fetchCalls=" + fetchCalls);
+  // 7. Static checks: no rangeResponse anywhere, no audio in SHELL.
+  check("No rangeResponse function remains in sw.js",
+    !swSrc.includes("function rangeResponse"), "rangeResponse present");
+  const shell = swSrc.slice(swSrc.indexOf("const SHELL"), swSrc.indexOf("];", swSrc.indexOf("const SHELL")));
+  check("No audio entry in the SHELL cache list",
+    !shell.includes("audio"), "audio in SHELL");
   console.log(`\ntest-sw-range: ${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })();

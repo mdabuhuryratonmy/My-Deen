@@ -1,9 +1,12 @@
 package com.deenday.app;
 
 import android.app.ActivityManager;
+import android.app.NotificationManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.media.AudioManager;
+import android.os.Build;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -78,6 +81,77 @@ public class DuroodUnlockPlugin extends Plugin {
         r.put("keepAliveRunning", isKeepAliveRunning(ctx));
         r.put("lastUnlockPlay", DuroodUnlockReceiver.getLastUnlockPlay(ctx));
         r.put("lastUnlockAttempt", DuroodUnlockReceiver.getLastUnlockAttempt(ctx));
+        call.resolve(r);
+    }
+
+    /**
+     * Fix #61: the phone's live audio state for the Settings diagnostic —
+     * every value is read from the system right now, never hardcoded:
+     *  - dnd: "off" (all interruptions allowed) / "priority" / "none" /
+     *    "alarms" / "unknown". DND silences USAGE_NOTIFICATION playback
+     *    (DuroodPlayer) AND notification-channel sounds — it is the
+     *    prime suspect when every native sound is dead at once while
+     *    the code is unchanged (Build 29 played, Build 32 silent).
+     *  - notifVolume/notifMax, mediaVolume/mediaMax: the two volume
+     *    knobs that decide whether anything is audible at all.
+     *  - notificationsEnabled: false means no notification can even
+     *    show, let alone sound.
+     *  - channelVersion: the Fix #58 migration marker (6 = the sounding
+     *    channels were deleted + recreated with their sounds).
+     *  - canChangeDnd: whether the app may change the DND policy
+     *    (needs the policy-access permission; informational only).
+     * Reading these needs no permission; a value that cannot be read
+     * is returned as -1 / "unknown", never faked.
+     */
+    @PluginMethod
+    public void getAudioState(PluginCall call) {
+        Context ctx = getContext();
+        JSObject r = new JSObject();
+        try {
+            NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+            String dnd = "unknown";
+            boolean notifEnabled = false;
+            boolean canChangeDnd = false;
+            if (nm != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    switch (nm.getCurrentInterruptionFilter()) {
+                        case NotificationManager.INTERRUPTION_FILTER_ALL: dnd = "off"; break;
+                        case NotificationManager.INTERRUPTION_FILTER_PRIORITY: dnd = "priority"; break;
+                        case NotificationManager.INTERRUPTION_FILTER_NONE: dnd = "none"; break;
+                        case NotificationManager.INTERRUPTION_FILTER_ALARMS: dnd = "alarms"; break;
+                        default: dnd = "unknown"; break;
+                    }
+                    try { canChangeDnd = nm.isNotificationPolicyAccessGranted(); } catch (Exception ignored) {}
+                }
+                try { notifEnabled = nm.areNotificationsEnabled(); } catch (Exception ignored) {}
+            }
+            r.put("dnd", dnd);
+            r.put("notificationsEnabled", notifEnabled);
+            r.put("canChangeDnd", canChangeDnd);
+        } catch (Exception ignored) {
+            r.put("dnd", "unknown");
+        }
+        try {
+            AudioManager am = (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
+            if (am != null) {
+                r.put("notifVolume", am.getStreamVolume(AudioManager.STREAM_NOTIFICATION));
+                r.put("notifMax", am.getStreamMaxVolume(AudioManager.STREAM_NOTIFICATION));
+                r.put("mediaVolume", am.getStreamVolume(AudioManager.STREAM_MUSIC));
+                r.put("mediaMax", am.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
+            } else {
+                r.put("notifVolume", -1); r.put("notifMax", -1);
+                r.put("mediaVolume", -1); r.put("mediaMax", -1);
+            }
+        } catch (Exception ignored) {
+            r.put("notifVolume", -1); r.put("notifMax", -1);
+            r.put("mediaVolume", -1); r.put("mediaMax", -1);
+        }
+        try {
+            int v = ctx.getSharedPreferences("mydeen", Context.MODE_PRIVATE).getInt("channel_version", 0);
+            r.put("channelVersion", v);
+        } catch (Exception ignored) {
+            r.put("channelVersion", -1);
+        }
         call.resolve(r);
     }
 

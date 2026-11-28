@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
  * (Fix #3 / Build #19 / Fix #6): explicit notification audio
  * attributes + full volume, with a MediaPlayer.create() fallback.
  * playOnce() runs on the CALLER's background thread (both callers use
- * goAsync + a thread) and blocks until the 1.5 s clip finishes, errors
+ * goAsync + a thread) and blocks until the 3.72 s clip finishes, errors
  * out, or 10 s elapse — so the caller can post the reminder
  * notification AFTER the durood finishes, on the user's chosen sound
  * channel, and the chosen tone (reminder 2.2 s, istighfar 1.0 s) never
@@ -35,24 +35,35 @@ public final class DuroodPlayer {
     /** Play res/raw/durood.mp3 once; block until it finishes/errors or
         10 s elapse. Counts the durood only when playback actually
         starts. Returns true when playback started. Must be called from
-        a background thread — never the main thread. */
+        a background thread — never the main thread.
+        Fix #61: an immediate player error used to return true — the
+        onError listener counted the latch down, the await returned,
+        and the caller recorded a "play" (count + last-play timestamp)
+        although nothing sounded. Now an error before or during
+        playback returns false, so the diagnostic never calls a failed
+        play a success. (A mid-playback error after the count was
+        already taken still returns false; the count may then be off
+        by one — the "last play" timestamp stays honest, which is
+        what the diagnostic relies on.) */
     public static boolean playOnce(Context context) {
         MediaPlayer mp = createPlayer(context);
         if (mp == null) return false;
         CountDownLatch done = new CountDownLatch(1);
+        final boolean[] errored = {false};
         mp.setOnCompletionListener(m -> done.countDown());
-        mp.setOnErrorListener((m, what, extra) -> { done.countDown(); return true; });
+        mp.setOnErrorListener((m, what, extra) -> { errored[0] = true; done.countDown(); return true; });
         try {
             mp.start();
         } catch (Exception e) {
             safeRelease(mp);
             return false;
         }
+        if (errored[0]) { safeRelease(mp); return false; }
         DuroodUnlockReceiver.incrementCount(context);
         try { done.await(10, TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
         try { if (mp.isPlaying()) mp.stop(); } catch (Exception ignored) {}
         safeRelease(mp);
-        return true;
+        return !errored[0];
     }
 
     /** Same explicit player as the old unlock receiver (Fix #6):

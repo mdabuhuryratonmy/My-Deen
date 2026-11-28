@@ -4175,6 +4175,7 @@ function renderDetailSounds(){
     box.innerHTML = ""; box.style.display = "none";
     const ex = $("#detail-sound-explain");
     if (ex) ex.textContent = Lb("এই অ্যালার্মে শুধু নোটিফিকেশন আসবে, কোনো সাউন্ড বাজবে না।", "This alarm shows a notification only, with no sound.");
+    renderAudioDiag(); // Fix #61: the diagnostic lives under the explainer
     return;
   }
   box.style.display = "";
@@ -4182,7 +4183,7 @@ function renderDetailSounds(){
   box.innerHTML = ALARM_SOUNDS.map(s=>`<div class="sound-row ${sel.includes(s.id)?"on":""}" data-sound="${s.id}" role="button" tabindex="0">
     <span class="sound-name">${Lb(s.bn, s.en)}</span>
     <span class="row"><span class="sound-check">${sel.includes(s.id)?"✅":""}</span>
-    <button class="mini-btn" data-preview="${s.id}" title="${Lb("শুনুন","Preview")}">▶</button></span></div>`).join("");
+    <button class="mini-btn${previewPlayingSound===s.id?" playing":""}" data-preview="${s.id}" title="${Lb("শুনুন","Preview")}">${previewPlayingSound===s.id?"⏸":"▶"}</button></span></div>`).join("");
   $$("#detail-sounds [data-sound]").forEach(r=>r.onclick=e=>{
     if (e.target.closest("[data-preview]")) return;
     toggleDetailSound(r.dataset.sound);
@@ -4196,6 +4197,7 @@ function renderDetailSounds(){
      Fix #42: the "(ডিফল্ট)" option row is gone from the UI, so the
      explainer no longer names it — it just says what plays. */
   const ex = $("#detail-sound-explain"); if (ex) ex.textContent = detailSoundExplain(sel);
+  renderAudioDiag(); // Fix #61: show the audio diagnostic with the sound rows
 }
 function detailSoundExplain(sounds){
   const ss = normalizeSounds(sounds);
@@ -4215,8 +4217,225 @@ function previewAlarmSound(sound){
   stopAyahAudio();
   if (sound==="silent") return;
   if (sound==="beep" || sound==="ring"){ beepPreview(sound==="ring"); return; }
-  if (sound==="notification"){ const a = $("#audio-reminder"); if (a){ a.currentTime=0; a.play().catch(()=>{}); } return; }
-  if (sound==="azan"){ const a = $("#audio-azan"); if (a){ a.currentTime=0; a.play().catch(()=>{}); } return; }
+  /* Fix #61: the notification ▶ plays the reminder tone (reminder.mp3 —
+     a short tune, NO words), the same tone a notification-only prayer
+     plays at prayer time (see detailSoundExplain). The azan ▶ plays the
+     azan file. Both go through the defensive helper + the diagnostic. */
+  if (sound==="notification"){ playPreviewAudio("notification"); return; }
+  if (sound==="azan"){ playPreviewAudio("azan"); return; }
+}
+/* Fix #61 (28 Nov 2026): audio diagnostic + defensive preview.
+   Build 32 on the phone: the azan ▶ preview did NOTHING for 53 s —
+   and the video's audio track had NO sound at all (no azan, no
+   notification tone, no speech, only room noise), so the preview is
+   fully dead, not just slow. Fix #60's Range/206 fix did not save it.
+   The failure was silent (play() rejections were swallowed), the ▶
+   button never changed, and there was no way to see what the media
+   element was doing — so this fix adds a live diagnostic AND makes
+   the preview robust: (1) the service worker no longer intercepts
+   audio at all (see sw.js — media goes direct to Capacitor's asset
+   server, which handles Range natively); (2) never seek before
+   metadata; (3) a poisoned element (an earlier load failed) is reset
+   before playing; (4) every play() rejection and media event is
+   logged where the user can see it; (5) the tapped ▶ visibly becomes
+   ⏸ while playing. The diagnostic covers BOTH preview elements
+   exactly the same way — if both are dead, the shared path is the
+   suspect, not the 3.4 MB azan file size. */
+let previewPlayingSound = null; // "azan" | "notification" | null
+let previewAttempt = null; // {sound, t0, played, timer}
+let previewAudioBound = false;
+/* Fix #61: one sound → element map, shared by the preview, the
+   watchdog and the media-event handler — the web reminder audios
+   (durood/istighfar) go through the same guarded play path. */
+function previewElId(sound){
+  return sound === "azan" ? "audio-azan" : sound === "durood" ? "audio-durood" : sound === "istighfar" ? "audio-istighfar" : "audio-reminder";
+}
+function previewSoundLabel(sound){
+  return sound === "azan" ? Lb("আজান", "Azan") : sound === "durood" ? Lb("দরুদ", "Durood") : sound === "istighfar" ? Lb("ইস্তিগফার", "Istighfar") : Lb("নোটিফিকেশন", "Notification");
+}
+const AUDIO_DIAG = { attempts: [] }; // last 4 {at, sound, note}
+/* Fix #61: dhikr reminder schedule state — what scheduleNativeDhikr
+   actually managed to arm (or the error it hit). The try/catch in
+   that function used to swallow every failure, so a reminder that was
+   never scheduled looked identical to one that was scheduled but
+   plays silently. */
+let dhikrScheduleState = { durood: 0, istighfar: 0, at: 0, error: null };
+let audioState = null; // last getAudioState() result (native) or null
+let audioStateTick = 0; // throttle the native audio-state read (1 s tick)
+function fmtDurSec(s){
+  if (typeof s !== "number" || !isFinite(s) || s < 0) return "—";
+  const m = Math.floor(s / 60), ss = Math.floor(s % 60);
+  return m + ":" + (ss < 10 ? "0" : "") + ss;
+}
+function fmtClockShort(d){
+  const p = n => (n < 10 ? "0" : "") + n;
+  return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+}
+function audioStateWord(a){
+  if (!a) return Lb("এলিমেন্ট নেই", "No element");
+  const rs = a.readyState;
+  const rsWord = (typeof rs === "number" && rs >= 4) ? "তৈরি" : rs === 3 ? "আংশিক" : rs === 2 ? "তথ্য এসেছে" : rs === 1 ? "মেটাডেটা" : "লোড হয়নি";
+  const ns = a.networkState;
+  const nsWord = ns === 1 ? "আইডল" : ns === 2 ? "লোড হচ্ছে" : ns === 3 ? "সোর্স নেই" : "খালি";
+  const err = a.error;
+  const errWord = err ? ("ত্রুটি" + (err.code !== undefined ? " " + err.code : "")) : "ত্রুটি নেই";
+  const bufEnd = (a.buffered && typeof a.buffered.length === "number" && a.buffered.length > 0 && typeof a.buffered.end === "function") ? a.buffered.end(a.buffered.length - 1) : 0;
+  const playWord = a.paused === false ? "বাজছে" : "থেমে আছে";
+  return rsWord + " · নেট: " + nsWord + " · " + errWord + " · " + fmtDurSec(a.currentTime) + "/" + fmtDurSec(a.duration) + " · বাফার: " + fmtDurSec(bufEnd) + " · " + playWord;
+}
+function swStatusWord(){
+  try {
+    if (typeof navigator === "undefined" || !navigator || !("serviceWorker" in navigator)) return Lb("নেই", "None");
+    const c = navigator.serviceWorker.controller;
+    return c ? Lb("নিয়ন্ত্রণে আছে", "Controlling") : Lb("চালু নয়", "Not controlling");
+  } catch(e){ return Lb("জানা যায়নি", "Unknown"); }
+}
+function audioDiagText(){
+  const lines = [];
+  lines.push(Lb("অডিও পরীক্ষা", "Audio check"));
+  lines.push(Lb("আজান: ", "Azan: ") + audioStateWord(document.getElementById("audio-azan")));
+  lines.push(Lb("নোটিফিকেশন: ", "Notification: ") + audioStateWord(document.getElementById("audio-reminder")));
+  lines.push(Lb("সার্ভিস ওয়ার্কার: ", "Service worker: ") + swStatusWord());
+  /* Fix #61: what the app itself managed to arm — a reminder that was
+     never scheduled and one that was scheduled but plays silently look
+     the same on the phone; this line tells them apart. */
+  if (dhikrScheduleState.at){
+    if (dhikrScheduleState.error) lines.push(Lb("রিমাইন্ডার সেট হয়নি: ", "Reminders not set: ") + dhikrScheduleState.error);
+    else lines.push(Lb("রিমাইন্ডার সেট: দরুদ ", "Reminders set: durood ") + bnNum(dhikrScheduleState.durood) + Lb("টি • ইস্তিগফার ", " • istighfar ") + bnNum(dhikrScheduleState.istighfar) + Lb("টি", ""));
+  }
+  if (typeof alarmStatus !== "undefined" && alarmStatus.checked){
+    lines.push(Lb("নামাজের অ্যালার্ম: ", "Prayer alarms: ") + bnNum(alarmStatus.scheduled) + Lb("টি সেট", " set") + (alarmStatus.skipped ? " • " + bnNum(alarmStatus.skipped) + Lb("টি বাদ", " skipped") : ""));
+  }
+  if (!AUDIO_DIAG.attempts.length) lines.push(Lb("এখনো ট্যাপ হয়নি", "No tap yet"));
+  else AUDIO_DIAG.attempts.forEach(en=>{
+    lines.push(en.at + " — " + previewSoundLabel(en.sound) + ": " + en.note);
+  });
+  return lines.join("\n");
+}
+function renderAudioDiag(){
+  const el = $("#audio-diag"); if (!el) return;
+  el.textContent = audioDiagText();
+}
+function logAudioEvent(sound, note){
+  AUDIO_DIAG.attempts.push({at: fmtClockShort(new Date()), sound: sound, note: note});
+  if (AUDIO_DIAG.attempts.length > 4) AUDIO_DIAG.attempts.splice(0, AUDIO_DIAG.attempts.length - 4);
+  renderAudioDiag();
+}
+function setPreviewBtn(sound, playing){
+  if (playing) previewPlayingSound = sound;
+  else if (previewPlayingSound === sound) previewPlayingSound = null;
+  const b = document.querySelector('#detail-sounds [data-preview="' + sound + '"]');
+  if (b){
+    b.textContent = playing ? "⏸" : "▶";
+    if (b.classList && typeof b.classList.toggle === "function") b.classList.toggle("playing", !!playing);
+  }
+}
+function resetPreviewAudio(a){
+  if (!a) return false;
+  try {
+    if (typeof a.pause === "function") a.pause();
+    const src = (typeof a.getAttribute === "function" && a.getAttribute("src")) || a.src || "";
+    if (typeof a.removeAttribute === "function") a.removeAttribute("src");
+    if (typeof a.load === "function") a.load();
+    if (src){
+      if (typeof a.setAttribute === "function") a.setAttribute("src", src);
+      else a.src = src;
+      if (typeof a.load === "function") a.load();
+    }
+    return true;
+  } catch(e){ return false; }
+}
+function previewWatchdogTick(){
+  const at = previewAttempt; if (!at) return;
+  if (at.played){ previewAttempt = null; return; }
+  const a = document.getElementById(previewElId(at.sound));
+  if (a && a.paused === false){ previewAttempt = null; return; } // actually playing
+  logAudioEvent(at.sound, Lb("৫ সেকেন্ডেও বাজেনি — আটকে আছে", "Still not playing after 5 s — stuck"));
+  previewAttempt = null;
+}
+function playPreviewEl(a, sound, context){
+  if (!a || typeof a.play !== "function"){ logAudioEvent(sound, Lb("অডিও এলিমেন্ট পাওয়া যায়নি", "Audio element missing")); return false; }
+  if (a.error) resetPreviewAudio(a);
+  /* Never seek before metadata: on an unloaded element the seek queues
+     behind a load that may never finish, and play() then stalls forever
+     with no error. currentTime is already 0 on a fresh element, so
+     skipping the seek loses nothing. */
+  if (typeof a.readyState === "number" && a.readyState >= 1){
+    try { a.currentTime = 0; } catch(e){}
+  }
+  if (previewAttempt && previewAttempt.timer && typeof clearTimeout === "function"){
+    try { clearTimeout(previewAttempt.timer); } catch(e){}
+  }
+  previewAttempt = {sound: sound, t0: Date.now(), played: false, timer: null};
+  if (typeof setTimeout === "function") previewAttempt.timer = setTimeout(previewWatchdogTick, 5000);
+  let p = null;
+  try { p = a.play(); } catch(e){
+    logAudioEvent(sound, Lb("play() ছুড়েছে: ", "play() threw: ") + (e && e.name ? e.name : "ত্রুটি"));
+    return false;
+  }
+  if (p && typeof p.catch === "function") p.catch(err=>{
+    logAudioEvent(sound, Lb("play() ব্যর্থ: ", "play() failed: ") + (err && err.name ? err.name : "ত্রুটি"));
+  });
+  logAudioEvent(sound, context === "azan-time" ? Lb("ওয়াক্তের সময় আজান বাজানোর চেষ্টা", "Trying the azan at prayer time") :
+    context === "reminder-time" ? Lb("ওয়াক্তের সময় রিমাইন্ডার টোন বাজানোর চেষ্টা", "Trying the reminder tone at prayer time") :
+    context === "durood-reminder" ? Lb("দরুদ রিমাইন্ডার বাজানোর চেষ্টা", "Trying the durood reminder") :
+    context === "istighfar-reminder" ? Lb("ইস্তিগফার রিমাইন্ডার বাজানোর চেষ্টা", "Trying the istighfar reminder") :
+    Lb("ট্যাপ হয়েছে — লোড হচ্ছে…", "Tapped — loading…"));
+  return true;
+}
+function playPreviewAudio(sound){
+  const a = document.getElementById(previewElId(sound));
+  if (!a){ logAudioEvent(sound, Lb("অডিও এলিমেন্ট পাওয়া যায়নি", "Audio element missing")); return false; }
+  /* Tap again while playing → pause (the button shows ⏸). */
+  if (previewPlayingSound === sound && a.paused === false){
+    if (typeof a.pause === "function"){ try { a.pause(); } catch(e){} }
+    setPreviewBtn(sound, false);
+    logAudioEvent(sound, Lb("থামানো হয়েছে", "Paused"));
+    return true;
+  }
+  /* Stop the other preview first — two previews must never overlap. */
+  const other = document.getElementById(sound === "azan" ? "audio-reminder" : "audio-azan");
+  if (other && other !== a && other.paused === false && typeof other.pause === "function"){
+    try { other.pause(); } catch(e){}
+    setPreviewBtn(sound === "azan" ? "notification" : "azan", false);
+  }
+  return playPreviewEl(a, sound, "preview");
+}
+function onPreviewMediaEvent(sound, type){
+  if (type === "playing"){
+    if (previewAttempt && previewAttempt.sound === sound) previewAttempt.played = true;
+    setPreviewBtn(sound, true);
+    logAudioEvent(sound, Lb("বাজছে", "Playing"));
+  } else if (type === "ended"){
+    setPreviewBtn(sound, false);
+    logAudioEvent(sound, Lb("শেষ হয়েছে", "Ended"));
+  } else if (type === "error"){
+    setPreviewBtn(sound, false);
+    const a = document.getElementById(previewElId(sound));
+    logAudioEvent(sound, Lb("ত্রুটি", "Error") + (a && a.error && a.error.code !== undefined ? " " + a.error.code : ""));
+  } else if (type === "stalled"){
+    logAudioEvent(sound, Lb("আটকে আছে (stalled)", "Stalled"));
+  } else if (type === "waiting"){
+    logAudioEvent(sound, Lb("অপেক্ষা করছে (waiting)", "Waiting"));
+  } else if (type === "pause"){
+    setPreviewBtn(sound, false);
+  }
+  renderAudioDiag();
+}
+function bindPreviewAudioEvents(){
+  if (previewAudioBound) return;
+  /* Fix #61: the web reminder audios too — their playing/ended events
+     mark the watchdog attempt as played, so a 3.72 s durood that
+     finishes before the 5 s watchdog is not misreported as "stuck". */
+  [["azan","audio-azan"],["notification","audio-reminder"],["durood","audio-durood"],["istighfar","audio-istighfar"]].forEach(function(pair){
+    const sound = pair[0], id = pair[1];
+    const a = document.getElementById(id);
+    if (!a || typeof a.addEventListener !== "function") return;
+    ["playing","ended","error","stalled","waiting","pause"].forEach(function(t){
+      a.addEventListener(t, function(){ onPreviewMediaEvent(sound, t); });
+    });
+  });
+  previewAudioBound = true;
 }
 /* Short WebAudio beep / phone-ring preview (no file needed). */
 function beepPreview(ring){
@@ -4339,7 +4558,10 @@ function playDurood(force){
   if (!force && now - lastDuroodAt < 5*60*1000) return;
   lastDuroodAt = now;
   const a = $("#audio-durood");
-  if (a){ a.currentTime = 0; a.play().catch(()=>{}); }
+  /* Fix #61: same guarded play as the preview — never seek before
+     metadata, and a play() failure is logged in the diagnostic
+     instead of swallowed. */
+  if (a) playPreviewEl(a, "durood", "durood-reminder");
 }
 function syncDuroodToggleNative(){
   try {
@@ -4441,7 +4663,45 @@ async function refreshDuroodStatus(){
     row.style.display = "";
     if (btnRow) btnRow.style.display = "";
     if (hint) hint.style.display = "";
+    refreshAudioState(); // Fix #61: DND/volume/channel state lives in the same section
   } catch(e){ if (row) row.style.display = "none"; if (btnRow) btnRow.style.display = "none"; if (hint) hint.style.display = "none"; }
+}
+/* Fix #61: the phone's live audio state (DND + volumes + channel
+   version) — the prime suspect when every native sound is dead at
+   once. DND silences USAGE_NOTIFICATION playback (the unlock durood)
+   AND notification-channel sounds (reminders), so one DND switch
+   explains all three native paths dying together while the code is
+   unchanged — but it must be READ from the phone, never assumed.
+   Values that cannot be read show "জানা যায়নি", never a guess. */
+function audioStateText(st){
+  if (!st) return "";
+  const onOff = v => v ? Lb("চালু", "On") : Lb("বন্ধ", "Off");
+  const vol = (v, m) => (typeof v === "number" && v >= 0 && typeof m === "number" && m > 0) ? (bnNum(v) + "/" + bnNum(m)) : Lb("জানা যায়নি", "Unknown");
+  const dndWord = st.dnd === "off" ? Lb("বন্ধ", "Off")
+    : st.dnd === "priority" ? Lb("চালু (অগ্রাধিকার)", "On (priority)")
+    : st.dnd === "none" ? Lb("চালু (সব বন্ধ)", "On (all blocked)")
+    : st.dnd === "alarms" ? Lb("চালু (শুধু অ্যালার্ম)", "On (alarms only)")
+    : Lb("জানা যায়নি", "Unknown");
+  const lines = [
+    `${Lb("ডু নট ডিস্টার্ব: ", "Do Not Disturb: ")}${dndWord}`,
+    `${Lb("নোটিফিকেশন ভলিউম: ", "Notification volume: ")}${vol(st.notifVolume, st.notifMax)}`,
+    `${Lb("মিডিয়া ভলিউম: ", "Media volume: ")}${vol(st.mediaVolume, st.mediaMax)}`,
+    `${Lb("নোটিফিকেশন চালু: ", "Notifications on: ")}${typeof st.notificationsEnabled === "boolean" ? onOff(st.notificationsEnabled) : Lb("জানা যায়নি", "Unknown")}`,
+  ];
+  if (typeof st.channelVersion === "number" && st.channelVersion >= 0)
+    lines.push(`${Lb("চ্যানেল সংস্করণ: ", "Channel version: ")}${bnNum(st.channelVersion)}`);
+  return lines.join("<br>");
+}
+async function refreshAudioState(){
+  const row = $("#audio-state");
+  try {
+    const P = (typeof window.Capacitor !== "undefined" && window.Capacitor.Plugins)
+      ? window.Capacitor.Plugins.DuroodUnlock : null;
+    if (!P || !P.getAudioState || !row){ if (row) row.style.display = "none"; return; }
+    audioState = await P.getAudioState();
+    row.innerHTML = audioStateText(audioState);
+    row.style.display = "";
+  } catch(e){ if (row) row.style.display = "none"; }
 }
 /* Fix #56: "দরুদ পরীক্ষা করুন" — plays the durood immediately
    through the SAME native DuroodPlayer path the unlock uses
@@ -4457,7 +4717,7 @@ async function playDuroodTest(){
     const r = await P.playTest();
     const ok = !!(r && r.played);
     toast(ok ? Lb("দরুদ বেজেছে ✓", "Durood played ✓") : Lb("দরুদ বাজেনি — আবার চেষ্টা করুন", "Durood did not play — try again"));
-    await refreshDuroodStats(); await refreshDuroodStatus();
+    await refreshDuroodStats(); await refreshDuroodStatus(); await refreshAudioState();
     return ok;
   } catch(e){ toast(Lb("দরুদ বাজেনি — আবার চেষ্টা করুন", "Durood did not play — try again")); return false; }
 }
@@ -4606,7 +4866,8 @@ function fireDhikrReminder(kind){
     /* Fix #33: istighfar audio only when its sound switch is on. */
     if (settings.astaghRemSound !== false){
       const a = $("#audio-istighfar");
-      if (a){ a.currentTime = 0; a.play().catch(()=>{}); }
+      /* Fix #61: same guarded play as the preview (see playDurood). */
+      if (a) playPreviewEl(a, "istighfar", "istighfar-reminder");
     }
     toast("🤲 " + Lb("আস্তাগফিরুল্লাহ পড়ুন", "Recite Astaghfirullah") + ": " + ASTAGH_AR);
     if (settings.notif && "Notification" in window && Notification.permission === "granted"){
@@ -4627,6 +4888,9 @@ function checkDhikrReminders(){
 }
 function dhikrIds(base){ const a = []; for (let k = 0; k < DHIKR_REM_COUNT; k++) a.push(base + k); return a; }
 async function scheduleNativeDhikr(){
+  /* Fix #61: counts for the diagnostic (declared before the try so the
+     catch can still report a partial schedule). */
+  let _dCount = 0, _iCount = 0;
   try {
     if (typeof window.Capacitor === "undefined" || !window.Capacitor.Plugins) return;
     const LN = window.Capacitor.Plugins.LocalNotifications; if (!LN) return;
@@ -4700,8 +4964,14 @@ async function scheduleNativeDhikr(){
           smallIcon: NOTIF_SMALL_ICON, largeIcon: NOTIF_LARGE_ICON });
       }
       if (list.length) await LN.schedule({ notifications: list });
+      if (j.base === DUROOD_REM_BASE) _dCount = list.length; else _iCount = list.length;
     }
-  } catch(e){ /* native-only; never break the web app */ }
+    dhikrScheduleState = { durood: _dCount, istighfar: _iCount, at: Date.now(), error: null };
+    renderAudioDiag();
+  } catch(e){ /* native-only; never break the web app */
+    dhikrScheduleState = { durood: _dCount, istighfar: _iCount, at: Date.now(), error: String((e && e.message) || e) };
+    renderAudioDiag();
+  }
 }
 /* Interval clamp for the dhikr reminders (Fix #31): the interval is just
    a number of minutes, 1..60. No offset, no preset position. */
@@ -4800,7 +5070,13 @@ function playAzan(){
      so the comparison is exact. */
   const wanted = settings.adhan !== "a1" ? ad.url : "audio/azan.mp3";
   if (a.getAttribute("src") !== wanted) a.src = wanted;
-  a.play().catch(()=>{});
+  /* Fix #61: a poisoned element (an earlier load failed) never recovers
+     on its own — reset it before playing, and record a play() rejection
+     in the diagnostic instead of swallowing it. playPreviewEl only
+     seeks when metadata is loaded, so the prayer-time azan still starts
+     from the top of the file. */
+  if (a && a.error) resetPreviewAudio(a);
+  playPreviewEl(a, "azan", "azan-time");
   if (settings.notif && "Notification" in window && Notification.permission==="granted"){
     const nx = nextPrayer(); const nm = PRAYERS.find(p=>p.id===nx.id);
     new Notification("My Deen — " + (pname(nm.id)), {body: Lb("নামাজের সময় হয়েছে", "It is time for prayer"), icon:"icons/icon-192.png"});
@@ -4810,7 +5086,10 @@ function playAzan(){
    #audio-reminder element the ▶ preview uses. */
 function playReminderTone(){
   const a = $("#audio-reminder");
-  if (a){ a.currentTime = 0; a.play().catch(()=>{}); }
+  if (!a) return;
+  /* Fix #61: same defensive play as the preview (metadata-aware seek,
+     poisoned-element reset, rejection logged in the diagnostic). */
+  playPreviewEl(a, "notification", "reminder-time");
 }
 /* Fix #40: is the native exact alarm armed right now? When it is, the
    native AlarmReceiver posts the notification, plays the azan and speaks
@@ -5654,10 +5933,17 @@ function showView(v){
 /* First-launch permission flow (Fix #4 §5): the app takes every
    permission it needs from the phone — location (asked by the setup
    screen), notifications, and exact alarms (Android 12+: a Settings
-   page the user switches on once). Runs once on first launch; the
-   Settings button re-runs it any time. */
+   page the user switches on once). The Settings button re-runs it any
+   time. Fix #61 (28 Nov 2026): the old `if (settings.onboarded)
+   return;` gate was the bug behind the user's complaint — the chain
+   ran ONCE on the very first install and never again, so a permission
+   added later, a step he backed out of, or a grant revoked since was
+   never re-asked. The gate is dropped: every launch runs the chain,
+   and it only ever opens UI for a step that is BOTH ungranted AND
+   never asked (the chain already skips granted steps and steps asked
+   before — a decline is still never nagged on launch; a declined
+   step is re-asked only from the Settings status rows, on his tap). */
 function maybeAskPermissions(){
-  if (settings.onboarded) return;
   // First launch (Fix #32): ask for the permissions directly, the way
   // any normal app does — the phone's own dialogs/pages, no in-app modal,
   // no steps, no skip buttons. A short delay so the language chooser /
@@ -5736,7 +6022,26 @@ async function runPermChain(force){
   permChainRunning = true; permChainWaiting = false;
   await permChainFrom(0, !!force);
 }
+/* Fix #61: one plain-Bengali line before each system prompt, so the
+   sequence reads as ONE setup, not random popups — the user knows WHY
+   each prompt appears. Called fresh each time (never precomputed) so
+   a language switch is respected. Deliberately Bengali-only, with no
+   English phrase that could collide with the manual-path toast. */
+function permStepExplain(id){
+  if (id === "location") return Lb("অবস্থানের অনুমতি দিন — তাহলে আপনার জায়গার সঠিক নামাজের সময় দেখাবে", "Allow location — so prayer times are shown for your place");
+  if (id === "notifications") return Lb("নোটিফিকেশন চালু করুন — তাহলে নামাজের সময় জানতে পারবেন", "Turn notifications on — so you are told at prayer time");
+  if (id === "exact") return Lb("সঠিক সময়ে আজান বাজাতে পরের পেজে অনুমতি চালু করুন", "Turn the permission on on the next page, so the azan rings on time");
+  if (id === "battery") return Lb("ব্যাটারি সাশ্রয় বন্ধ করুন — ফোন ঘুমালেও আজান বাজবে", "Turn battery saving off — so the azan rings even while the phone sleeps");
+  if (id === "appsettings") return Lb("অটোস্টার্ট চালু করুন — আনলক করলেই দরুদ বাজবে", "Turn autostart on — so the durood plays on unlock");
+  return "";
+}
 async function permChainFrom(idx, force){
+  /* Fix #61: a manual-path toast (the exact/appsettings page failed to
+     open) is the important message — later one-liners must not
+     overwrite it in the same run, or the user never sees how to fix
+     it by hand. (resumePermChain starts a fresh run, so the flag
+     resets there — the paused exact step never set it.) */
+  let _manualToasted = false;
   for (let i = idx; i < PERM_STEPS.length; i++){
     const id = PERM_STEPS[i];
     if (!force && permStepsAsked()[id]) continue; // asked once already — never auto-ask again
@@ -5746,6 +6051,7 @@ async function permChainFrom(idx, force){
     // while the user is on the Settings page (or the promise never
     // settles), the next launch does not re-open this page.
     permMarkAsked(id);
+    if (!_manualToasted) toast(permStepExplain(id)); // Fix #61: one line saying WHY this prompt appears
     const res = await permTimeout(permRequestStep(id), id === "notifications" ? 90000 : 30000);
     if (id === "exact" || id === "appsettings"){
       // A system page opened — the user is away from the app. Pause the
@@ -5764,6 +6070,7 @@ async function permChainFrom(idx, force){
         permChainWaiting = true; permChainIdx = i + 1; return;
       }
       if (!res || res === "timeout" || !res.granted){
+        _manualToasted = true;
         toast(id === "exact"
           ? Lb("অ্যালার্মের পেজ খোলা যায়নি — ফোনের Settings → Apps → My Deen → 'Alarms & reminders' চালু করুন, তাহলে সঠিক সময়ে আজান বাজবে", "Could not open the alarm page — turn on 'Alarms & reminders' for My Deen in your phone's Settings → Apps → My Deen, then the azan will ring on time")
           : Lb("অ্যাপের সেটিংস পেজ খোলা যায়নি — ফোনের Settings → Apps → My Deen খুলে Autostart চালু করুন এবং Battery-তে \"No restrictions\" দিন", "Could not open the app settings page — open My Deen in your phone's Settings → Apps, turn Autostart on and set Battery to 'No restrictions'"));
@@ -5789,12 +6096,57 @@ async function permChainFrom(idx, force){
 function resumePermChain(){
   if (!permChainRunning || !permChainWaiting) return;
   permChainWaiting = false;
+  toast(Lb("ফিরে এসেছেন — বাকি অনুমতি চাওয়া হচ্ছে", "Back — asking for the remaining permissions")); // Fix #61: the chain resumes visibly
   permChainFrom(permChainIdx, false);
 }
 function finishPermChain(){
   permChainRunning = false; permChainWaiting = false;
   settings.onboarded = true; settings.permAsked = true; saveSettings();
-  syncPrayerAlarms(); refreshAlarmStatus();
+  syncPrayerAlarms(); refreshAlarmStatus(); refreshPermStatus(); // Fix #61: the Settings status shows the result
+}
+/* Fix #61 (28 Nov 2026): permission status in Settings — one row per
+   permission, built ONLY from real native state (permStatus()), never
+   hardcoded. A missing permission gets a one-tap "চালু করুন" button
+   that re-asks just that step (askPermStep); autostart cannot be
+   detected by any API, so its row honestly says "নিজে দেখুন" and the
+   button opens the app Settings page instead. */
+function permStatusText(st){
+  if (!st) return "";
+  const onOff = v => v ? Lb("চালু", "On") : Lb("বন্ধ", "Off");
+  const ask = Lb("চালু করুন", "Turn on");
+  const row = (id, label, val, btnLabel) =>
+    `<div class="row between"><span>${label}: ${val}</span>${btnLabel ? `<button class="btn small" data-perm-ask="${id}">${btnLabel}</button>` : ""}</div>`;
+  return [
+    row("location", Lb("অবস্থান (নামাজের সময়)", "Location (prayer times)"), onOff(st.location), st.location ? "" : ask),
+    row("notifications", Lb("নোটিফিকেশন", "Notifications"), onOff(st.notifications), st.notifications ? "" : ask),
+    row("exact", Lb("সঠিক সময়ে অ্যালার্ম", "Exact alarms"), onOff(st.exact), st.exact ? "" : ask),
+    row("battery", Lb("ফোন ঘুমালেও আজান", "Azan while asleep"), onOff(st.battery), st.battery ? "" : ask),
+    row("appsettings", Lb("অটোস্টার্ট", "Autostart"), Lb("নিজে দেখুন", "Check yourself"), Lb("সেটিংস খুলুন", "Open settings")),
+  ].join("");
+}
+async function refreshPermStatus(){
+  const row = $("#perm-status");
+  try {
+    const st = await permTimeout(permStatus(), 10000);
+    if (!st || st === "timeout" || !row){ if (row) row.style.display = "none"; return; }
+    row.innerHTML = permStatusText(st);
+    row.style.display = "";
+    row.querySelectorAll("[data-perm-ask]").forEach(b=>{
+      b.onclick = ()=>askPermStep(b.getAttribute("data-perm-ask"));
+    });
+  } catch(e){ if (row) row.style.display = "none"; }
+}
+/* Fix #61: re-ask ONE permission from its Settings status row — the
+   user tapped it on purpose, so it is requested directly (no
+   asked-flag logic), then the status refreshes so the result is
+   visible. For exact/appsettings the system page opens and the user
+   leaves the app; the status refreshes again when they return
+   (visibilitychange → refreshPermStatus). */
+async function askPermStep(id){
+  toast(Lb("অনুমতি চাওয়া হচ্ছে…", "Asking for the permission…"));
+  try { await permTimeout(permRequestStep(id), id === "notifications" ? 90000 : 30000); } catch(e){}
+  await new Promise(r=>setTimeout(r, 800));
+  refreshPermStatus(); refreshAlarmStatus(); syncPrayerAlarms();
 }
 let currentQTab = "all";
 function applyTheme(){ document.documentElement.setAttribute("data-theme", settings.theme);
@@ -5838,6 +6190,7 @@ function fillSettings(){
   renderDuroodSoundSelect();
   refreshDuroodStats();
   refreshDuroodStatus();
+  refreshPermStatus(); // Fix #61: permission status rows (real native state)
   /* Fix #56: the diagnostic test button — wired here (fillSettings
      runs whenever Settings is shown), like the app-settings button. */
   const dt = $("#btn-durood-test");
@@ -6081,6 +6434,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
      preload="auto" above asks for it; .load() makes sure the fetch
      actually starts now) so the first ▶ tap in Settings plays at once. */
   step(()=>{ ["audio-azan","audio-reminder"].forEach(id=>{ const el = document.getElementById(id); if (el) el.load(); }); });
+  step(()=>bindPreviewAudioEvents()); // Fix #61: media-event listeners for the audio diagnostic
   step(()=>maybeAskPermissions()); // Fix #4 §5: first-launch permission flow
   // Prayer times load FIRST: a slow or failed Quran-list download must
   // never block them (previously one stalled fetch froze both).
@@ -6096,12 +6450,12 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   if (settings.autoLoc && !settings.locManual && hasLocation() && (!settings.useCoords || Date.now() - lastLocOk > 12*3600*1000)){
     detectLocation(true);
   }
-  setInterval(()=>{ renderPrayers(); checkAzan(); checkPreAzanVoice(); }, 1000);
+  setInterval(()=>{ renderPrayers(); checkAzan(); checkPreAzanVoice(); renderAudioDiag(); /* Fix #61: keep the audio diagnostic live */ if (++audioStateTick >= 30){ audioStateTick = 0; refreshAudioState(); /* Fix #61: DND/volume can change while Settings is open */ } }, 1000);
   /* Countdown resync (Fix #2): timers freeze while the tab / app is
      hidden — re-render the moment it comes back, and pick up a
      location saved in another tab. */
   const resyncCountdown = ()=>{ renderPrayers(); if (timingsDate !== ddmmyyyy()) initPrayers(); };
-  document.addEventListener("visibilitychange", ()=>{ if (!document.hidden){ resyncCountdown(); syncPrayerAlarms(); refreshAlarmStatus(); resumePermChain(); } }); // Fix #19: re-sync alarms on foreground — granting the exact-alarm permission in Settings and returning now arms the alarms (before this, a grant after the first sync left every alarm unarmed until a full restart, with no warning). Fix #32: also resume the permission chain when returning from a Settings page.
+  document.addEventListener("visibilitychange", ()=>{ if (!document.hidden){ resyncCountdown(); syncPrayerAlarms(); refreshAlarmStatus(); resumePermChain(); refreshPermStatus(); /* Fix #61: a grant made in Settings shows at once on return */ } }); // Fix #19: re-sync alarms on foreground — granting the exact-alarm permission in Settings and returning now arms the alarms (before this, a grant after the first sync left every alarm unarmed until a full restart, with no warning). Fix #32: also resume the permission chain when returning from a Settings page.
   window.addEventListener("focus", resyncCountdown);
   window.addEventListener("storage", resyncCountdown);
   setInterval(checkDhikrReminders, 20000);

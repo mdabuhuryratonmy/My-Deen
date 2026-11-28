@@ -130,6 +130,7 @@ main{padding:14px 14px 0}
 .btn.ghost{background:transparent; color:var(--emerald); border:1.5px solid var(--emerald)}
 [data-theme="dark"] .btn.ghost{color:var(--gold-l); border-color:var(--gold)}
 .btn.block{width:100%}
+.btn.small{padding:6px 10px; font-size:13px; border-radius:9px} /* Fix #61: inline re-ask buttons in the permission-status rows */
 .btn:disabled{opacity:.5}
 .chip{display:inline-block; padding:7px 12px; margin:3px; border-radius:999px;
   border:1.5px solid var(--emerald); background:transparent; color:var(--emerald); font-size:14px}
@@ -267,6 +268,11 @@ label{display:block; font-size:13.5px; color:var(--muted); margin:12px 0 5px}
 .mini-btn{background:var(--bg); border:1px solid var(--line); color:var(--text);
   border-radius:999px; padding:6px 11px; font-size:13px}
 .mini-btn.on{background:var(--gold); border-color:var(--gold); color:#2a1f00}
+/* Fix #61: the preview ▶ visibly becomes ⏸ while its sound plays, and the
+   audio diagnostic under the Alarm Sound rows keeps its line breaks. */
+.mini-btn.playing{background:var(--gold); border-color:var(--gold); color:#2a1f00}
+#audio-diag{white-space:pre-line; margin-top:8px}
+#audio-state{white-space:pre-line; margin-top:4px}
 .ayah.playing{background:rgba(212,175,55,.12); border-radius:10px}
 
 /* ---------- tasbih ---------- */

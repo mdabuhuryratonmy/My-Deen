@@ -2,7 +2,7 @@
 const CACHE = "my-deen-v20";
 const SHELL = ["index.html", "styles.css", "app.js", "praycalc.js", "data/duas.js", "data/hadiths.js",
   "assets/quran-meta.js", "assets/quran-full.js", "manifest.json",
-  "icons/icon-192.png", "icons/icon-512.png", "audio/azan.mp3", "audio/reminder.mp3", "audio/durood.mp3", "audio/istighfar.mp3"];
+  "icons/icon-192.png", "icons/icon-512.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
@@ -12,21 +12,24 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET") return;
+  /* Fix #61 (28 Nov 2026): never intercept media files. The azan ▶
+     preview stayed dead on the phone even after the Fix #60 Range/206
+     fix — and the 53-second video had NO sound at all, not even the
+     17 KB reminder tone, so the shared worker path is the suspect, not
+     the 3.4 MB file size. The worker adds nothing for local audio:
+     Capacitor's asset server serves it with native Range support, and
+     every worker hop is another place the media pipeline can stall.
+     Let audio go direct (no respondWith at all) — this also retires
+     rangeResponse, which only ever served audio Range requests. The
+     audio entries are dropped from SHELL too: with the bypass they
+     would never be read, and addAll is all-or-nothing — one failed
+     3.4 MB audio fetch used to fail the whole install (and with it,
+     the offline app shell). The pathname check covers the Capacitor
+     origin (/audio/...) and the PWA share prefix; the .mp3 check is
+     the backstop for either layout. */
+  if (url.origin === location.origin &&
+      (url.pathname.indexOf("/audio/") !== -1 || url.pathname.slice(-4).toLowerCase() === ".mp3")) return;
   if (url.origin === location.origin) {
-    /* Fix #60 (28 Nov 2026): the azan ▶ preview seeks (currentTime = 0)
-       on every tap, and Chromium serves media seeks as Range requests.
-       caches.match() ignores the Range header and returns the whole file
-       as HTTP 200 — the media pipeline cannot seek against a 200, so
-       every tap re-streamed the whole 3.4 MB azan.mp3 through the worker
-       (the "VERY late" azan-button delay; Fix #37's preload could not
-       save it because the tap-time seek goes back through the worker).
-       Answer Range requests with a proper 206 Partial Content sliced
-       from the cached full response. */
-    const range = e.request.headers.get("range");
-    if (range) {
-      e.respondWith(rangeResponse(e.request, range));
-      return;
-    }
     // App shell: cache first, fall back to network
     e.respondWith(caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
       const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return res;
@@ -38,37 +41,3 @@ self.addEventListener("fetch", e => {
     }).catch(() => caches.match(e.request)));
   }
 });
-
-/* Build a 206 Partial Content response for a Range request, sliced from
-   the cached (or freshly fetched) full response. Unparseable or
-   unsatisfiable ranges fall back to the full response / a plain fetch —
-   never worse than the old behaviour (whole file as 200). */
-async function rangeResponse(request, range) {
-  const m = /^bytes=(\d*)-(\d*)$/.exec(String(range).trim());
-  if (!m) return fetch(request);
-  let res = await caches.match(request);
-  if (!res) {
-    try {
-      res = await fetch(request);
-      const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(request, copy)).catch(()=>{});
-    } catch (e) { return fetch(request); }
-  }
-  if (!res) return fetch(request);
-  const buf = await res.arrayBuffer();
-  const total = buf.byteLength;
-  let start = m[1] === "" ? null : parseInt(m[1], 10);
-  let end = m[2] === "" ? null : parseInt(m[2], 10);
-  if (start === null && end === null) return res;
-  if (start === null) { start = Math.max(0, total - end); end = total - 1; }
-  if (end === null || end >= total) end = total - 1;
-  if (start >= total || start > end) {
-    return new Response(null, {status: 416, headers: {"Content-Range": "bytes */" + total}});
-  }
-  return new Response(buf.slice(start, end + 1), {status: 206, headers: {
-    "Content-Range": "bytes " + start + "-" + end + "/" + total,
-    "Accept-Ranges": "bytes",
-    "Content-Length": String(end - start + 1),
-    "Content-Type": res.headers.get("Content-Type") || "application/octet-stream"
-  }});
-}
