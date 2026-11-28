@@ -101,6 +101,9 @@ const STR = {  en: {
     markRead:"✅ Mark this Surah as read",
     markedRead:"✅ Finished ✓",
     nextSurah:"Next Surah →",
+    timeAdjustment:"Time Adjustment",
+    alarmSound:"Alarm Sound",
+    tilawatBtn:"🎧 Tilawat",
     nothingFound:"Nothing found.",
     noBookmarks:"No bookmarks yet. Tap 🔖 while reading the Quran to bookmark.",
     noReadYet:"No surah marked as read yet. After reading a surah, tap the \"Mark as read\" button.",
@@ -326,6 +329,9 @@ const STR = {  en: {
     markRead:"✅ এই সূরা পড়া শেষ",
     markedRead:"✅ পড়া শেষ ✓",
     nextSurah:"পরের সূরা →",
+    timeAdjustment:"সময় সমন্বয়",
+    alarmSound:"অ্যালার্মের শব্দ",
+    tilawatBtn:"🎧 তিলাওয়াত",
     nothingFound:"কিছু পাওয়া যায়নি।",
     noBookmarks:"কোনো বুকমার্ক নেই। কুরআন পড়ার সময় 🔖 চাপ দিয়ে বুকমার্ক করুন।",
     noReadYet:"এখনো কোনো সূরা পড়া শেষ হিসেবে চিহ্নিত করা হয়নি। সূরা পড়ে \"এই সূরা পড়া শেষ\" বোতামে চাপ দিন।",
@@ -1847,7 +1853,11 @@ settings.alarmSound = {...DEFAULTS.alarmSound, ...(settings.alarmSound||{})};
    sound, so it never consumes a slot; Fix #43). Older saved values were
    single strings — normalize them, keeping the old choice as the extra
    sound next to the permanent "name" default. */
-const VALID_SOUNDS = ["silent","beep","ring","name","notification","azan"];
+/* Fix #60: beep/ring dropped from VALID_SOUNDS too — a stale stored
+   selection containing them is cleaned by normalizeSounds (via
+   migrateAlarmSounds at startup), so it can never block the max-2 cap
+   or resurface in the picker. */
+const VALID_SOUNDS = ["silent","name","notification","azan"];
 function normalizeSounds(v){
   let arr = Array.isArray(v) ? v.slice() : (typeof v === "string" && v ? [v] : []);
   if (arr.includes("silent")) return ["silent"];
@@ -2309,6 +2319,34 @@ function hijriFromGregorian(d){
   const names = ["Muharram","Safar","Rabiʿ al-awwal","Rabiʿ al-thani","Jumādá al-ūlá","Jumādá al-ākhirah","Rajab","Shaʿbān","Ramadān","Shawwāl","Dhū al-Qaʿdah","Dhū al-Ḥijjah"];
   return { day: String(day), month: { number: month, en: names[month-1] || "" }, year: String(year) };
 }
+/* Fix #60 (28 Nov 2026, audit): Hijri month names in Bengali. The
+   calendar head, the fasting Beed rows, the Hijri month table and the
+   header date showed the English month ("13 Ramadan") inside Bengali
+   UI. The map keys on the month's English name after stripping
+   diacritics (Aladhan returns "Jumādá al-ākhirah", the local converter
+   "Jumada al-Akhirah" — both normalise to the same key); an unknown
+   name falls back to itself, never to a blank. */
+const HIJRI_MONTHS_BN = {
+  "muharram": "মুহাররম", "safar": "সফর",
+  "rabi al awwal": "রবিউল আউয়াল", "rabi al thani": "রবিউস সানি",
+  "jumada al ula": "জুমাদাল উলা", "jumada al akhirah": "জুমাদাল আখিরাহ",
+  "rajab": "রজব", "shaban": "শাবান", "ramadan": "রমজান",
+  "shawwal": "শাওয়াল", "dhul qadah": "জিলকদ", "dhul hijjah": "জিলহজ",
+  /* Fix #60: the Aladhan forms of months 11–12 normalize differently
+     ("Dhū al-Qaʿdah" → "dhu al qadah", "Dhū al-Ḥijjah" → "dhu al hijjah")
+     from the local "Dhul-Qada"/"Dhul-Hijja" forms — both must map.
+     Same for month 4: Aladhan "Rabiʿ al-thani" vs local "Rabi al-Akhir". */
+  "dhu al qadah": "জিলকদ", "dhu al hijjah": "জিলহজ",
+  "rabi al akhir": "রবিউস সানি", "dhul qada": "জিলকদ", "dhul hijja": "জিলহজ"
+};
+function hijriMonthBn(en){
+  const key = String(en || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\u02bf\u0027\u2018\u2019]/g, "").toLowerCase().replace(/[^a-z]+/g, " ").trim();
+  return HIJRI_MONTHS_BN[key] || en;
+}
+/* The month label for the current UI language: Bengali name when the UI
+   is Bengali, otherwise the English name as received. */
+function hijriMonthLabel(en){ return settings.lang==="bn" ? hijriMonthBn(en) : en; }
 function nextPrayer(now=locNow()){
   const mins = now.getHours()*60 + now.getMinutes();
   for (const p of PRAYER_IDS){
@@ -2513,13 +2551,19 @@ function renderPrayers(){
         ringLabel = $("#ring-label"), ringSub = $("#ring-sub");
   if (ringName){
     // Fix #16 + Fix #17 (user reversed the countdown part): during a
-    // forbidden window the ring name shows the message "এখন সালাতের
-    // নিষিদ্ধ সময়, এই সময়ে নামাজ পড়া নিষিদ্ধ" — AND the "শেষ হতে
-    // বাকি" countdown IS shown too. Otherwise the ring shows the
-    // prayer name + countdown as before.
+    // forbidden window the ring shows the forbidden state AND the
+    // "শেষ হতে বাকি" countdown. Otherwise the ring shows the prayer
+    // name + countdown as before.
+    // Fix #60 (28 Nov 2026, audit): the old ring name was the full
+    // sentence "এখন সালাতের নিষিদ্ধ সময়, এই সময়ে নামাজ পড়া নিষিদ্ধ"
+    // — measured 181.5 / 185.8 px wide in Hind Siliguri at 17 px, but
+    // the ring's inner-circle chord at those heights is only 148.0 /
+    // 159.5 px, so the text crossed the ring stroke on both sides. The
+    // short form "এখন নিষিদ্ধ সময়" (114–124 px) fits with margin; the
+    // countdown and "শেষ হতে বাকি" still show, as Fix #17 ordered.
     const isForbidNow = ev.kind==="forbidden" && ev.state==="current";
     ringName.textContent = isForbidNow
-      ? Lb("এখন সালাতের নিষিদ্ধ সময়, এই সময়ে নামাজ পড়া নিষিদ্ধ", "It is now a forbidden time for prayer; praying is forbidden at this time")
+      ? Lb("এখন নিষিদ্ধ সময়", "Forbidden time now")
       : ev.kind==="nafl" ? naflRotateName(now) : ev.name;
     ringName.classList.toggle("forbid-msg", isForbidNow);
   }
@@ -2590,7 +2634,7 @@ function renderForbidden(){
    on the 1-second re-render; only the countdown text ticks. */
 const NAFL_STR = {
   en:{refSee:"See reference",duha:"Duha",zawal:"Zawal begins",awwabin:"Awwabin",tahajjud:"Tahajjud",afterMaghrib:"After Maghrib",afterIsha:"After Isha",lastThirdStart:"Last third of night begins",nextSehri:"Next Sehri",nextIftar:"Next Iftar",sehriLeft:"Time to Sehri",iftarLeft:"Time to Iftar",viewMore:"View larger",viewLess:"View smaller",ishraq:"Ishraq",sehriEnds:"Sehri ends (Imsak)",iftarAt:"Iftar (Maghrib)",refNote:"Duha: Sahih Muslim 720 • Last third of the night: Sahih al-Bukhari 1145, Sahih Muslim 758 • Awwabin: Jami' at-Tirmidhi 435 • Zawal: the start of Dhuhr time"},
-  bn:{refSee:"রেফারেন্স দেখুন",duha:"দুহা",zawal:"জাওয়াল শুরু",awwabin:"আওয়াবিন",tahajjud:"তাহাজ্জুদ",afterMaghrib:"মাগরিবের পর",afterIsha:"ইশার পর",lastThirdStart:"রাতের শেষ ১/৩ শুরু",nextSehri:"পরবর্তী সাহরি",nextIftar:"পরবর্তী ইফতার",sehriLeft:"সাহরির বাকি",iftarLeft:"ইফতারের বাকি",viewMore:"বড় করে দেখুন",viewLess:"ছোট করে দেখুন",ishraq:"ইশরাক",sehriEnds:"সেহরি শেষ (ইমসাক)",iftarAt:"ইফতার (মাগরিব)",refNote:"দুহা: সহিহ মুসলিম ৭২০ • রাতের শেষ তৃতীয়াংশ: সহিহ বুখারি ১১৪৫, সহিহ মুসলিম ৭৫৮ • আওয়াবিন: জামি' তিরমিজি ৪৩৫ • জাওয়াল: যোহরের ওয়াক্ত শুরু"},
+  bn:{refSee:"রেফারেন্স দেখুন",duha:"দুহা",zawal:"জাওয়াল শুরু",awwabin:"আওয়াবিন",tahajjud:"তাহাজ্জুদ",afterMaghrib:"মাগরিবের পর",afterIsha:"ইশার পর",lastThirdStart:"রাতের শেষ ১/৩ শুরু",nextSehri:"পরবর্তী সেহরি",nextIftar:"পরবর্তী ইফতার",sehriLeft:"সেহরির বাকি",iftarLeft:"ইফতারের বাকি",viewMore:"বড় করে দেখুন",viewLess:"ছোট করে দেখুন",ishraq:"ইশরাক",sehriEnds:"সেহরি শেষ (ইমসাক)",iftarAt:"ইফতার (মাগরিব)",refNote:"দুহা: সহিহ মুসলিম ৭২০ • রাতের শেষ তৃতীয়াংশ: সহিহ বুখারি ১১৪৫, সহিহ মুসলিম ৭৫৮ • আওয়াবিন: জামি' তিরমিজি ৪৩৫ • জাওয়াল: যোহরের ওয়াক্ত শুরু"},
   ar:{refSee:"عرض المرجع",duha:"الضحى",zawal:"يبدأ الزوال",awwabin:"الأوابين",tahajjud:"التهجد",afterMaghrib:"بعد المغرب",afterIsha:"بعد العشاء",lastThirdStart:"يبدأ الثلث الأخير من الليل",nextSehri:"السحور القادم",nextIftar:"الإفطار القادم",sehriLeft:"المتبقي للسحور",iftarLeft:"المتبقي للإفطار",viewMore:"عرض أكبر",viewLess:"عرض أصغر",ishraq:"الإشراق",sehriEnds:"انتهاء السحور (الإمساك)",iftarAt:"الإفطار (المغرب)"},
   ur:{refSee:"حوالہ دیکھیں",duha:"چاشت",zawal:"زوال شروع",awwabin:"اوابین",tahajjud:"تہجد",afterMaghrib:"مغرب کے بعد",afterIsha:"عشاء کے بعد",lastThirdStart:"رات کا آخری تیسرا حصہ شروع",nextSehri:"اگلی سحری",nextIftar:"اگلا افطار",sehriLeft:"سحری میں باقی",iftarLeft:"افطار میں باقی",viewMore:"بڑا کرکے دیکھیں",viewLess:"چھوٹا کریں",ishraq:"اشراق",sehriEnds:"سحری ختم (امساک)",iftarAt:"افطار (مغرب)"},
   ms:{refSee:"Lihat rujukan",duha:"Duha",zawal:"Zawal bermula",awwabin:"Awwabin",tahajjud:"Tahajud",afterMaghrib:"Selepas Maghrib",afterIsha:"Selepas Isyak",lastThirdStart:"Sepertiga malam terakhir bermula",nextSehri:"Sahur seterusnya",nextIftar:"Iftar seterusnya",sehriLeft:"Berbaki ke sahur",iftarLeft:"Berbaki ke iftar",viewMore:"Lihat lebih besar",viewLess:"Lihat lebih kecil",ishraq:"Isyraq",sehriEnds:"Sahur tamat (Imsak)",iftarAt:"Iftar (Maghrib)"},
@@ -2622,7 +2666,11 @@ function renderNafl(){
   const sunrise = toMin(timings.Sunrise), dhuhr = toMin(timings.Dhuhr), maghrib = toMin(timings.Maghrib),
         isha = toMin(timings.Isha), fajr = toMin(timings.Fajr), lastThird = toMin(timings.Lastthird);
   const rows = [
-    {icon:"sun", name:nt("duha"), val:`${fmt24(sunrise+15)} - ${fmt24(dhuhr-10)}`},
+    /* Fix #60 (28 Nov 2026, audit): Duha ends at dhuhr−4, when zawal
+       (the noon forbidden window) starts — the row used to say
+       dhuhr−10, six minutes short of both naflWindow()'s period end
+       and forbiddenWindows()' noon start. */
+    {icon:"sun", name:nt("duha"), val:`${fmt24(sunrise+15)} - ${fmt24(dhuhr-4)}`},
     {icon:"mosque", name:nt("zawal"), val:fmt24(dhuhr)},
     {icon:"cloudsun", name:nt("awwabin"), val:`${nt("afterMaghrib")} - ${fmt24(isha)}`},
     {icon:"moon", name:nt("tahajjud"), val:`${nt("afterIsha")} - ${fmt24(fajr)}`,
@@ -2662,7 +2710,9 @@ function updateNaflStrip(){
 function renderDates(){
   const now = locNow();
   const g = Lb(`${bnNum(now.getDate())} ${["জানুয়ারি","ফেব্রুয়ারি","মার্চ","এপ্রিল","মে","জুন","জুলাই","আগস্ট","সেপ্টেম্বর","অক্টোবর","নভেম্বর","ডিসেম্বর"][now.getMonth()]} ${bnNum(now.getFullYear())}, ${["রবিবার","সোমবার","মঙ্গলবার","বুধবার","বৃহস্পতিবার","শুক্রবার","শনিবার"][now.getDay()]}`, now.toDateString());
-  const h = hijriInfo ? (Lb(`${bnNum(hijriInfo.day)} ${escHtml(hijriInfo.month.en)} ${bnNum(hijriInfo.year)} হিজরি`, `${hijriInfo.day} ${escHtml(hijriInfo.month.en)} ${hijriInfo.year} AH`)) : "…";
+  /* Fix #60: Hijri month in Bengali (hijriMonthBn) — the header date
+     line is Bengali throughout, so the month is too. */
+  const h = hijriInfo ? (Lb(`${bnNum(hijriInfo.day)} ${escHtml(hijriMonthBn(hijriInfo.month.en))} ${bnNum(hijriInfo.year)} হিজরি`, `${hijriInfo.day} ${escHtml(hijriInfo.month.en)} ${hijriInfo.year} AH`)) : "…";
   const b = banglaDate(now);
   /* Fix #50 (28 Nov 2026): Hijri + Bengali dates each on their own
      line — the old two-line layout wrapped the Bengali year ("১৪৩৩")
@@ -2981,8 +3031,10 @@ function renderSurahList(filter="", tab="all"){
     // spelling find the surah (and the original spelling still works).
     const normName = s => s.toLowerCase().replace(/(.)\1+/g, "$1");
     const nf = normName(f);
+    // Fix #60: the filter also matches the Bengali name (QURAN_META.bn),
+    // so "ফাতিহা" / "বাকারা" / "ইখলাস" find their surahs.
     list = list.filter(s=> normName(s.englishName).includes(nf) || String(s.number)===f ||
-      normName(s.englishNameTranslation||"").includes(nf));
+      normName(s.englishNameTranslation||"").includes(nf) || normName(s.bn||"").includes(nf));
   }
   box.innerHTML = list.map(s=>`<button class="surah-item" data-surah="${s.number}">
     <span class="num">${num(s.number)}</span>
@@ -3024,6 +3076,10 @@ function finishOpenSurah(n){
   $("#jump-ayah").value = "";
   const mr = $("#btn-mark-read");
   if (mr) mr.textContent = isSurahRead(n) ? t("markedRead") : t("markRead");
+  /* Fix #60: on the last surah there is no next one — the button was a
+     silent no-op there. Hide it instead of leaving a dead button. */
+  const nx = $("#btn-next-surah");
+  if (nx) nx.style.display = n>=114 ? "none" : "";
   window.scrollTo(0,0);
 }
 function renderAyahs(ayahs){
@@ -3900,7 +3956,7 @@ function renderFastHadith(){
 function renderFastSchedule(){
   const box = $("#fast-schedule"); if (!box || !timings) return;
   const rows = [
-    {key:"Sehri", label:Lb("পরবর্তী সাহরি", "Next Sehri"), time:fmtTime(minsToHHMM(toMin(timings.Imsak) + (settings.offsets.Sehri||0)))},
+    {key:"Sehri", label:Lb("পরবর্তী সেহরি", "Next Sehri"), time:fmtTime(minsToHHMM(toMin(timings.Imsak) + (settings.offsets.Sehri||0)))},
     {key:"Iftar", label:Lb("পরবর্তী ইফতার", "Next Iftar"), time:fmtTime(minsToHHMM(toMin(timings.Maghrib) + (settings.offsets.Iftar||0)))}
   ];
   box.innerHTML = rows.map(r=>{
@@ -3913,8 +3969,8 @@ function renderFastSchedule(){
     const k = b.dataset.fastBell;
     settings.alarmOn[k] = !settings.alarmOn[k]; saveSettings(); syncPrayerAlarms(); renderFastSchedule();
     toast(settings.alarmOn[k]
-      ? Lb(`${k==="Sehri"?"সাহরির":"ইফতারের"} অ্যালার্ম চালু ✓`, `${k==="Sehri"?"Sehri":"Iftar"} alarm on ✓`)
-      : Lb(`${k==="Sehri"?"সাহরির":"ইফতারের"} অ্যালার্ম বন্ধ`, `${k==="Sehri"?"Sehri":"Iftar"} alarm off`));
+      ? Lb(`${k==="Sehri"?"সেহরির":"ইফতারের"} অ্যালার্ম চালু ✓`, `${k==="Sehri"?"Sehri":"Iftar"} alarm on ✓`)
+      : Lb(`${k==="Sehri"?"সেহরির":"ইফতারের"} অ্যালার্ম বন্ধ`, `${k==="Sehri"?"Sehri":"Iftar"} alarm off`));
   });
 }
 function renderFasting(){
@@ -3934,7 +3990,7 @@ function renderFasting(){
     beed.forEach(d=>{
       const gd = new Date(d.date.gregorian.year, d.date.gregorian.month.number-1, d.date.gregorian.day);
       if (gd >= new Date(now.getFullYear(), now.getMonth(), now.getDate()))
-        items.push({date:gd, label: Lb(`আইয়ামে বীজ — ${bnNum(d.date.hijri.day)} ${escHtml(d.date.hijri.month.en)}`, `Ayyam al-Beed — ${d.date.hijri.day} ${escHtml(d.date.hijri.month.en)}`), kind: Lb("সুন্নত", "Sunnah")});
+        items.push({date:gd, label: Lb(`আইয়ামে বীজ — ${bnNum(d.date.hijri.day)} ${escHtml(hijriMonthBn(d.date.hijri.month.en))}`, `Ayyam al-Beed — ${d.date.hijri.day} ${escHtml(d.date.hijri.month.en)}`), kind: Lb("সুন্নত", "Sunnah")});
     });
     // Day of Arafah — 9 Dhul Hijjah
     if (hijriInfo.month.number === 12){
@@ -3952,8 +4008,8 @@ function renderFasting(){
     $("#hijri-month").innerHTML = hijriMonthData.slice(0,31).map(d=>{
       const today = d.date.gregorian.date === ddmmyyyy();
       return `<div class="win-row" ${today?'style="background:rgba(212,175,55,.15);border-radius:8px;padding-left:8px;padding-right:8px"':""}>
-        <span>${num(d.date.hijri.day)} ${escHtml(d.date.hijri.month.en)} ${num(d.date.hijri.year)}${today?" ●":""}</span>
-        <b>${num(d.date.gregorian.day)} ${d.date.gregorian.month.en}</b></div>`;
+        <span>${num(d.date.hijri.day)} ${escHtml(hijriMonthLabel(d.date.hijri.month.en))} ${num(d.date.hijri.year)}${today?" ●":""}</span>
+        <b>${num(d.date.gregorian.day)} ${Lb(GREG_BN_MONTHS[d.date.gregorian.month.number-1], d.date.gregorian.month.en)}</b></div>`;
     }).join("");
   }
   // big countdown ring: at night → Sehri, in the day → Iftar
@@ -3961,9 +4017,9 @@ function renderFasting(){
     const now2 = locNow(); const mins = now2.getHours()*60+now2.getMinutes();
     const imsak = toMin(timings.Imsak), magh = toMin(timings.Maghrib);
     let label, sub, target, prev;
-    if (mins < imsak){ label = Lb("পরবর্তী সাহরি", "Next Sehri"); sub = Lb("সাহরির বাকি", "Time to Sehri"); target = imsak; prev = magh - 1440; }
+    if (mins < imsak){ label = Lb("পরবর্তী সেহরি", "Next Sehri"); sub = Lb("সেহরির বাকি", "Time to Sehri"); target = imsak; prev = magh - 1440; }
     else if (mins < magh){ label = Lb("পরবর্তী ইফতার", "Next Iftar"); sub = Lb("ইফতারের বাকি", "Time to Iftar"); target = magh; prev = imsak; }
-    else { label = Lb("পরবর্তী সাহরি", "Next Sehri"); sub = Lb("সাহরির বাকি", "Time to Sehri"); target = imsak + 1440; prev = magh; }
+    else { label = Lb("পরবর্তী সেহরি", "Next Sehri"); sub = Lb("সেহরির বাকি", "Time to Sehri"); target = imsak + 1440; prev = magh; }
     const nowSec = now2.getHours()*3600 + now2.getMinutes()*60 + now2.getSeconds();
     const diff = Math.max(0, target*60 - nowSec);
     const hh = Math.floor(diff/3600), mm = Math.floor(diff%3600/60), ss = diff%60;
@@ -4034,10 +4090,15 @@ function renderAlarmPage(){
   });
 }
 let detailId = null, detailDraft = null;
+/* Fix #60 (28 Nov 2026, audit): beep + ring are gone from the picker.
+   They never had an alarm-time sound — only a WebAudio preview in the
+   detail page — while the native alarm always rang the azan for any
+   non-silent selection, so picking them promised a sound that could
+   never play at prayer time. What remains is honest: silent (nothing),
+   notification (reminder tone), azan. The max-2 rule still applies to
+   notification + azan together. */
 const ALARM_SOUNDS = [
   {id:"silent", bn:"নিঃশব্দ", en:"Silent"},
-  {id:"beep", bn:"বিপ", en:"Beep"},
-  {id:"ring", bn:"রিং", en:"Ring"},
   {id:"notification", bn:"নোটিফিকেশন", en:"Notification"},
   {id:"azan", bn:"আজান", en:"Azan"}
 ];
@@ -4067,7 +4128,7 @@ function updateDetailTime(){
   const base = detailBaseMin(detailId); if (base==null) return;
   const set = fmtTime(minsToHHMM(base + detailDraft.offset));
   const ex = $("#detail-exact");
-  if (ex) ex.textContent = detailDraft.offset===0 ? Lb("Exact time", "Exact time") : offsetText(detailDraft.offset);
+  if (ex) ex.textContent = detailDraft.offset===0 ? Lb("সময়মতো", "Exact time") : offsetText(detailDraft.offset);
   const dt = $("#detail-time");
   if (dt) dt.textContent = `${Lb("সেট করা সময়", "Set time")}: ${set}`;
 }
@@ -4083,6 +4144,10 @@ function updateDetailTime(){
    UI), not a toast. */
 function toggleDetailSound(sid){
   if (!detailDraft) return;
+  // Fix #60: ignore ids with no row (beep/ring were removed — they have
+  // no alarm-time sound, only a WebAudio preview). A tap on a removed
+  // row is unreachable from the UI; this guards direct calls.
+  if (sid!=="name" && !ALARM_SOUNDS.some(s=>s.id===sid)) return;
   if (sid==="name") return; // permanent default in the model; no row, no toast
   let cur = detailDraft.sounds || ["name"];
   if (sid==="silent"){
@@ -4101,6 +4166,18 @@ function toggleDetailSound(sid){
 }
 function renderDetailSounds(){
   const box = $("#detail-sounds"); if (!box) return;
+  /* Fix #60: Tahajjud + forbidden-time alarms are notification-only by
+     design (their sound is hard-coded "none" in buildPrayerAlarmList)
+     — the picker never did anything there, so it is hidden and the
+     explainer says so plainly instead of offering sounds. */
+  const noteOnly = detailId==="Tahajjud" || (timings && forbiddenWindows().some(w=>w.id===detailId));
+  if (noteOnly){
+    box.innerHTML = ""; box.style.display = "none";
+    const ex = $("#detail-sound-explain");
+    if (ex) ex.textContent = Lb("এই অ্যালার্মে শুধু নোটিফিকেশন আসবে, কোনো সাউন্ড বাজবে না।", "This alarm shows a notification only, with no sound.");
+    return;
+  }
+  box.style.display = "";
   const sel = detailDraft.sounds || ["name"];
   box.innerHTML = ALARM_SOUNDS.map(s=>`<div class="sound-row ${sel.includes(s.id)?"on":""}" data-sound="${s.id}" role="button" tabindex="0">
     <span class="sound-name">${Lb(s.bn, s.en)}</span>
@@ -4127,6 +4204,11 @@ function detailSoundExplain(sounds){
   // notification shows the waqt name (the combination the user asked for).
   if (ss.includes("azan") && ss.includes("notification")) return Lb("ওয়াক্তের সময় আজান বাজবে, আর নোটিফিকেশনে ওয়াক্তের নাম দেখাবে।", "The azan will play at prayer time, and the notification shows the prayer name.");
   if (ss.includes("azan")) return Lb("ওয়াক্তের সময় আজান বাজবে।", "The azan will play at prayer time.");
+  /* Fix #60: an explicit Notification choice (no azan) plays the
+     reminder tone, NOT the azan — the old default branch claimed the
+     azan here, which was the lie the audit found. The untouched
+     default (only "name") still plays the azan, as always. */
+  if (ss.some(s=>s!=="name")) return Lb("ওয়াক্তের সময় রিমাইন্ডার টোন বাজবে, আজান বাজবে না।", "The reminder tone will play at prayer time, not the azan.");
   return Lb("ওয়াক্তের সময় আজান বাজবে, আর নোটিফিকেশনে ওয়াক্তের নাম দেখাবে।", "The azan will play at prayer time, and the notification shows the prayer name.");
 }
 function previewAlarmSound(sound){
@@ -4198,12 +4280,19 @@ const GREG_EN_WEEKDAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Fr
 let calMonth = new Date().getMonth(), calYear = new Date().getFullYear();
 function renderCalendarPage(){
   const ms = $("#cal-month"), ys = $("#cal-year");
-  if (ms && !ms.options.length){
-    ms.innerHTML = GREG_BN_MONTHS.map((m,i)=>`<option value="${i}">${m}</option>`).join("");
+  /* Fix #60 (28 Nov 2026, audit): the month options were built once from
+     the Bengali names, so the dropdown stayed Bengali in every other
+     language — and the year options used Bengali digits. Rebuilt on
+     every call from Lb(), so a language change re-renders them (the
+     onchange handlers are still bound once). */
+  if (ms){
+    ms.innerHTML = GREG_BN_MONTHS.map((m,i)=>`<option value="${i}">${Lb(m, GREG_EN_MONTHS[i])}</option>`).join("");
     const y0 = new Date().getFullYear();
-    ys.innerHTML = [y0-1, y0, y0+1].map(y=>`<option value="${y}">${bnNum(y)}</option>`).join("");
-    ms.onchange = ()=>{ calMonth = +ms.value; renderCalendarPage(); };
-    ys.onchange = ()=>{ calYear = +ys.value; renderCalendarPage(); };
+    if (ys) ys.innerHTML = [y0-1, y0, y0+1].map(y=>`<option value="${y}">${Lb(bnNum(y), String(y))}</option>`).join("");
+    if (!ms.onchange){
+      ms.onchange = ()=>{ calMonth = +ms.value; renderCalendarPage(); };
+      if (ys) ys.onchange = ()=>{ calYear = +ys.value; renderCalendarPage(); };
+    }
   }
   if (ms) ms.value = String(calMonth);
   if (ys) ys.value = String(calYear);
@@ -4216,12 +4305,12 @@ function renderCalendarPage(){
     const t = computeTimingsLocal(date);
     if (!t) continue;
     const hj = hijriFromGregorian(date);
-    const head = Lb(`${bnNum(d)} ${GREG_BN_MONTHS[calMonth]}, ${bnNum(calYear)} — ${GREG_BN_WEEKDAYS[date.getDay()]} / ${bnNum(hj.day)} ${escHtml(hj.month.en)}, ${bnNum(hj.year)}`,
+    const head = Lb(`${bnNum(d)} ${GREG_BN_MONTHS[calMonth]}, ${bnNum(calYear)} — ${GREG_BN_WEEKDAYS[date.getDay()]} / ${bnNum(hj.day)} ${escHtml(hijriMonthBn(hj.month.en))}, ${bnNum(hj.year)}`,
       `${d} ${GREG_EN_MONTHS[calMonth]} ${calYear} — ${GREG_EN_WEEKDAYS[date.getDay()]} / ${hj.day} ${escHtml(hj.month.en)}, ${hj.year}`);
     const prayLines = PRAYER_IDS.map(pid=>`<div class="cal-line"><span>${pname(pid)}</span><b>${fmtTime(t[pid])}</b></div>`).join("");
     const second = `<div class="cal-line"><span>${Lb("সূর্যোদয়","Sunrise")}</span><b>${fmtTime(t.Sunrise)}</b></div>
       <div class="cal-line"><span>${Lb("সূর্যাস্ত","Sunset")}</span><b>${fmtTime(t.Sunset)}</b></div>
-      <div class="cal-line"><span>${Lb("সাহরি","Sehri")}</span><b>${fmtTime(t.Imsak)}</b></div>
+      <div class="cal-line"><span>${Lb("সেহরি","Sehri")}</span><b>${fmtTime(t.Imsak)}</b></div>
       <div class="cal-line"><span>${Lb("ইফতার","Iftar")}</span><b>${fmtTime(t.Maghrib)}</b></div>`;
     const sr = toMin(t.Sunrise), dh = toMin(t.Dhuhr), mg = toMin(t.Maghrib);
     const forb = `<div class="cal-forb">${Lb("সালাতের নিষিদ্ধ সময়", "Forbidden prayer times")}: ${fmtTime(t.Sunrise)} – ${fmtTime(minsToHHMM(sr+15))} • ${fmtTime(minsToHHMM(dh-4))} – ${fmtTime(minsToHHMM(dh+2))} • ${fmtTime(minsToHHMM(mg-15))} – ${fmtTime(t.Maghrib)}</div>`;
@@ -4354,7 +4443,7 @@ async function refreshDuroodStatus(){
     if (hint) hint.style.display = "";
   } catch(e){ if (row) row.style.display = "none"; if (btnRow) btnRow.style.display = "none"; if (hint) hint.style.display = "none"; }
 }
-/* Fix #56: "দুরুদ পরীক্ষা করুন" — plays the durood immediately
+/* Fix #56: "দরুদ পরীক্ষা করুন" — plays the durood immediately
    through the SAME native DuroodPlayer path the unlock uses
    (DuroodUnlockPlugin.playTest → DuroodPlayer.playOnce), so a tap
    proves whether the audio path works on this phone. The count and
@@ -4701,13 +4790,27 @@ let rungToday = {};
 function playAzan(){
   const ad = ADHANS.find(a=>a.id===settings.adhan) || ADHANS[0];
   const a = $("#audio-azan");
-  a.src = "audio/azan.mp3";
-  if (settings.adhan !== "a1") a.src = ad.url;
+  /* Fix #60 (28 Nov 2026): only assign .src when it actually changes.
+     Assigning it — even to the same URL — runs the resource-selection
+     algorithm, discards the Fix #37 preloaded buffer, and forces a fresh
+     fetch + decode through the service worker on every prayer. The tap
+     delay had the same shape (a seek through the range-incapable worker,
+     fixed in sw.js); this is the prayer-time half. getAttribute returns
+     the literal value (unlike .src, which resolves to an absolute URL),
+     so the comparison is exact. */
+  const wanted = settings.adhan !== "a1" ? ad.url : "audio/azan.mp3";
+  if (a.getAttribute("src") !== wanted) a.src = wanted;
   a.play().catch(()=>{});
   if (settings.notif && "Notification" in window && Notification.permission==="granted"){
     const nx = nextPrayer(); const nm = PRAYERS.find(p=>p.id===nx.id);
     new Notification("My Deen — " + (pname(nm.id)), {body: Lb("নামাজের সময় হয়েছে", "It is time for prayer"), icon:"icons/icon-192.png"});
   }
+}
+/* Fix #60: foreground backstop for a reminder-tone prayer — the same
+   #audio-reminder element the ▶ preview uses. */
+function playReminderTone(){
+  const a = $("#audio-reminder");
+  if (a){ a.currentTime = 0; a.play().catch(()=>{}); }
 }
 /* Fix #40: is the native exact alarm armed right now? When it is, the
    native AlarmReceiver posts the notification, plays the azan and speaks
@@ -4731,13 +4834,22 @@ function checkAzan(){
          silent here too (Fix #38): the foreground path never honoured
          silent before. Otherwise play the azan and speak the
          announcement — "[Waqt] নামাজের সময় হয়েছে, মিসওয়াক ও অজু করে
-         নামাজের প্রস্তুতি নিন" — with the Bengali voice. */
-      const silent = normalizeSounds(settings.alarmSound[p]).includes("silent");
-      if (!nativeAzanArmed() && !silent){
+         নামাজের প্রস্তুতি নিন" — with the Bengali voice.
+         Fix #60: the tick honours the sound choice, like the scheduler
+         — azan selections play the azan + speak; an explicit reminder
+         choice plays the reminder tone as its backstop (the native alarm
+         / LN fallback posts the tone when the app is closed); silent
+         plays nothing. Before this the tick played the azan for every
+         non-silent prayer, so a notification-only prayer still rang the
+         azan whenever the app was open. */
+      const snd = soundFor(p);
+      if (!nativeAzanArmed() && snd==="azan"){
         playAzan();
         /* Fix #49: Friday Dhuhr speaks the Jumu'ah sentence instead
            (azanSpeakText judges the location day, like preazanText). */
         speakText(azanSpeakText(p, now), "bn-BD");
+      } else if (!nativeAzanArmed() && snd==="reminder"){
+        playReminderTone();
       }
       toast(`🕌 ${Lb("নামাজের সময় হয়েছে", "Time for prayer")} — ${p}`);
     }
@@ -4884,6 +4996,21 @@ const FORB_IDS = [41,42,43], DUHA_ID = 44;
    azan | durood | istighfar | reminder | none and maps to a res/raw mp3
    on the native side (and to an LN channel sound in the fallback).
    Every entry is the NEXT occurrence of that item. */
+/* Fix #60 (28 Nov 2026, audit): one native sound per alarm, and the
+   picker finally means what it says. Azan wins when selected; an
+   EXPLICIT non-azan choice ("notification", or "beep"/"ring" saved by
+   an older build) plays the reminder tone; silent alone = none. The
+   untouched default (only "name") still plays the azan, as it always
+   has — changing that would silence every prayer the user never
+   touched. Hoisted to module scope so the foreground tick (checkAzan)
+   uses the same decision as the scheduler. */
+function soundFor(id){
+  const ss = normalizeSounds(settings.alarmSound[id]);
+  if (ss.includes("silent")) return "none";
+  if (ss.includes("azan")) return "azan";
+  if (ss.some(s=>s!=="name")) return "reminder";
+  return "azan";
+}
 function buildPrayerAlarmList(){
   if (!timings) return [];
   /* Fix #12: alarm instants are ABSOLUTE times, but prayer times are
@@ -4898,14 +5025,6 @@ function buildPrayerAlarmList(){
   const atMin = m => { const d = new Date(dayStart); d.setMinutes(m); return d; };
   const nextOcc = d => { if (d <= ln) d.setDate(d.getDate()+1); return locAbs(d); };
   const list = [];
-  /* Multi-select (Fix #10): one native sound per alarm — azan wins when
-     selected, otherwise the notification sound; silent alone = none. */
-  const soundFor = id => {
-    const ss = normalizeSounds(settings.alarmSound[id]);
-    if (ss.includes("silent")) return "none";
-    if (ss.includes("azan")) return "azan";
-    return "reminder"; // name / notification / beep / ring → reminder sound
-  };
   PRAYER_IDS.forEach((id, i)=>{
     const base = toMin(timings[id]); if (base == null) return;
     const at = nextOcc(atMin(base + (settings.offsets[id] || 0)));
@@ -4952,14 +5071,20 @@ function buildPrayerAlarmList(){
        (Fajr adds "ঘুম থেকে উঠে") is read aloud with the
        phone's Bengali voice (native AlarmReceiver TTS; the foreground
        path in checkAzan speaks it when the app is open). A "silent"
-       prayer does not speak. The Fix #8 pre-azan texts are untouched. */
-    const azanEntry = { id: AZAN_IDS[i], at, type: snd==="none" ? "azan-v2-silent" : "azan-v2", title: "My Deen — " + name,
+       prayer does not speak. The Fix #8 pre-azan texts are untouched.
+       Fix #60: the entry TYPE is the sound now — "azan" rings the azan
+       via the MediaPlayer service, "reminder" posts on the
+       prayer-reminder channel (reminder tone), "none" posts silently.
+       Before this every non-silent selection became type azan-v2, so
+       the picker rows were decoration — the azan played no matter what
+       was picked. The announcement is spoken only with the azan. */
+    const azanEntry = { id: AZAN_IDS[i], at, type: snd==="azan" ? "azan-v2" : snd==="reminder" ? "prayer-reminder" : "azan-v2-silent", title: "My Deen — " + name,
       body: Lb("মিসওয়াক ও অজু করে নামাজের জন্য প্রস্তুত হোন", "Use miswak and perform wudu to prepare for prayer"),
-      sound: snd, prayerId: id, speak: snd!=="none" };
+      sound: snd, prayerId: id, speak: snd==="azan" };
     /* Fix #49: Friday Dhuhr speaks the Jumu'ah sentence — azanSpeakText
        judges the prayer's own day (locNow(at)), like preazanText does
        for the reminders. Other days and prayers use AZAN_SPEAK_TEXTS. */
-    if (snd!=="none") azanEntry.speakText = azanSpeakText(id, locNow(at));
+    if (snd==="azan") azanEntry.speakText = azanSpeakText(id, locNow(at));
     list.push(azanEntry);
   });
   // Tahajjud: notification ONLY, never an azan — and only when its
@@ -4975,7 +5100,7 @@ function buildPrayerAlarmList(){
   if (settings.alarmOn.Sehri){
     const im = toMin(timings.Imsak);
     if (im != null) list.push({ id: SEHRI_ID, at: nextOcc(atMin(im + (settings.offsets.Sehri||0))), type: "sehri",
-      title: "My Deen — " + Lb("সাহরি", "Sehri"), body: Lb("সাহরির সময় হয়েছে", "It is time for Sehri"), sound: "reminder", prayerId: "Sehri" });
+      title: "My Deen — " + Lb("সেহরি", "Sehri"), body: Lb("সেহরির সময় হয়েছে", "It is time for Sehri"), sound: "reminder", prayerId: "Sehri" });
   }
   if (settings.alarmOn.Iftar){
     const mg = toMin(timings.Maghrib);
@@ -4990,8 +5115,18 @@ function buildPrayerAlarmList(){
   });
   if (settings.alarmOn.Duha){
     const sr = toMin(timings.Sunrise);
-    if (sr != null) list.push({ id: DUHA_ID, at: nextOcc(atMin(sr + 15 + (settings.offsets.Duha||0))), type: "duha",
-      title: "My Deen — " + nt("duha"), body: Lb("দুহার নামাজের সময় হয়েছে", "It is time for Duha prayer"), sound: soundFor("Duha"), prayerId: "Duha" });
+    /* Fix #60: Duha honours its sound choice too — azan rings the azan
+       via the service (type azan-v2), an explicit notification choice
+       uses the duha channel (reminder tone), and silent posts on a
+       silent channel. Before this every Duha alarm posted on the duha
+       channel (reminder tone) whatever was picked — silent still rang
+       and azan never played. Duha never speaks (no Duha sentence). */
+    if (sr != null){
+      const dSnd = soundFor("Duha");
+      list.push({ id: DUHA_ID, at: nextOcc(atMin(sr + 15 + (settings.offsets.Duha||0))),
+        type: dSnd==="azan" ? "azan-v2" : dSnd==="none" ? "duha-silent" : "duha",
+        title: "My Deen — " + nt("duha"), body: Lb("দুহার নামাজের সময় হয়েছে", "It is time for Duha prayer"), sound: dSnd, prayerId: "Duha", speak: false });
+    }
   }
   return list;
 }
@@ -5060,7 +5195,10 @@ function nextAzanInfo(){
   try {
     if (!timings) return "";
     const now = Date.now();
-    const next = buildPrayerAlarmList().filter(a=>a.type.startsWith("azan-v2") && a.at.getTime() > now).sort((x,y)=>x.at-y.at)[0];
+    /* Fix #60: only prayers that will actually play an azan count as
+       the "next azan" — a silent or reminder-tone prayer is not one
+       (before this, azan-v2-silent matched the startsWith filter). */
+    const next = buildPrayerAlarmList().filter(a=>a.type==="azan-v2" && PRAYER_IDS.includes(a.prayerId) && a.at.getTime() > now).sort((x,y)=>x.at-y.at)[0];
     if (!next) return "";
     return `${Lb("পরের আজান", "Next azan")}: ${pname(next.prayerId)} ${fmtTime(timings[next.prayerId] || "")}`;
   } catch(e){ return ""; }
@@ -5120,6 +5258,10 @@ async function scheduleNativeAzan(){
     await LN.createChannel({ id: "iftar", name: "Iftar", description: "Iftar alarm", importance: 4, vibration: true });
     await LN.createChannel({ id: "forbidden", name: "Forbidden times", description: "Forbidden prayer time alerts", importance: 4, vibration: true });
     await LN.createChannel({ id: "duha", name: "Duha", description: "Duha prayer alarm", sound: "reminder.mp3", importance: 4, vibration: true });
+    // Fix #60: channels for the honest sound picker — a Notification-only
+    // prayer posts here (reminder tone), a silent Duha posts silently.
+    await LN.createChannel({ id: "prayer-reminder", name: "Prayer reminders", description: "Prayer time alerts with reminder sound", sound: "reminder.mp3", importance: 5, vibration: true });
+    await LN.createChannel({ id: "duha-silent", name: "Duha (silent)", description: "Duha prayer alarm without sound", importance: 4, vibration: true });
     const soundFile = s => s==="azan" ? "azan.mp3" : s==="durood" ? "durood.mp3" : s==="istighfar" ? "istighfar.mp3" : s==="reminder" ? "reminder.mp3" : undefined;
     /* Fix #40: NO repeats here. The LN plugin repeats an `at` anchor
        with interval = (at − now) — whatever gap the sync happened to
@@ -5659,6 +5801,14 @@ function applyTheme(){ document.documentElement.setAttribute("data-theme", setti
   const dark = $("#set-dark"); if (dark) dark.checked = settings.theme==="dark"; }
 function applyLang(){
   $$("[data-i18n]").forEach(el=>{ el.textContent = t(el.dataset.i18n); });
+  /* Fix #60: #btn-mark-read / #btn-autoplay carry data-i18n AND have
+     JS-managed text — the loop above reset them to their default labels,
+     contradicting their state. Re-apply the stateful labels (same logic
+     as finishOpenSurah / the autoplay handler). */
+  const mr = $("#btn-mark-read");
+  if (mr) mr.textContent = isSurahRead(currentSurah) ? t("markedRead") : t("markRead");
+  const ap = $("#btn-autoplay");
+  if (ap) ap.textContent = ap.dataset.on==="1" ? t("stopListen") : t("listenAll");
   document.documentElement.lang = settings.lang;
   document.documentElement.dir = isRTL() ? "rtl" : "ltr";
   const sl = $("#set-lang"); if (sl) sl.value = settings.lang;
@@ -5774,6 +5924,26 @@ function bindEvents(){
   const slEl = $("#set-lang");
   if (slEl) slEl.onchange=e=>{ settings.lang = e.target.value; saveSettings(); applyLang(); };
   $("#set-dark").onchange=e=>{ settings.theme = e.target.checked?"dark":"light"; saveSettings(); applyTheme(); };
+  /* Fix #60 (28 Nov 2026, audit): the rest of the Settings controls
+     apply the moment they change — before this they only applied on
+     Save, so leaving Settings without saving silently lost them (the
+     dark / durood / daily / language controls already applied
+     instantly). Method + school change the prayer times, so they
+     re-run initPrayers like Save does; azan / notification / adhan /
+     reciter only need a save (times and alarms are untouched). Save
+     still works — it re-reads the same fields. */
+  const smEl = $("#set-method");
+  if (smEl) smEl.onchange=e=>{ settings.method = +e.target.value; saveSettings(); initPrayers(); };
+  const ssEl = $("#set-school");
+  if (ssEl) ssEl.onchange=e=>{ settings.school = +e.target.value; settings.schoolExplicit = true; saveSettings(); initPrayers(); };
+  const saEl = $("#set-azan");
+  if (saEl) saEl.onchange=e=>{ settings.azan = e.target.checked; saveSettings(); };
+  const snEl = $("#set-notif");
+  if (snEl) snEl.onchange=e=>{ settings.notif = e.target.checked; saveSettings(); if(e.target.checked && "Notification" in window && Notification.permission!=="granted") Notification.requestPermission(); };
+  const shEl = $("#set-adhan");
+  if (shEl) shEl.onchange=e=>{ settings.adhan = e.target.value; saveSettings(); };
+  const srEl = $("#set-reciter");
+  if (srEl) srEl.onchange=e=>{ settings.reciter = e.target.value; saveSettings(); };
   $("#btn-save-settings").onclick=saveSettingsFromUI;
   $("#btn-go-fasting").onclick=()=>showView("fasting");
   // Fix #4: home buttons, reference toggles, alarm + calendar + detail pages
@@ -5791,13 +5961,14 @@ function bindEvents(){
   const fQu = $("#feat-quran"); if (fQu) fQu.onclick=()=>showView("quran");
   const fQi = $("#feat-qibla"); if (fQi) fQi.onclick=()=>showView("qibla");
   const fRu = $("#feat-ruqyah"); if (fRu) fRu.onclick=()=>showView("ruqyah");
-  /* Fix #36: the Tilawat + Tafsir grid tiles are gone — they live INSIDE
-     the Quran view now (#btn-quran-tilawat / #btn-quran-tafsir). Tilawat
-     opens the reader for the current surah (same as the old tile). There
-     is NO separate tafsir text in the app — the old tile just opened the
-     Quran list — so the Tafsir button takes the user to the surah list. */
+  /* Fix #36: the Tilawat + Tafsir grid tiles are gone — Tilawat lives
+     INSIDE the Quran view now (#btn-quran-tilawat) and opens the reader
+     for the current surah (same as the old tile).
+     Fix #60 (28 Nov 2026, audit): the in-view Tafsir button is gone
+     too — it only scrolled to the surah list, and there is NO separate
+     tafsir text in the app, so the button promised what does not exist.
+     It returns when real tafsir is built (Muslims Day feature 1). */
   const qTi = $("#btn-quran-tilawat"); if (qTi) qTi.onclick=()=>openSurah(currentSurah || 1);
-  const qTa = $("#btn-quran-tafsir"); if (qTa) qTa.onclick=()=>{ const l = $("#surah-list"); if (l) l.scrollIntoView({behavior:"smooth", block:"start"}); };
   const fNa = $("#feat-names"); if (fNa) fNa.onclick=()=>showView("tasbih");
   const fTs = $("#feat-tasbih"); if (fTs) fTs.onclick=()=>showView("tasbih");
   const fDu = $("#feat-duas"); if (fDu) fDu.onclick=()=>showView("duas"); // Fix #30: Duas opens from the Home grid
@@ -5870,9 +6041,10 @@ function bindEvents(){
     toast(`${t("targetLabel")} ${num(settings.tasbihTarget)}`);
   };
   $("#btn-gps").onclick=()=>detectLocation(false);
-  if ("Notification" in window && $("#set-notif")){
-    $("#set-notif").onchange=e=>{ if(e.target.checked && Notification.permission!=="granted") Notification.requestPermission(); };
-  }
+  // Fix #60: the #set-notif handler lives with the other immediate-apply
+  // handlers above (it saves on change AND asks for the Notification
+  // permission when turned on) — the old separate handler here would
+  // have overwritten it.
 }
 document.addEventListener("DOMContentLoaded", async ()=>{
   /* Interactivity FIRST, and every startup step isolated: if any one

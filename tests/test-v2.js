@@ -87,8 +87,8 @@ check("legacy check-reminder ids 100-159 are cancelled on every sync (Fix #39)",
 check("detectLocation is function", typeof detectLocation==="function");
 check("no Deen Day in app.js", !src.includes("Deen Day") && !src.includes("দীন দিবস"));
 const html = fs.readFileSync("/home/hatch/workspace/deen-day/index.html","utf8");
-check("azan test button + instruction note removed (user asked 2026-11-16)",
-  !src.includes("btn-test-azan") && !html.includes("নোটিফিকেশন কেটে দিলে আজান বন্ধ") && !src.includes("দরুদ পরীক্ষা"));
+check("azan test button + instruction note removed (user asked 2026-11-16) — the Fix #56 durood test button (28 Nov, his order) is NOT covered by this removal",
+  !src.includes("btn-test-azan") && !html.includes("নোটিফিকেশন কেটে দিলে আজান বন্ধ") && src.includes("দরুদ পরীক্ষা করুন"));
 // ---- i18n (16 languages, English default) ----
 check("default language is English", settings.lang==="en", settings.lang);
 check("LANGS has 16 languages", LANGS.length===16, String(LANGS.length));

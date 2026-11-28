@@ -108,7 +108,7 @@
         <p class="muted small hidden" id="nafl-ref"></p>
         <div id="nafl-rows"></div>
         <div class="nafl-strip">
-          <div class="nafl-cell"><b id="nafl-sehri">—</b><span id="nafl-sehri-label">পরবর্তী সাহরি</span></div>
+          <div class="nafl-cell"><b id="nafl-sehri">—</b><span id="nafl-sehri-label">পরবর্তী সেহরি</span></div>
           <div class="nafl-cell"><b id="nafl-iftar">—</b><span id="nafl-iftar-label">পরবর্তী ইফতার</span></div>
           <div class="nafl-cell"><b id="nafl-count">--:--:--</b><span id="nafl-count-label">ইফতারের বাকি</span></div>
         </div>
@@ -137,13 +137,14 @@
           <button class="chip" data-qtab="bookmarks" data-i18n="bookmarksTab">🔖 বুকমার্ক</button>
           <button class="chip" data-qtab="read" data-i18n="readTab">✅ পড়া শেষ</button>
         </div>
-        <!-- Fix #36: Tilawat + Tafsir live INSIDE the Quran view now (their
-             grid tiles are gone). Tilawat opens the reader; Tafsir takes
-             the user to the surah list — the app has no separate tafsir
-             text, the old tile just opened this same list. -->
+        <!-- Fix #60 (28 Nov 2026, audit): the Tafsir button is gone — it
+             only scrolled to the surah list, and the app has no tafsir
+             text at all, so the button promised what does not exist
+             (real tafsir + word-by-word is the queued Muslims Day
+             feature 1). Tilawat stays; it opens the reader. The button
+             returns when real tafsir is built. -->
         <div class="row wrap mt">
-          <button class="btn" id="btn-quran-tilawat">🎧 তিলাওয়াত</button>
-          <button class="btn" id="btn-quran-tafsir">📚 তাফসীর</button>
+          <button class="btn" id="btn-quran-tilawat" data-i18n="tilawatBtn">🎧 তিলাওয়াত</button>
         </div>
       </div>
       <div id="surah-list"><p class="muted">সূরার তালিকা লোড হচ্ছে…</p></div>
@@ -333,14 +334,14 @@
           <label class="switch"><input type="checkbox" id="detail-toggle"><span class="slider"></span></label></div>
       </div>
       <div class="card">
-        <h3>Time Adjustment</h3>
+        <h3 data-i18n="timeAdjustment">Time Adjustment</h3>
         <p class="muted small">স্লাইডার দিয়ে আজানের সময় ৩০ মিনিট আগে বা পরে করা যাবে (১ মিনিট ধাপে)।</p>
         <input type="range" id="detail-slider" min="-30" max="30" step="1" value="0" class="adj-slider">
         <div class="row between small"><span>−৩০ মিনিট</span><b id="detail-exact">Exact time</b><span>+৩০ মিনিট</span></div>
         <p class="center mt"><b id="detail-time">—</b></p>
       </div>
       <div class="card">
-        <h3>Alarm Sound</h3>
+        <h3 data-i18n="alarmSound">Alarm Sound</h3>
         <div id="detail-sounds"></div>
         <!-- Fix #38: say plainly what plays at prayer time for the
              selection above (filled by renderDetailSounds). -->
@@ -418,7 +419,7 @@
              same DuroodPlayer path the unlock uses, an honest status
              (toggle / unlock listener / keep-alive / last unlock play),
              and a one-line battery/autostart note for Realme. -->
-        <div class="row mt" id="durood-test-row" style="display:none"><button class="btn block" id="btn-durood-test">▶️ দুরুদ পরীক্ষা করুন</button></div>
+        <div class="row mt" id="durood-test-row" style="display:none"><button class="btn block" id="btn-durood-test">▶️ দরুদ পরীক্ষা করুন</button></div>
         <p class="muted small" id="durood-unlock-status" style="display:none"></p>
         <p class="muted small" id="durood-battery-hint" style="display:none">🔋 ফোনের সেটিংসে My Deen-এর ব্যাটারি "Don't optimize" রাখুন আর অটোস্টার্ট চালু রাখুন — তাহলে আনলক করলেই দরুদ বাজবে। (Settings → Apps → My Deen → Battery)</p>
         <div class="row mt" id="durood-appsettings-row"><button class="btn block" id="btn-durood-appsettings">⚙️ অ্যাপের সেটিংস খুলুন</button></div>

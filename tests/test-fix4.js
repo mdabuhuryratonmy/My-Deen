@@ -8,7 +8,7 @@ const fs = require("fs");
 
 globalThis.localStorage = { _s:{}, getItem(k){return this._s[k]??null}, setItem(k,v){this._s[k]=v} };
 const els = {};
-function mkEl(){ const _cls = new Set(); return {textContent:"", innerHTML:"", value:"", checked:false, style:{}, options:[], classList:{add(c){_cls.add(c)},remove(c){_cls.delete(c)},toggle(c,f){ if(f===undefined) f=!_cls.has(c); if(f)_cls.add(c); else _cls.delete(c); },contains(c){return _cls.has(c)}}, dataset:{}, onclick:null, onchange:null, oninput:null, onkeydown:null, querySelector(){ return mkEl(); }, querySelectorAll(){ return [] }, setAttribute(){}, getAttribute(){ return null; }, addEventListener(){}, removeEventListener(){}, appendChild(){}, scrollIntoView(){}}; }
+function mkEl(){ const _cls = new Set(); const _at = {}; return {textContent:"", innerHTML:"", value:"", checked:false, style:{}, options:[], classList:{add(c){_cls.add(c)},remove(c){_cls.delete(c)},toggle(c,f){ if(f===undefined) f=!_cls.has(c); if(f)_cls.add(c); else _cls.delete(c); },contains(c){return _cls.has(c)}}, dataset:{}, onclick:null, onchange:null, oninput:null, onkeydown:null, querySelector(){ return mkEl(); }, querySelectorAll(){ return [] }, setAttribute(k,v){ _at[k]=v; }, getAttribute(k){ return k in _at ? _at[k] : null; }, addEventListener(){}, removeEventListener(){}, appendChild(){}, scrollIntoView(){}}; }
 globalThis.document = { addEventListener(){}, querySelector(s){ return els[s] || (els[s]=mkEl()); },
   querySelectorAll(){ return [] }, getElementById(id){ return els["#"+id] || (els["#"+id]=mkEl()); }, documentElement:{ setAttribute(){}, lang:"bn" } };
 globalThis.window = globalThis;
@@ -39,6 +39,13 @@ globalThis.renderDuaCats=renderDuaCats; globalThis.renderDuas=renderDuas;
 globalThis.__setDuaCat=v=>{ duaCat=v; };
 globalThis.banglaDate=banglaDate; globalThis.renderDates=renderDates;
 globalThis.checkAzan=checkAzan; globalThis.__getRungToday=()=>rungToday;
+globalThis.playAzan=playAzan; globalThis.ADHANS=ADHANS; globalThis.soundFor=soundFor;
+globalThis.playReminderTone=playReminderTone; globalThis.hijriMonthBn=hijriMonthBn;
+globalThis.hijriMonthLabel=hijriMonthLabel; globalThis.hijriFromGregorian=hijriFromGregorian;
+globalThis.renderDetailPage=renderDetailPage;
+globalThis.applyLang=applyLang; globalThis.openSurah=openSurah;
+globalThis.finishOpenSurah=finishOpenSurah;
+globalThis.__setCurrentSurah = n => { currentSurah = n; };
 globalThis.effMethod=effMethod; globalThis.methodForRegion=methodForRegion;
 globalThis.saveSettings=saveSettings; globalThis.fillSettings=fillSettings;
 globalThis.updateNotifBadge=updateNotifBadge;
@@ -200,13 +207,15 @@ const ne0650 = nextEvent(at0650);
 check("Fix #15: at 06:50 the ring shows Fajr (current), counting to sunrise 07:03", ne0650.kind==="prayer" && ne0650.id==="Fajr" && ne0650.state==="current" && ne0650.at.getHours()===7 && ne0650.at.getMinutes()===3, ne0650.kind+" "+ne0650.id);
 
 // ---- Fix #16 + Fix #17: forbidden time shows the message ----
-// During a forbidden window the ring name shows "এখন সালাতের নিষিদ্ধ
-// সময়, এই সময়ে নামাজ পড়া নিষিদ্ধ". Fix #16 first hid the countdown;
-// the user then reversed that (Fix #17): the "শেষ হতে বাকি"
-// countdown IS shown too. In a normal waqt the ring shows the prayer
-// name + countdown as before. Also: the forbidden section's midday
-// cell must show the Fix #15 window (12:56–13:02), not the old
-// hardcoded 12:50–13:00.
+// During a forbidden window the ring name shows "এখন নিষিদ্ধ সময়"
+// (Fix #60: the old full sentence "এখন সালাতের নিষিদ্ধ সময়, এই সময়ে
+// নামাজ পড়া নিষিদ্ধ" measured 181.5/185.8px — wider than the ring's
+// 148/159.5px inner chord, so it crossed the ring stroke). Fix #16 first
+// hid the countdown; the user then reversed that (Fix #17): the
+// "শেষ হতে বাকি" countdown IS shown too. In a normal waqt the ring
+// shows the prayer name + countdown as before. Also: the forbidden
+// section's midday cell must show the Fix #15 window (12:56–13:02),
+// not the old hardcoded 12:50–13:00.
 const RealDate16 = Date;
 const _tz16 = settings.tzName; settings.tzName = "";
 const fake16 = (h, m, s=0) => {
@@ -219,7 +228,7 @@ const fake16 = (h, m, s=0) => {
 settings.lang = "bn";
 fake16(18, 50); renderPrayers();
 check("Fix #17: at 18:50 (inside evening window) the ring shows the forbidden message AND the countdown (user reversed the no-countdown part)",
-  els["#ring-name"].textContent === "এখন সালাতের নিষিদ্ধ সময়, এই সময়ে নামাজ পড়া নিষিদ্ধ" &&
+  els["#ring-name"].textContent === "এখন নিষিদ্ধ সময়" &&
   els["#ring-count"].textContent === "০০:০৮:০০" && els["#ring-count"].style.display !== "none" &&
   els["#ring-sub"].textContent === "শেষ হতে বাকি" && els["#ring-label"].textContent === "নিষিদ্ধ সময়",
   `${els["#ring-name"].textContent} / count='${els["#ring-count"].textContent}' / sub='${els["#ring-sub"].textContent}'`);
@@ -314,7 +323,8 @@ settings.alarmOn.Tahajjud = true; settings.alarmOn.Sehri = true; settings.alarmO
 list = buildPrayerAlarmList();
 check("tahajjud alarm appears when on (notification only, no azan)", list.some(a=>a.type==="tahajjud" && a.sound==="none"));
 check("sehri + iftar alarms appear when on", list.some(a=>a.type==="sehri") && list.some(a=>a.type==="iftar"));
-check("duha alarm appears when on (sunrise+15)", list.some(a=>a.type==="duha"));
+check("duha alarm appears when on (sunrise+15, default sound = azan so the type is azan-v2 — Fix #60)",
+  list.some(a=>a.prayerId==="Duha" && a.type==="azan-v2"));
 settings.alarmOn.Tahajjud = false; settings.alarmOn.Sehri = false; settings.alarmOn.Iftar = false; settings.alarmOn.Duha = false;
 
 // ---- Prayer list + ring ----
@@ -329,10 +339,10 @@ check("ring name is set", els["#ring-name"].textContent.length > 0, els["#ring-n
 openPrayerDetail("Fajr");
 check("detail draft opens with current offset 0", getDetailDraft() && getDetailDraft().offset===0 && getDetailId()==="Fajr");
 getDetailDraft().offset = 0; updateDetailTime();
-check("offset 0 shows 'Exact time'", els["#detail-exact"].textContent === "Exact time", els["#detail-exact"].textContent);
+check("offset 0 shows 'সময়মতো' in Bengali UI (Fix #60: was the hard-coded English 'Exact time')", els["#detail-exact"].textContent === "সময়মতো", els["#detail-exact"].textContent);
 getDetailDraft().offset = 5; updateDetailTime();
 check("offset +5 changes the set time to 5:47", els["#detail-time"].textContent.includes("৫:৪৭"), els["#detail-time"].textContent);
-check("ALARM_SOUNDS has 5 options, no name row (Fix #42)", ALARM_SOUNDS.length===5 && ALARM_SOUNDS.some(s=>s.id==="azan") && ALARM_SOUNDS.some(s=>s.id==="silent") && ALARM_SOUNDS.some(s=>s.id==="notification") && !ALARM_SOUNDS.some(s=>s.id==="name"));
+check("ALARM_SOUNDS has 3 options, no name row (Fix #42) and no beep/ring (Fix #60: they could never sound at prayer time)", ALARM_SOUNDS.length===3 && ALARM_SOUNDS.some(s=>s.id==="azan") && ALARM_SOUNDS.some(s=>s.id==="silent") && ALARM_SOUNDS.some(s=>s.id==="notification") && !ALARM_SOUNDS.some(s=>s.id==="name") && !ALARM_SOUNDS.some(s=>s.id==="beep") && !ALARM_SOUNDS.some(s=>s.id==="ring"));
 
 // ---- Alarm page + calendar ----
 renderAlarmPage();
@@ -347,7 +357,7 @@ check("FASTING_HADITHS has 4 verified entries", FASTING_HADITHS.length===4 && FA
 renderFastHadith();
 check("fasting hadith card renders", els["#fast-hadith"].innerHTML.length > 20);
 renderFastSchedule();
-check("fasting schedule renders Sehri + Iftar lines", els["#fast-schedule"].innerHTML.includes("সাহরি") || els["#fast-schedule"].innerHTML.includes("Sehri"));
+check("fasting schedule renders Sehri + Iftar lines", els["#fast-schedule"].innerHTML.includes("সেহরি") || els["#fast-schedule"].innerHTML.includes("Sehri"));
 
 // ---- No double scheduling ----
 const initBody = src.slice(src.indexOf("async function initPrayers()"), src.indexOf("async function initPrayers()")+700);
@@ -515,7 +525,7 @@ toggleDetailSound("notification");
 check("adding a second extra gives name + azan + notification (UPDATED Fix #43: name does not count)",
   JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["name","azan","notification"]));
 toggleDetailSound("beep");
-check("a third sound is refused (max 2 together)",
+check("a removed sound (beep) is ignored — selection unchanged (Fix #60: beep/ring have no row any more)",
   JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["name","azan","notification"]));
 toggleDetailSound("azan");
 check("tapping a selected extra removes it, name stays",
@@ -535,8 +545,9 @@ check("name + azan plays the azan sound (on the azan channel)",
   azanSoundList.find(a=>a.type==="azan-v2" && a.prayerId==="Fajr").sound==="azan");
 settings.alarmSound.Fajr = ["name","notification"];
 const notifSoundList = buildPrayerAlarmList();
-check("name + notification plays the notification sound (still on the azan channel)",
-  notifSoundList.find(a=>a.type==="azan-v2" && a.prayerId==="Fajr").sound==="reminder");
+check("name + notification plays the reminder tone on its own prayer-reminder channel (Fix #60: was azan-v2 with sound reminder — the picker lied)",
+  notifSoundList.find(a=>a.type==="prayer-reminder" && a.prayerId==="Fajr").sound==="reminder" &&
+  !notifSoundList.some(a=>a.type==="azan-v2" && a.prayerId==="Fajr"));
 settings.alarmSound.Fajr = ["silent"];
 const silentSoundList = buildPrayerAlarmList();
 check("silent alone plays no sound — and posts on the silent channel (Fix #38)",
@@ -930,8 +941,8 @@ Object.assign(settings, _savedTz);
       !src.includes('createChannel({ id: "azan-v2"'), "no v2 channel");
     check("Fix #24: no azan entry still uses the old channel",
       !src.includes('type: "azan"') && !src.includes('createChannel({ id: "azan",'), "old channel gone");
-    check("Fix #24: next-azan status reads the v2 entries (incl. the Fix #38 silent channel)",
-      src.includes('a.type.startsWith("azan-v2")'), "nextAzanInfo v2");
+    check("Fix #24 (UPDATED Fix #60): next-azan status reads the v2 entries exactly (a silent azan-v2-silent entry is NOT counted any more, and a Duha-azan entry is excluded)",
+      src.includes('a.type==="azan-v2" && PRAYER_IDS.includes(a.prayerId)'), "nextAzanInfo v2");
     check("Fix #24 (UPDATED Fix #43): native DELETES the sounding azan-v2 channel and never creates it (the old azan channel is still deleted too)",
       !_as.includes('createChannel(nm, ctx, "azan-v2"') && _as.includes('deleteNotificationChannel("azan-v2")') && _as.includes('deleteNotificationChannel("azan")'), "native deletes v2");
     check("Fix #24: AlarmReceiver maps a stale stored 'azan' type to azan-v2",
@@ -1292,14 +1303,16 @@ Object.assign(settings, _savedTz);
       "8 tiles, merged last");
     check("Fix #36: Ruqyah stays in place (not in the keep-list, but never asked to be removed)",
       html.includes('id="feat-ruqyah"') && html.includes("রুকইয়াহ"), "ruqyah kept");
-    check("Fix #36: Tilawat + Tafsir are inside the Quran view as buttons",
-      html.includes('id="btn-quran-tilawat"') && html.includes('id="btn-quran-tafsir"') &&
-      html.includes("🎧 তিলাওয়াত") && html.includes("📚 তাফসীর"),
-      "inside Quran");
-    check("Fix #36: the in-view buttons are wired (Tilawat opens the reader, Tafsir goes to the surah list)",
-      src.includes('$("#btn-quran-tilawat")') && src.includes('$("#btn-quran-tafsir")') &&
-      src.includes('qTi.onclick=()=>openSurah(currentSurah || 1)') &&
-      src.includes('scrollIntoView({behavior:"smooth", block:"start"})'),
+    check("Fix #60: only the Tilawat button is inside the Quran view (the Tafsir button is gone — it only scrolled to the list and the app has no tafsir text)",
+      html.includes('id="btn-quran-tilawat"') && !html.includes('id="btn-quran-tafsir"') &&
+      html.includes("🎧 তিলাওয়াত") && !html.includes("📚 তাফসীর"),
+      "tilawat stays, tafsir gone");
+    check("Fix #60: the Tafsir button is gone (it only scrolled to the list — the app has no tafsir text) and nothing references it any more",
+      !src.includes('$("#btn-quran-tafsir")') && !src.includes('qTa') && !html.includes('btn-quran-tafsir'),
+      "no tafsir refs");
+    check("Fix #36: the in-view Tilawat button is wired (opens the reader)",
+      src.includes('$("#btn-quran-tilawat")') &&
+      src.includes('qTi.onclick=()=>openSurah(currentSurah || 1)'),
       "wired");
     check("Fix #36: the single Roza card opens the fasting view, which holds Sehri/Iftar times + the fasting timetable",
       html.includes('id="feat-fasting"') && html.includes("সাওমের সময়সূচি") &&
@@ -1350,8 +1363,8 @@ Object.assign(settings, _savedTz);
     check("Fix #38: a silent azan posts on the silent channel (native + LN)",
       javaSched.includes('"azan-v2-silent"') && src.includes('id: "azan-v2-silent"'),
       "silent channel");
-    check("Fix #38: next-azan info still finds a silent azan entry",
-      src.includes('a.type.startsWith("azan-v2")'),
+    check("Fix #38 (UPDATED Fix #60): next-azan info finds a sounding azan-v2 entry (a silent azan-v2-silent entry is no longer counted as 'next azan')",
+      src.includes('a.type==="azan-v2"'),
       "next azan");
 
     // ---- Fix #39: the wrong notification text — kill the zombie alarms ----
@@ -2276,8 +2289,9 @@ Object.assign(settings, _savedTz);
       // (2) Multi-select: "name" does not consume a slot.
       check("Fix #43: normalizeSounds keeps name + up to 2 visible sounds (Notification + Azan fit together)",
         JSON.stringify(normalizeSounds(["name","notification","azan"]))===JSON.stringify(["name","notification","azan"]), "name+2");
-      check("Fix #43: normalizeSounds still caps the visible sounds at 2 (a third extra is dropped)",
-        JSON.stringify(normalizeSounds(["name","notification","azan","beep"]))===JSON.stringify(["name","notification","azan"]), "cap 2");
+      check("Fix #60: normalizeSounds drops removed sounds (beep/ring are gone from VALID_SOUNDS) and still keeps name + up to 2 visible sounds",
+        JSON.stringify(normalizeSounds(["name","notification","azan","beep"]))===JSON.stringify(["name","notification","azan"]) &&
+        JSON.stringify(normalizeSounds(["name","ring"]))===JSON.stringify(["name"]), "beep/ring dropped");
       check("Fix #43: normalizeSounds keeps the old behaviour for silent and single sounds",
         JSON.stringify(normalizeSounds(["silent"]))===JSON.stringify(["silent"]) &&
         JSON.stringify(normalizeSounds(["azan"]))===JSON.stringify(["name","azan"]) &&
@@ -2317,8 +2331,10 @@ Object.assign(settings, _savedTz);
           JSON.stringify(getDetailDraft().sounds)===JSON.stringify(["name","notification","azan"]), "both selected");
         const _before43 = JSON.stringify(getDetailDraft().sounds);
         toggleDetailSound("beep");
-        check("Fix #43: a third sound is refused with the max-2 toast and the selection is unchanged",
-          JSON.stringify(getDetailDraft().sounds)===_before43 && __$("#toast").textContent.includes("সর্বোচ্চ ২টা"), "third refused");
+        check("Fix #60: a removed sound (beep) is ignored — the selection is unchanged and no toast fires",
+          JSON.stringify(getDetailDraft().sounds)===_before43 && !__$("#toast").textContent.includes("সর্বোচ্চ ২টা"), "beep ignored");
+        check("Fix #60: the max-2 guard + toast stay in toggleDetailSound (defense for any future third sound)",
+          src.includes("একসাথে সর্বোচ্চ ২টা সাউন্ড সিলেক্ট করা যায়"), "cap guard kept");
         check("Fix #43: the explainer for Notification + Azan says the azan plays AND the notification shows the waqt name",
           detailSoundExplain(["name","notification","azan"]) === "ওয়াক্তের সময় আজান বাজবে, আর নোটিফিকেশনে ওয়াক্তের নাম দেখাবে।", "explainer both");
         // Spoken texts, from the real alarm list.
@@ -3157,8 +3173,8 @@ Object.assign(settings, _savedTz);
         _sched58.includes('alarm.put("speak", false);'), "re-arm type");
       check("Fix #59: AlarmReceiver never TTS-speaks a pre-azan type (gate on the type, not the stored flag)",
         _recv59.includes('if (type.startsWith("preazan")) toSpeak = null;'), "TTS gate");
-      check("Fix #59: azan path untouched — azan entries still speak, checkAzan still speaks the announcement",
-        src.includes('speak: snd!=="none"') && src.includes('speakText(azanSpeakText(p, now), "bn-BD")'), "azan speaks");
+      check("Fix #59 (UPDATED Fix #60): azan entries still speak, checkAzan still speaks the announcement — speak is now snd===\"azan\" (a reminder-only prayer no longer speaks)",
+        src.includes('speak: snd==="azan"') && src.includes('speakText(azanSpeakText(p, now), "bn-BD")'), "azan speaks");
       check("Fix #59: istighfar.b64 decodes to the final short-form Helio clip (md5 331cdfba…, slower + louder)",
         _md559("/home/hatch/workspace/deen-day/audio/istighfar.mp3") === "331cdfba89c988b84e2f9f90a7072d64" &&
         Buffer.from(fs.readFileSync("/home/hatch/workspace/deen-day/assets/istighfar.b64", "utf8").trim(), "base64").equals(fs.readFileSync("/home/hatch/workspace/deen-day/audio/istighfar.mp3")), "final short istighfar");
@@ -3186,6 +3202,181 @@ Object.assign(settings, _savedTz);
         fs.readFileSync("/home/hatch/workspace/deen-day/package.json", "utf8").includes("audio/reminder_fajr.mp3") &&
         fs.readFileSync("/home/hatch/workspace/deen-day/package.json", "utf8").includes("audio/reminder_jumuah.mp3"), "build:www");
     }
+
+    // ---- Fix #60 (28 Nov 2026, full audit): UI bugs + azan-button delay ----
+    // (a) Azan-button delay: playAzan must not reassign src on every call
+    // (the old code discarded the Fix #37 preload and forced a full
+    // re-stream through the range-incapable service worker on every tap).
+    {
+      const _az = __$("#audio-azan"); // NB: $() creates the stub on demand — els["#audio-azan"] alone is undefined
+      _az.pause = ()=>{}; _az.play = ()=>Promise.resolve();
+      let _srcSets = 0; let _curSrc = "audio/azan.mp3";
+      _az.setAttribute("src", "audio/azan.mp3");
+      Object.defineProperty(_az, "src", {configurable:true,
+        get(){ return _curSrc; },
+        set(v){ _srcSets++; _curSrc = v; _az.setAttribute("src", v); }});
+      settings.adhan = "a1"; playAzan();
+      check("Fix #60: playAzan with adhan a1 and src already audio/azan.mp3 does NOT reassign src (the Fix #37 preload survives)",
+        _srcSets===0, "0 sets");
+      playAzan();
+      check("Fix #60: a second playAzan call still does not reassign src", _srcSets===0, "still 0");
+      settings.adhan = "a2"; playAzan();
+      check("Fix #60: changing adhan to a2 reassigns src exactly once to the a2 url",
+        _srcSets===1 && _curSrc===ADHANS.find(x=>x.id==="a2").url, "1 set to a2");
+      playAzan();
+      check("Fix #60: repeating playAzan with a2 does not reassign src again", _srcSets===1, "still 1");
+      settings.adhan = "a1";
+      // (a2) The service worker answers Range requests with 206, so a seek
+      // no longer forces a full re-stream of the 3.4 MB azan file.
+      check("Fix #60: sw.js answers a ranged request with 206 + Content-Range (no full re-stream on seek)",
+        fs.readFileSync("/home/hatch/workspace/deen-day/www/sw.js", "utf8").includes("function rangeResponse") &&
+        fs.readFileSync("/home/hatch/workspace/deen-day/www/sw.js", "utf8").includes("206") &&
+        fs.readFileSync("/home/hatch/workspace/deen-day/www/sw.js", "utf8").includes("Content-Range"), "sw range");
+    }
+    // (b) Forbidden ring name fits inside the ring now.
+    check("Fix #60: the forbidden ring name is the short 'এখন নিষিদ্ধ সময়' (the old 2-line sentence crossed the ring stroke; it survives only in the history comment)",
+      src.includes('Lb("এখন নিষিদ্ধ সময়", "Forbidden time now")') && !src.includes('Lb("এখন সালাতের নিষিদ্ধ সময়'), "short name");
+    // (c) Fasting ring countdown is 28px (Fix #55 treatment applied to it too).
+    check("Fix #60: the fasting ring countdown is 28px (was 34px — it touched the ring)",
+      fs.readFileSync("/home/hatch/workspace/deen-day/www/styles.css", "utf8").includes(".small-ring .ring-count{font-size:28px}"), "fasting 28px");
+    // (d) Settings headings + Exact-time label are translated.
+    check("Fix #60: the Alarm settings headings use data-i18n (no hard-coded English headings in Bengali UI)",
+      html.includes('data-i18n="timeAdjustment"') && html.includes('data-i18n="alarmSound"') &&
+      src.includes('timeAdjustment:"সময় সমন্বয়"') && src.includes('alarmSound:"অ্যালার্মের শব্দ"'), "i18n headings");
+    // (e) soundFor mapping (the picker now means what it says). soundFor
+    // takes a prayer id and reads settings.alarmSound[id].
+    check("Fix #60: soundFor maps name-only → azan, notification → reminder, azan → azan, silent → none",
+      (settings.alarmSound.Fajr=["name"], soundFor("Fajr")==="azan") &&
+      (settings.alarmSound.Fajr=["name","notification"], soundFor("Fajr")==="reminder") &&
+      (settings.alarmSound.Fajr=["name","azan"], soundFor("Fajr")==="azan") &&
+      (settings.alarmSound.Fajr=["silent"], soundFor("Fajr")==="none"), "soundFor");
+    // (f) Alarm list types honour the sound choice.
+    __setTimings({Fajr:"05:45", Sunrise:"07:07", Dhuhr:"13:03", Asr:"16:30", Maghrib:"19:06", Isha:"20:20", Imsak:"05:35", Firstthird:"23:00", Lastthird:"03:00"});
+    settings.alarmOn = {...settings.alarmOn, Duha:true, Tahajjud:true, ForbMorning:true, ForbNoon:true, ForbEvening:true};
+    settings.alarmSound = {Fajr:["name","notification"], Dhuhr:["name"], Asr:["name"], Maghrib:["name"], Isha:["name"], Duha:["name","notification"], Tahajjud:["name"], ForbMorning:["name"], ForbNoon:["name"], ForbEvening:["name"], Sehri:["name"], Iftar:["name"]};
+    {
+      const _al = buildPrayerAlarmList();
+      const _fajr = _al.find(a=>a.prayerId==="Fajr" && a.type!=="preazan" && !a.type.startsWith("preazan"));
+      const _duha = _al.find(a=>a.prayerId==="Duha");
+      check("Fix #60: Fajr notification-only → type prayer-reminder, sound reminder (was azan-v2: the picker lied)",
+        _fajr && _fajr.type==="prayer-reminder" && _fajr.sound==="reminder" && _fajr.speak===false, "fajr reminder");
+      check("Fix #60: Duha notification-only → type duha (was duha with the reminder tone fixed on)",
+        _duha && _duha.type==="duha", "duha reminder");
+      const _tah = _al.find(a=>a.type==="tahajjud");
+      const _forb = _al.find(a=>a.type==="forbidden");
+      check("Fix #60: Tahajjud + forbidden entries are unchanged (notification only, sound none)",
+        _tah && _tah.sound==="none" && _forb && _forb.sound==="none", "note-only unchanged");
+    }
+    settings.alarmSound = {Fajr:["silent"], Dhuhr:["name"], Asr:["name"], Maghrib:["name"], Isha:["name"], Duha:["silent"], Tahajjud:["name"], ForbMorning:["name"], ForbNoon:["name"], ForbEvening:["name"], Sehri:["name"], Iftar:["name"]};
+    {
+      const _al = buildPrayerAlarmList();
+      const _fajr = _al.find(a=>a.prayerId==="Fajr" && !a.type.startsWith("preazan"));
+      const _duha = _al.find(a=>a.prayerId==="Duha");
+      check("Fix #60: Fajr silent → type azan-v2-silent; Duha silent → type duha-silent (a silent Duha no longer rings)",
+        _fajr && _fajr.type==="azan-v2-silent" && _duha && _duha.type==="duha-silent", "silent types");
+    }
+    settings.alarmSound = {Fajr:["name","azan"], Dhuhr:["name"], Asr:["name"], Maghrib:["name"], Isha:["name"], Duha:["name","azan"], Tahajjud:["name"], ForbMorning:["name"], ForbNoon:["name"], ForbEvening:["name"], Sehri:["name"], Iftar:["name"]};
+    {
+      const _al = buildPrayerAlarmList();
+      const _fajr = _al.find(a=>a.prayerId==="Fajr" && !a.type.startsWith("preazan"));
+      const _duha = _al.find(a=>a.prayerId==="Duha");
+      check("Fix #60: Fajr azan → azan-v2; Duha azan → azan-v2 (the azan service, not a channel sound)",
+        _fajr && _fajr.type==="azan-v2" && _duha && _duha.type==="azan-v2", "azan types");
+    }
+    // (g) Explainer for notification-only + picker hidden for note-only alarms.
+    check("Fix #60: the explainer for notification-only says the reminder tone plays, not the azan",
+      detailSoundExplain(["name","notification"]) === "ওয়াক্তের সময় রিমাইন্ডার টোন বাজবে, আজান বাজবে না।", "explainer reminder");
+    openPrayerDetail("Tahajjud");
+    check("Fix #60: Tahajjud detail hides the sound picker and says honestly that only a notification comes",
+      els["#detail-sounds"].style.display==="none" &&
+      els["#detail-sound-explain"].textContent === "এই অ্যালার্মে শুধু নোটিফিকেশন আসবে, কোনো সাউন্ড বাজবে না।", "tahajjud hidden");
+    openPrayerDetail("Fajr");
+    check("Fix #60: a fard prayer detail shows the sound picker again", els["#detail-sounds"].style.display!=="none", "fajr shown");
+    // (h) Bengali Hijri month names (both Aladhan diacritic forms and local forms).
+    check("Fix #60: hijriMonthBn maps all 12 months from Aladhan + local forms",
+      hijriMonthBn("Muharram")==="মুহাররম" && hijriMonthBn("Safar")==="সফর" &&
+      hijriMonthBn("Rabiʿ al-awwal")==="রবিউল আউয়াল" && hijriMonthBn("Rabi al-Awwal")==="রবিউল আউয়াল" &&
+      hijriMonthBn("Rabiʿ al-thani")==="রবিউস সানি" && hijriMonthBn("Rabi al-Akhir")==="রবিউস সানি" &&
+      hijriMonthBn("Jumādá al-ūlá")==="জুমাদাল উলা" && hijriMonthBn("Jumada al-Ula")==="জুমাদাল উলা" &&
+      hijriMonthBn("Jumādá al-ākhirah")==="জুমাদাল আখিরাহ" && hijriMonthBn("Jumada al-Akhirah")==="জুমাদাল আখিরাহ" &&
+      hijriMonthBn("Rajab")==="রজব" && hijriMonthBn("Shaʿbān")==="শাবান" && hijriMonthBn("Shaban")==="শাবান" &&
+      hijriMonthBn("Ramaḍān")==="রমজান" && hijriMonthBn("Ramadan")==="রমজান" &&
+      hijriMonthBn("Shawwāl")==="শাওয়াল" && hijriMonthBn("Shawwal")==="শাওয়াল" &&
+      hijriMonthBn("Dhū al-Qaʿdah")==="জিলকদ" && hijriMonthBn("Dhul-Qada")==="জিলকদ" &&
+      hijriMonthBn("Dhū al-Ḥijjah")==="জিলহজ" && hijriMonthBn("Dhul-Hijja")==="জিলহজ" &&
+      hijriMonthBn("Foo")==="Foo", "hijri bn");
+    // (i) Calendar month dropdown rebuilds in the current language.
+    settings.lang = "en"; renderCalendarPage();
+    check("Fix #60: the calendar month dropdown shows English month names in English UI",
+      els["#cal-month"].innerHTML.includes("January") && !els["#cal-month"].innerHTML.includes("জানুয়ারি"), "cal en");
+    settings.lang = "bn"; renderCalendarPage();
+    check("Fix #60: the calendar month dropdown shows Bengali month names in Bengali UI",
+      els["#cal-month"].innerHTML.includes("জানুয়ারি") && !els["#cal-month"].innerHTML.includes("January"), "cal bn");
+    // (j) Surah search accepts Bengali names. renderSurahList takes the
+    // filter as a parameter and renders into #surah-list; rows are
+    // .surah-item and show the English name (the Bengali name is the
+    // search key, not a displayed column).
+    renderSurahList("ফাতিহা");
+    check("Fix #60: surah search finds আল-ফাতিহা by the Bengali name 'ফাতিহা'",
+      (els["#surah-list"].innerHTML.match(/surah-item/g)||[]).length===1 && els["#surah-list"].innerHTML.includes("Al-Faatiha"), "search ফাতিহা");
+    renderSurahList("বাকারা");
+    check("Fix #60: surah search finds আল-বাকারা by 'বাকারা'",
+      (els["#surah-list"].innerHTML.match(/surah-item/g)||[]).length===1 && els["#surah-list"].innerHTML.includes("Al-Baqara"), "search বাকারা");
+    renderSurahList("ইখলাস");
+    check("Fix #60: surah search finds আল-ইখলাস by 'ইখলাস'",
+      (els["#surah-list"].innerHTML.match(/surah-item/g)||[]).length===1 && els["#surah-list"].innerHTML.includes("Al-Ikhlaas"), "search ইখলাস");
+    renderSurahList("");
+    // (k) The Quran translation uses the app's spellings now.
+    check("Fix #60: the bundled Bengali translation has no 'নামায' (97→0) and no 'এশা' (1→0)",
+      fs.readFileSync("/home/hatch/workspace/deen-day/www/assets/quran-full.js", "utf8").split("নামায").length===1 &&
+      fs.readFileSync("/home/hatch/workspace/deen-day/www/assets/quran-full.js", "utf8").split("এশা").length===1 &&
+      fs.readFileSync("/home/hatch/workspace/deen-day/www/assets/quran-full.js", "utf8").includes("ইশার নামাজের পর"), "quran spelling");
+    // (l) The durood dua exists and its ▶ button renders.
+    check("Fix #60: DUAS has a durood dua containing the exact audio-branch phrase",
+      globalThis.DUAS.length===25 && globalThis.DUAS.some(d=>d.ar.includes("صَلِّ وَسَلِّمْ عَلَى نَبِيِّنَا")), "durood dua");
+    __setDuaCat("daily"); renderDuas();
+    check("Fix #60: the daily duas render a durood play button (data-play-dua=\"durood\")",
+      els["#dua-list"].innerHTML.includes('data-play-dua="durood"'), "durood button");
+    // (m) applyLang keeps the stateful Quran labels; next-surah hides on 114.
+    // (finishOpenSurah directly: openSurah is async and fetches ayahs.
+    // NB: store.set, not localStorage — the app's LS probe falls back to
+    // an in-memory store in this harness because the stub lacks removeItem.)
+    globalThis.scrollTo = ()=>{};
+    store.set("quran_read", {114:true});
+    __setCurrentSurah(114);
+    finishOpenSurah(114);
+    check("Fix #60: on Surah 114 the 'next surah' button is hidden (it was a silent no-op)",
+      els["#btn-next-surah"].style.display==="none", "next hidden 114");
+    finishOpenSurah(1);
+    check("Fix #60: on Surah 1 the 'next surah' button shows again",
+      els["#btn-next-surah"].style.display!=="none", "next shown 1");
+    __setCurrentSurah(114); finishOpenSurah(114);
+    settings.lang = "bn"; applyLang();
+    check("Fix #60: applyLang keeps the mark-read label for a read surah (not reset to the default)",
+      els["#btn-mark-read"].textContent === "✅ পড়া শেষ ✓", els["#btn-mark-read"].textContent);
+    els["#btn-autoplay"].dataset.on = "1"; applyLang();
+    check("Fix #60: applyLang keeps the autoplay label when listening is on (not reset to 'Listen All')",
+      els["#btn-autoplay"].textContent === "⏸️ বন্ধ করুন", els["#btn-autoplay"].textContent);
+    els["#btn-autoplay"].dataset.on = ""; store.set("quran_read", {});
+    // (n) Settings handlers apply immediately (no silent loss on nav-away).
+    // (Bound as smEl/ssEl/saEl/shEl/srEl.onchange in bindEvents.)
+    check("Fix #60: method/school/adhan/reciter/azan-toggle apply on change, not only on Save",
+      src.includes('smEl.onchange') && src.includes('ssEl.onchange') &&
+      src.includes('saEl.onchange') && src.includes('shEl.onchange') &&
+      src.includes('srEl.onchange'), "immediate handlers");
+    // (o) Native + LN fallback channels for the new alarm types exist.
+    {
+      const _sched = fs.readFileSync("/home/hatch/workspace/deen-day/android/app/src/main/java/com/deenday/app/AlarmScheduler.java", "utf8");
+      const _snd = _sched.slice(_sched.indexOf("SOUNDING_CHANNEL_IDS"), _sched.indexOf("};", _sched.indexOf("SOUNDING_CHANNEL_IDS")));
+      check("Fix #60: AlarmScheduler creates the prayer-reminder + duha-silent channels; prayer-reminder sounds, duha-silent does not (CHANNEL_VERSION stays 6)",
+        _sched.includes('"prayer-reminder"') && _sched.includes('"duha-silent"') &&
+        _sched.includes("CHANNEL_VERSION = 6") && _snd.includes('"prayer-reminder"') && !_snd.includes('"duha-silent"'), "native channels");
+    }
+    check("Fix #60: the LN fallback creates the prayer-reminder + duha-silent channels too",
+      src.includes('id: "prayer-reminder"') && src.includes('id: "duha-silent"'), "LN channels");
+    // (p) 'সাহরি' is gone everywhere; 'সেহরি' is the one spelling.
+    check("Fix #60: 'সাহরি' appears nowhere in the shipped JS/HTML any more",
+      !src.includes("সাহরি") && !html.includes("সাহরি"), "সেহরি only");
   } finally {
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);

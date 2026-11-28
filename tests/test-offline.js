@@ -142,7 +142,8 @@ function check(name, ok, extra=""){ console.log((ok?"PASS":"FAIL")+" | "+name+(e
   // versionCode stays 1. The old "no 'My Deen v2.0' anywhere in app.js"
   // check that lived here is gone for good — the two now agree.
   check("no 'ঐচ্ছিক' wording in app", !src.includes("ঐচ্ছিক") && !fs.readFileSync(ROOT+"/index.html","utf8").includes("ঐচ্ছিক"));
-  check("no test buttons / azan note in app", !src.includes("btn-test-azan") && !src.includes("দরুদ পরীক্ষা"));
+  check("no azan test button / azan note in app (the Fix #56 durood test button, 28 Nov his order, stays)",
+    !src.includes("btn-test-azan") && src.includes("দরুদ পরীক্ষা করুন"));
   check("About credit line (aboutLine1) not in index.html", !fs.readFileSync(ROOT+"/index.html","utf8").includes("aboutLine1"));
 
   console.log(`\nOFFLINE RESULT: ${pass} passed, ${fail} failed`);

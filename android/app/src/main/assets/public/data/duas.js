@@ -72,7 +72,14 @@ tr:"A'udhu billahi minash-shaytanir-rajim.",
 bn:"আমি বিতাড়িত শয়তান থেকে আল্লাহর আশ্রয় নিচ্ছি।", ref:"রাগের সময়ের দোয়া"},
 {cat:"daily", catBn:"দৈনন্দিন জীবন", catEn:"Daily Life", ar:"لَا إِلَهَ إِلَّا اللَّهُ وَحْدَهُ لَا شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ، يُحْيِي وَيُمِيتُ، وَهُوَ حَيٌّ لَا يَمُوتُ، بِيَدِهِ الْخَيْرُ، وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ",
 tr:"La ilaha illallahu wahdahu la sharika lah, lahul-mulku wa lahul-hamdu, yuhyi wa yumit, wa huwa hayyun la yamut, biyadihil-khayr, wa huwa 'ala kulli shay'in qadir.",
-bn:"আল্লাহ ছাড়া কোনো ইলাহ নেই, তিনি এক, তাঁর কোনো শরিক নেই। রাজত্ব তাঁরই, প্রশংসা তাঁরই। তিনি জীবন দেন ও মৃত্যু দেন; তিনি চিরঞ্জীব, মরেন না। কল্যাণ তাঁরই হাতে, আর তিনি সবকিছুর ওপর ক্ষমতাবান।", ref:"তিরমিজি ৩৪২৮ — বাজারে প্রবেশের দোয়া"}
+bn:"আল্লাহ ছাড়া কোনো ইলাহ নেই, তিনি এক, তাঁর কোনো শরিক নেই। রাজত্ব তাঁরই, প্রশংসা তাঁরই। তিনি জীবন দেন ও মৃত্যু দেন; তিনি চিরঞ্জীব, মরেন না। কল্যাণ তাঁরই হাতে, আর তিনি সবকিছুর ওপর ক্ষমতাবান।", ref:"তিরমিজি ৩৪২৮ — বাজারে প্রবেশের দোয়া"},
+/* Fix #60 (28 Nov 2026, audit): the short durood — renderDuas() has a
+   durood audio branch keyed on "صَلِّ وَسَلِّمْ عَلَى نَبِيِّنَا", but no
+   dua in DUAS contained that phrase, so the ▶ button could never render.
+   Appended last so every existing saved-dua index is unchanged. */
+{cat:"daily", catBn:"দৈনন্দিন জীবন", catEn:"Daily Life", ar:"اللَّهُمَّ صَلِّ وَسَلِّمْ عَلَى نَبِيِّنَا مُحَمَّدٍ",
+tr:"Allahumma salli wa sallim 'ala nabiyyina Muhammad.",
+bn:"হে আল্লাহ! আমাদের নবী মুহাম্মদ (সাল্লাল্লাহু আলাইহি ওয়াসাল্লাম)-এর ওপর রহমত ও শান্তি বর্ষণ করুন।", ref:"হিসনুল মুসলিম"}
 ];
 window.DUA_CATS = [
   {id:"all", bn:"সব", en:"All"},

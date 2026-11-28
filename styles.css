@@ -413,6 +413,13 @@ hr.sep{border:none; border-top:1px solid var(--line); margin:14px 0}
 .ring-hero .ring-wrap{width:192px; height:192px}
 .ring-hero .ring-svg{width:192px; height:192px}
 .ring-hero .ring-count{font-size:28px}
+/* Fix #60 (28 Nov 2026, audit): the fasting ring had the same fault
+   Fix #55 fixed on Home — its countdown "০৮:৩৪:৫৬" at 34px measured
+   148.7px against the same 180px ring's ~149.7px inner diameter
+   (~1px clearance, digits touching the ring). Same treatment: 28px
+   (≈122px, ~14px clear on each side). Scoped to .small-ring, which
+   is the fasting ring only — the Home ring already has its own rule. */
+.small-ring .ring-count{font-size:28px}
 .ring-sub{font-size:13px; opacity:.92}
 .pills{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:12px}
 .pill{background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.35); color:#fff;

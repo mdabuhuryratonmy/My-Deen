@@ -83,11 +83,14 @@ public final class AlarmScheduler {
         channel. Keep in sync with the createChannel calls below and
         with DuroodUnlockReceiver.ensureChannels. Fix #59: the six
         per-waqt pre-azan channels join the list (their sounds are the
-        new Helio clips); preazan-v2 stays for stale alarms. */
+        new Helio clips); preazan-v2 stays for stale alarms. Fix #60:
+        "prayer-reminder" joins it (reminder tone for a Notification-only
+        prayer); "duha-silent" carries no sound, so it stays out — like
+        azan-v2-silent and the dhikr -silent twins. */
     private static final String[] SOUNDING_CHANNEL_IDS = {
         "preazan-v2", "preazan-fajr", "preazan-dhuhr", "preazan-asr",
         "preazan-maghrib", "preazan-isha", "preazan-jumuah",
-        "duha", "dhikr-durood-v4", "dhikr-istighfar-v4",
+        "duha", "prayer-reminder", "dhikr-durood-v4", "dhikr-istighfar-v4",
         DuroodUnlockReceiver.CHANNEL_REMINDER, DuroodUnlockReceiver.CHANNEL_ISTIGHFAR
     };
 
@@ -340,6 +343,17 @@ public final class AlarmScheduler {
                     NotificationManager.IMPORTANCE_DEFAULT, -1);
             createChannel(nm, ctx, "duha", "Duha", "Duha prayer alarm",
                     NotificationManager.IMPORTANCE_DEFAULT, R.raw.reminder);
+            // Fix #60 (28 Nov 2026, audit): the sound picker finally
+            // means what it says — a prayer with only Notification
+            // selected posts on "prayer-reminder" (HIGH, reminder tone)
+            // instead of ringing the azan, and a silent Duha posts on
+            // "duha-silent" (the old duha channel always played the
+            // reminder tone, so silent Duha still rang). New channel ids
+            // have no stale state, so no version bump is needed.
+            createChannel(nm, ctx, "prayer-reminder", "Prayer reminders", "Prayer time alerts with reminder sound",
+                    NotificationManager.IMPORTANCE_HIGH, R.raw.reminder);
+            createChannel(nm, ctx, "duha-silent", "Duha (silent)", "Duha prayer alarm without sound",
+                    NotificationManager.IMPORTANCE_DEFAULT, -1);
             // Fix #18: the old dhikr channels were created WITHOUT a
             // working sound on the user's phone — a notification arrived
             // but no audio played — and Android never updates an
